@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag to release (for manual reruns)"
+        required: true
+        type: string
 
 jobs:
   publish-and-release:
@@ -24,10 +29,12 @@ jobs:
         run: Invoke-Build -File ./AtlassianPS.Standards.build.ps1 -Task Build
 
       - name: Publish to PowerShell Gallery
-        if: ${{ secrets.PSGALLERY_API_KEY != '' }}
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        if: env.PSGALLERY_API_KEY != ''
         shell: pwsh
         run: |
-          Publish-Module -Path ./Release/AtlassianPS.Standards -NuGetApiKey ${{ secrets.PSGALLERY_API_KEY }} -ErrorAction Stop
+          Publish-Module -Path ./Release/AtlassianPS.Standards -NuGetApiKey $env:PSGALLERY_API_KEY -ErrorAction Stop
 
       - name: Package release zip
         shell: pwsh
@@ -37,6 +44,7 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           files: ./Release/AtlassianPS.Standards.zip
           generate_release_notes: true
