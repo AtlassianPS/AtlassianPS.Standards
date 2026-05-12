@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup build dependencies
+        shell: pwsh
+        run: ./Tools/setup.ps1
+
+      - name: Run script analysis
+        shell: pwsh
+        run: Invoke-Build -File ./AtlassianPS.Standards.build.ps1 -Task Lint
+
+  build:
+    name: Build
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup build dependencies
+        shell: pwsh
+        run: ./Tools/setup.ps1
+
+      - name: Build release artifact
+        shell: pwsh
+        run: Invoke-Build -File ./AtlassianPS.Standards.build.ps1 -Task Build
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Release
+          path: ./Release/
+
+  test:
+    name: Test (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup test dependencies
+        shell: pwsh
+        run: ./Tools/setup.ps1
+
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Release
+          path: ./Release/
+
+      - name: Run tests against built module
+        shell: pwsh
+        run: |
+          $env:ATLASSIANPS_STANDARDS_MODULE_MANIFEST = (Resolve-Path './Release/AtlassianPS.Standards/AtlassianPS.Standards.psd1').ProviderPath
+          Invoke-Pester -Path ./Tests -Output Detailed -CI

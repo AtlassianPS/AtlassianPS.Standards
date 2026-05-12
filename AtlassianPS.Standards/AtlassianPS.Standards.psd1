@@ -1,0 +1,30 @@
+@{
+    RootModule        = 'AtlassianPS.Standards.psm1'
+    ModuleVersion     = '0.1.0'
+    GUID              = 'b558bd8c-dc02-4ff2-96b7-4d2c61d9d103'
+    Author            = 'AtlassianPS'
+    CompanyName       = 'AtlassianPS'
+    Copyright         = '(c) 2026 AtlassianPS. All rights reserved.'
+    Description       = 'Shared analyzer settings and standards utilities for AtlassianPS modules.'
+    PowerShellVersion = '5.1'
+
+    FunctionsToExport = @(
+        'Get-AtlassianPSScriptAnalyzerSettingsPath'
+    )
+    CmdletsToExport   = @()
+    VariablesToExport = @()
+    AliasesToExport   = @()
+
+    PrivateData       = @{
+        PSData = @{
+            Tags         = @(
+                'AtlassianPS'
+                'PSScriptAnalyzer'
+                'Standards'
+            )
+            LicenseUri   = 'https://github.com/AtlassianPS/AtlassianPS.Standards/blob/master/LICENSE'
+            ProjectUri   = 'https://github.com/AtlassianPS/AtlassianPS.Standards'
+            ReleaseNotes = 'Initial shared standards module release.'
+        }
+    }
+}
