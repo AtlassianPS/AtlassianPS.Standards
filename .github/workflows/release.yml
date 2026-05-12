@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  publish-and-release:
+    name: Publish and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup build dependencies
+        shell: pwsh
+        run: ./Tools/setup.ps1
+
+      - name: Build release artifact
+        shell: pwsh
+        run: Invoke-Build -File ./AtlassianPS.Standards.build.ps1 -Task Build
+
+      - name: Publish to PowerShell Gallery
+        if: ${{ secrets.PSGALLERY_API_KEY != '' }}
+        shell: pwsh
+        run: |
+          Publish-Module -Path ./Release/AtlassianPS.Standards -NuGetApiKey ${{ secrets.PSGALLERY_API_KEY }} -ErrorAction Stop
+
+      - name: Package release zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ./Release/AtlassianPS.Standards/* -DestinationPath ./Release/AtlassianPS.Standards.zip -Force
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          files: ./Release/AtlassianPS.Standards.zip
+          generate_release_notes: true

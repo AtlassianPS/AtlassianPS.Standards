@@ -1,0 +1,17 @@
+# Build artifacts
+/Release/
+/*.nupkg
+/*.zip
+
+# Test output
+/Test-*.xml
+
+# Local scratch
+/.tmp/
+/*.log
+
+# IDE
+/.vscode/
+
+# OS
+.DS_Store
