@@ -1,4 +1,4 @@
-name: Release
+name: Create Release and Publish
 
 on:
   push:
@@ -12,39 +12,55 @@ on:
         type: string
 
 jobs:
-  publish-and-release:
-    name: Publish and Release
+  release:
+    name: Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup build dependencies
-        shell: pwsh
-        run: ./Tools/setup.ps1
-
-      - name: Build release artifact
-        shell: pwsh
-        run: Invoke-Build -File ./AtlassianPS.Standards.build.ps1 -Task Build
-
-      - name: Publish to PowerShell Gallery
-        env:
-          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
-        if: env.PSGALLERY_API_KEY != ''
-        shell: pwsh
-        run: |
-          Publish-Module -Path ./Release/AtlassianPS.Standards -NuGetApiKey $env:PSGALLERY_API_KEY -ErrorAction Stop
-
-      - name: Package release zip
-        shell: pwsh
-        run: |
-          Compress-Archive -Path ./Release/AtlassianPS.Standards/* -DestinationPath ./Release/AtlassianPS.Standards.zip -Force
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/checkout@v6
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
-          name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+
+      - name: Resolve release ref
+        id: release_ref
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            release_tag="${{ inputs.release_tag }}"
+          else
+            release_tag="${{ github.ref_name }}"
+          fi
+
+          release_sha="$(git rev-list -n 1 "$release_tag")"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Download artifact from tagged commit CI run
+        uses: dawidd6/action-download-artifact@v21
+        with:
+          workflow: ci.yml
+          workflow_conclusion: success
+          commit: ${{ steps.release_ref.outputs.release_sha }}
+          name: Release
+          path: ./Release/
+          if_no_artifact_found: fail
+
+      - uses: ./.github/actions/setup-powershell
+
+      - name: Publish module
+        run: Invoke-Build -Task Publish -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -PSGalleryAPIKey ${{ secrets.PSGALLERY_API_KEY }}
+        shell: pwsh
+
+      - name: Create Release and Upload Asset
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.release_ref.outputs.release_tag }}
+          name: ${{ steps.release_ref.outputs.release_tag }}
           files: ./Release/AtlassianPS.Standards.zip
-          generate_release_notes: true
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: ${{ contains(steps.release_ref.outputs.release_tag, 'alpha') || contains(steps.release_ref.outputs.release_tag, 'beta') || contains(steps.release_ref.outputs.release_tag, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
