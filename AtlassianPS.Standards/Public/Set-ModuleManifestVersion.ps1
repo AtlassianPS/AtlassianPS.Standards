@@ -23,13 +23,66 @@
         throw "Built module manifest '$BuiltManifestPath' was not found."
     }
 
-    [System.Management.Automation.SemanticVersion]$normalizedVersion = $VersionToPublish.TrimStart('v')
+    function ConvertTo-VersionDescriptor {
+        param(
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [string]$VersionText
+        )
+
+        $trimmedVersion = $VersionText.Trim()
+        if ($trimmedVersion -match '^v') {
+            $trimmedVersion = $trimmedVersion.Substring(1)
+        }
+
+        if ($trimmedVersion -notmatch '^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:-(?<prerelease>[0-9A-Za-z][0-9A-Za-z\.-]*))?$') {
+            throw "Invalid semantic version '$VersionText'. Expected format: <major>.<minor>.<patch>[-prerelease]."
+        }
+
+        return [PSCustomObject]@{
+            Major           = [int]$matches.major
+            Minor           = [int]$matches.minor
+            Patch           = [int]$matches.patch
+            PreReleaseLabel = $matches.prerelease
+            CoreVersion     = [Version]::new([int]$matches.major, [int]$matches.minor, [int]$matches.patch)
+        }
+    }
+
+    function Compare-VersionDescriptor {
+        param(
+            [Parameter(Mandatory)]
+            [PSCustomObject]$Left,
+            [Parameter(Mandatory)]
+            [PSCustomObject]$Right
+        )
+
+        $coreComparison = $Left.CoreVersion.CompareTo($Right.CoreVersion)
+        if ($coreComparison -ne 0) {
+            return $coreComparison
+        }
+
+        if ([string]::IsNullOrEmpty($Left.PreReleaseLabel) -and [string]::IsNullOrEmpty($Right.PreReleaseLabel)) {
+            return 0
+        }
+
+        if ([string]::IsNullOrEmpty($Left.PreReleaseLabel)) {
+            return 1
+        }
+
+        if ([string]::IsNullOrEmpty($Right.PreReleaseLabel)) {
+            return -1
+        }
+
+        return [string]::CompareOrdinal($Left.PreReleaseLabel, $Right.PreReleaseLabel)
+    }
+
+    $normalizedVersion = ConvertTo-VersionDescriptor -VersionText $VersionToPublish
 
     $published = Find-Module -Name $ModuleName -ErrorAction SilentlyContinue
     if ($published) {
-        [System.Management.Automation.SemanticVersion]$latestPublished = $published.Version
-        if ($normalizedVersion -le $latestPublished) {
-            throw "Version must be greater than latest published version: $latestPublished"
+        $latestPublished = ConvertTo-VersionDescriptor -VersionText $published.Version.ToString()
+        if ((Compare-VersionDescriptor -Left $normalizedVersion -Right $latestPublished) -le 0) {
+            throw "Version must be greater than latest published version: $($published.Version)"
         }
     }
 

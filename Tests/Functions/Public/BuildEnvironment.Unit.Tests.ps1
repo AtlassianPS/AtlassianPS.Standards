@@ -29,7 +29,8 @@ Describe 'Get-BuildEnvironmentInfo' {
             $info = Get-BuildEnvironmentInfo -VersionToPublish 'v1.2.3'
 
             $info.VersionToPublish | Should -Be '1.2.3'
-            $info.BuiltManifestPath | Should -Be '/tmp/project/Release/AtlassianPS.Standards/AtlassianPS.Standards.psd1'
+            $expectedBuiltManifestPath = Join-Path -Path (Join-Path -Path $env:BHBuildOutput -ChildPath $env:BHProjectName) -ChildPath "$($env:BHProjectName).psd1"
+            $info.BuiltManifestPath | Should -Be $expectedBuiltManifestPath
             $info.OS | Should -Be 'Linux'
         }
     }

@@ -143,7 +143,7 @@ Describe 'Set-ModuleManifestVersion' {
             } -ParameterFilter { $Name -eq 'Metadata\Update-Metadata' }
             Mock -CommandName Find-Module -MockWith {
                 [PSCustomObject]@{
-                    Version = [System.Management.Automation.SemanticVersion]'1.2.3'
+                    Version = [Version]'1.2.3'
                 }
             }
 
