@@ -42,6 +42,7 @@
                 'PSScriptAnalyzer'
                 'Standards'
             )
+            Prerelease   = ''
             LicenseUri   = 'https://github.com/AtlassianPS/AtlassianPS.Standards/blob/master/LICENSE'
             ProjectUri   = 'https://github.com/AtlassianPS/AtlassianPS.Standards'
             ReleaseNotes = 'Initial shared standards module release.'
