@@ -1,4 +1,4 @@
-BeforeAll {
+﻿BeforeAll {
     $moduleManifestPath = if ($env:ATLASSIANPS_STANDARDS_MODULE_MANIFEST) {
         $env:ATLASSIANPS_STANDARDS_MODULE_MANIFEST
     }
@@ -9,13 +9,13 @@ BeforeAll {
     Import-Module $moduleManifestPath -Force
 }
 
-AfterAll {
-    Remove-Module AtlassianPS.Standards -ErrorAction SilentlyContinue
-}
-
 Describe 'Project validation' {
     It 'loads analyzer settings as a hashtable' {
-        $settingsPath = Get-AtlassianPSScriptAnalyzerSettingsPath
+        $settingsCommand = Get-Command -Module 'AtlassianPS.Standards' |
+            Where-Object { $_.CommandType -eq 'Function' -and $_.Verb -eq 'Get' -and $_.Name -like '*ScriptAnalyzerSettingsPath' } |
+            Select-Object -First 1
+        $settingsCommand | Should -Not -BeNullOrEmpty
+        $settingsPath = & $settingsCommand.Name
         $settings = Import-PowerShellDataFile -Path $settingsPath
 
         $settings | Should -BeOfType [hashtable]

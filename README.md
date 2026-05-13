@@ -1,8 +1,15 @@
 # AtlassianPS.Standards
 
-`AtlassianPS.Standards` is a minimal shared module that ships the AtlassianPS PSScriptAnalyzer baseline and exposes a single helper function:
+`AtlassianPS.Standards` is a shared toolbag module that ships the AtlassianPS PSScriptAnalyzer baseline and reusable build helpers for AtlassianPS repositories.
 
-- `Get-AtlassianPSScriptAnalyzerSettingsPath`
+Exported helpers cover:
+
+- analyzer settings lookup and lint orchestration (`Get-ScriptAnalyzerSettingsPath`, `Invoke-Lint`)
+- analyzer settings synchronization for module setup scripts (`Sync-ScriptAnalyzerSettings`)
+- build environment bootstrap/info (`Initialize-BuildEnvironment`, `Get-BuildEnvironmentInfo`, `Write-BuildInfo`)
+- build output orchestration (`Copy-ModuleArtifacts`, `Join-ModuleSource`)
+- manifest and release helpers (`Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `New-ModulePackage`, `Publish-ModuleRelease`)
+- Pester orchestration (`Invoke-ModuleTests`)
 
 ## Usage
 
@@ -11,6 +18,8 @@ Import-Module AtlassianPS.Standards
 $settingsPath = Get-AtlassianPSScriptAnalyzerSettingsPath
 Invoke-ScriptAnalyzer -Path ./MyModule -Settings $settingsPath -Recurse
 ```
+
+The module manifest sets `DefaultCommandPrefix = 'AtlassianPS'`, so consumers can call prefixed commands without the function names carrying that infix in source.
 
 ## Repository Layout
 
@@ -25,6 +34,8 @@ Invoke-ScriptAnalyzer -Path ./MyModule -Settings $settingsPath -Recurse
 ```powershell
 ./Tools/setup.ps1
 ```
+
+`setup.ps1` installs the union of runtime dependencies from `AtlassianPS.Standards.psd1` (`RequiredModules`) and build-only dependencies from `Tools/build.requirements.psd1`.
 
 ## Build, Lint, Test
 
