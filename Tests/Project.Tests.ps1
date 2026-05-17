@@ -10,8 +10,15 @@
 }
 
 Describe 'Project validation' {
+    It 'exports compatibility helper commands' {
+        $moduleCommands = Get-Command -Module AtlassianPS.Standards | Select-Object -ExpandProperty Name
+
+        $moduleCommands | Should -Contain 'Get-AtlassianPSBuildEnvironmentInfo'
+        $moduleCommands | Should -Contain 'Get-AtlassianPSScriptAnalyzerSettingsPath'
+    }
+
     It 'loads analyzer settings as a hashtable' {
-        $settingsPath = InModuleScope AtlassianPS.Standards { Get-ScriptAnalyzerSettingsPath }
+        $settingsPath = Get-AtlassianPSScriptAnalyzerSettingsPath
         $settings = Import-PowerShellDataFile -Path $settingsPath
 
         $settings | Should -BeOfType [hashtable]

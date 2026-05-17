@@ -4,8 +4,7 @@
 
 Exported helpers cover:
 
-- analyzer settings sync and lint orchestration (`Sync-ScriptAnalyzerSettings`, `Invoke-Lint`)
-- analyzer settings synchronization for module setup scripts (`Sync-ScriptAnalyzerSettings`)
+- analyzer settings lookup, sync, and lint orchestration (`Get-ScriptAnalyzerSettingsPath`, `Sync-ScriptAnalyzerSettings`, `Invoke-Lint`)
 - build environment bootstrap/info (`Initialize-BuildEnvironment`, `Get-BuildEnvironmentInfo`, `Write-BuildInfo`)
 - build output orchestration (`Copy-ModuleArtifacts`, `Join-ModuleSource`)
 - manifest and release helpers (`Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `New-ModulePackage`, `Publish-ModuleRelease`)
@@ -20,6 +19,7 @@ Invoke-ScriptAnalyzer -Path ./MyModule -Settings $settingsPath -Recurse
 ```
 
 The module manifest sets `DefaultCommandPrefix = 'AtlassianPS'`, so consumers can call prefixed commands without the function names carrying that infix in source.
+Compatibility helpers (`Get-BuildEnvironmentInfo`, `Get-ScriptAnalyzerSettingsPath`) remain exported for downstream build scripts.
 
 ## Repository Layout
 

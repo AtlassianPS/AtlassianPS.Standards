@@ -14,6 +14,8 @@
 
     FunctionsToExport    = @(
         'Copy-ModuleArtifacts'
+        'Get-BuildEnvironmentInfo'
+        'Get-ScriptAnalyzerSettingsPath'
         'Initialize-BuildEnvironment'
         'Invoke-Lint'
         'Invoke-ModuleTests'

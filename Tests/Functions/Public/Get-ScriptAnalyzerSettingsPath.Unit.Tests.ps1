@@ -6,15 +6,14 @@ BeforeAll {
     $script:moduleToTest = Initialize-TestEnvironment
 }
 
-Describe 'Get-ScriptAnalyzerSettingsPath (internal)' {
-    It 'is available inside module scope' {
-        InModuleScope AtlassianPS.Standards {
-            Get-Command -Name Get-ScriptAnalyzerSettingsPath -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
+Describe 'Get-ScriptAnalyzerSettingsPath' {
+    It 'is exported by the module' {
+        $command = Get-Command -Name 'Get-AtlassianPSScriptAnalyzerSettingsPath' -ErrorAction SilentlyContinue
+        $command | Should -Not -BeNullOrEmpty
     }
 
     It 'returns the full path to the shipped settings file' {
-        $path = InModuleScope AtlassianPS.Standards { Get-ScriptAnalyzerSettingsPath }
+        $path = Get-AtlassianPSScriptAnalyzerSettingsPath
 
         $path | Should -Not -BeNullOrEmpty
         $path | Should -Match 'PSScriptAnalyzerSettings\.psd1$'
