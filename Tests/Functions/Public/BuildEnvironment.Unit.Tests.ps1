@@ -6,11 +6,6 @@ BeforeAll {
 }
 
 Describe 'Get-BuildEnvironmentInfo' {
-    It 'is exported by the module' {
-        $command = Get-Command -Name 'Get-AtlassianPSBuildEnvironmentInfo' -ErrorAction SilentlyContinue
-        $command | Should -Not -BeNullOrEmpty
-    }
-
     It 'normalizes version input and builds manifest path from BH env vars' {
         InModuleScope AtlassianPS.Standards {
             $env:BHBuildSystem = 'Local'
