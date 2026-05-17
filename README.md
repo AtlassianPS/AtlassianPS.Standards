@@ -4,7 +4,7 @@
 
 Exported helpers cover:
 
-- analyzer settings lookup and lint orchestration (`Get-ScriptAnalyzerSettingsPath`, `Invoke-Lint`)
+- analyzer settings sync and lint orchestration (`Sync-ScriptAnalyzerSettings`, `Invoke-Lint`)
 - analyzer settings synchronization for module setup scripts (`Sync-ScriptAnalyzerSettings`)
 - build environment bootstrap/info (`Initialize-BuildEnvironment`, `Get-BuildEnvironmentInfo`, `Write-BuildInfo`)
 - build output orchestration (`Copy-ModuleArtifacts`, `Join-ModuleSource`)
@@ -15,7 +15,7 @@ Exported helpers cover:
 
 ```powershell
 Import-Module AtlassianPS.Standards
-$settingsPath = Get-AtlassianPSScriptAnalyzerSettingsPath
+$settingsPath = Sync-AtlassianPSScriptAnalyzerSettings -DestinationPath ./PSScriptAnalyzerSettings.psd1
 Invoke-ScriptAnalyzer -Path ./MyModule -Settings $settingsPath -Recurse
 ```
 

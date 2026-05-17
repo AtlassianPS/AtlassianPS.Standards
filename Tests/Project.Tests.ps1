@@ -11,11 +11,7 @@
 
 Describe 'Project validation' {
     It 'loads analyzer settings as a hashtable' {
-        $settingsCommand = Get-Command -Module 'AtlassianPS.Standards' |
-            Where-Object { $_.CommandType -eq 'Function' -and $_.Verb -eq 'Get' -and $_.Name -like '*ScriptAnalyzerSettingsPath' } |
-            Select-Object -First 1
-        $settingsCommand | Should -Not -BeNullOrEmpty
-        $settingsPath = & $settingsCommand.Name
+        $settingsPath = InModuleScope AtlassianPS.Standards { Get-ScriptAnalyzerSettingsPath }
         $settings = Import-PowerShellDataFile -Path $settingsPath
 
         $settings | Should -BeOfType [hashtable]
