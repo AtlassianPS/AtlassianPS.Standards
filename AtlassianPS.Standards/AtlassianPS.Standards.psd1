@@ -12,21 +12,7 @@
         @{ ModuleName = 'PSScriptAnalyzer'; RequiredVersion = '1.25.0' }
     )
 
-    FunctionsToExport    = @(
-        'Copy-ModuleArtifacts'
-        'Get-BuildEnvironmentInfo'
-        'Get-ScriptAnalyzerSettingsPath'
-        'Initialize-BuildEnvironment'
-        'Invoke-Lint'
-        'Invoke-ModuleTests'
-        'Join-ModuleSource'
-        'New-ModulePackage'
-        'Publish-ModuleRelease'
-        'Set-ModuleManifestVersion'
-        'Sync-ScriptAnalyzerSettings'
-        'Update-ModuleManifestExports'
-        'Write-BuildInfo'
-    )
+    FunctionsToExport    = '*'
     DefaultCommandPrefix = 'AtlassianPS'
     FileList             = @(
         'PSScriptAnalyzerSettings.psd1'
