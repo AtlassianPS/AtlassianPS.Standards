@@ -1,6 +1,6 @@
-﻿#requires -Module PowerShellGet
+#requires -Module PowerShellGet
 
-[CmdletBinding(SupportsShouldProcess = $true)]
+[CmdletBinding()]
 param()
 
 $requirementsPath = Join-Path $PSScriptRoot 'build.requirements.psd1'
@@ -24,39 +24,86 @@ function Get-LatestModuleVersion {
     }
 }
 
-function Update-DependencyRequirement {
-    [CmdletBinding(SupportsShouldProcess = $true)]
-    param()
+function Update-ArrayRequirements {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [array]$Requirements
+    )
 
-    if (-not (Test-Path -LiteralPath $requirementsPath -PathType Leaf)) {
-        Write-Warning "Dependency file '$requirementsPath' not found."
-        return
+    $outputLines = @('@(')
+    foreach ($module in $Requirements) {
+        if (-not $module.ModuleName -or -not $module.RequiredVersion) {
+            continue
+        }
+
+        Write-Verbose "Checking for module: $($module.ModuleName)"
+        $newVersion = $module.RequiredVersion
+        $latestVersion = Get-LatestModuleVersion -ModuleName $module.ModuleName
+        if ($latestVersion -and ([version]$latestVersion -gt [version]$module.RequiredVersion)) {
+            Write-Verbose "Updating $($module.ModuleName): v$($module.RequiredVersion) --> $latestVersion"
+            $newVersion = $latestVersion
+        }
+
+        $outputLines += "    @{ ModuleName = `"$($module.ModuleName)`"; RequiredVersion = `"$newVersion`" }"
     }
+    $outputLines += ')'
 
-    $content = [System.IO.File]::ReadAllText($requirementsPath)
-    $modulePattern = '(?m)^(?<indent>\s*)@\{\s*ModuleName\s*=\s*"(?<name>[^"]+)"\s*;\s*RequiredVersion\s*=\s*"(?<version>[^"]+)"\s*\}\s*$'
-    $matches = [System.Text.RegularExpressions.Regex]::Matches($content, $modulePattern)
+    return ($outputLines -join "`r`n") + "`r`n"
+}
 
-    if ($matches.Count -eq 0) {
-        Write-Warning "No ModuleName/RequiredVersion entries found in '$requirementsPath'."
-        return
-    }
+function Update-HashtableRequirements {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Requirements,
+        [Parameter(Mandatory = $true)]
+        [string]$RawContent
+    )
 
-    $updatedContent = $content
-    foreach ($match in $matches) {
-        $moduleName = $match.Groups['name'].Value
-        $currentVersion = $match.Groups['version'].Value
+    $updatedContent = $RawContent
+    foreach ($key in $Requirements.Keys) {
+        if ($key -eq 'PSDependOptions') {
+            continue
+        }
 
-        Write-Output "Checking for module: $moduleName"
-        $latestVersion = Get-LatestModuleVersion -ModuleName $moduleName
+        $entry = $Requirements[$key]
+        $currentVersion = $null
+        if ($entry -is [string]) {
+            $currentVersion = $entry
+        }
+        elseif ($entry -is [System.Collections.IDictionary] -and $entry.Contains('Version')) {
+            $currentVersion = [string]$entry['Version']
+        }
+
+        if (-not $currentVersion -or $currentVersion -eq 'latest') {
+            continue
+        }
+
+        Write-Verbose "Checking for module: $key"
+        $latestVersion = Get-LatestModuleVersion -ModuleName $key
         if (-not $latestVersion -or ([version]$latestVersion -le [version]$currentVersion)) {
             continue
         }
 
-        Write-Output "Updating ${moduleName}: v$currentVersion --> $latestVersion"
-        $updatedContent = $updatedContent.Replace(
-            $match.Value,
-            ('{0}@{{ ModuleName = "{1}"; RequiredVersion = "{2}" }}' -f $match.Groups['indent'].Value, $moduleName, $latestVersion)
+        Write-Verbose "Updating ${key}: v$currentVersion --> $latestVersion"
+        $escapedKey = [System.Text.RegularExpressions.Regex]::Escape([string]$key)
+
+        if ($entry -is [string]) {
+            $pattern = "(?m)(^\s*['""]?$escapedKey['""]?\s*=\s*['""])([^'""]+)(['""]\s*$)"
+        }
+        else {
+            $pattern = "(?ms)(^\s*['""]?$escapedKey['""]?\s*=\s*@\{.*?^\s*Version\s*=\s*['""])([^'""]+)(['""]\s*$)"
+        }
+
+        $updatedContent = [System.Text.RegularExpressions.Regex]::Replace(
+            $updatedContent,
+            $pattern,
+            {
+                param($match)
+                "$($match.Groups[1].Value)$latestVersion$($match.Groups[3].Value)"
+            },
+            [System.Text.RegularExpressions.RegexOptions]::Multiline
         )
     }
 
@@ -64,14 +111,40 @@ function Update-DependencyRequirement {
     if (-not $updatedContent.EndsWith("`r`n")) {
         $updatedContent += "`r`n"
     }
+    return $updatedContent
+}
 
-    if ($updatedContent -ne $content -and $PSCmdlet.ShouldProcess($requirementsPath, 'Update dependency requirements')) {
-        [System.IO.File]::WriteAllText($requirementsPath, $updatedContent, [System.Text.UTF8Encoding]::new($true))
+function Update-DependencyRequirement {
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+
+    if (-not (Test-Path -Path $requirementsPath)) {
+        Write-Warning "Dependency file '$requirementsPath' not found."
+        return
+    }
+
+    $rawContent = [System.IO.File]::ReadAllText($requirementsPath)
+    $requirements = Invoke-Expression $rawContent
+    $newContent = $null
+
+    if ($requirements -is [array]) {
+        $newContent = Update-ArrayRequirements -Requirements $requirements
+    }
+    elseif ($requirements -is [hashtable]) {
+        $newContent = Update-HashtableRequirements -Requirements $requirements -RawContent $rawContent
+    }
+    else {
+        Write-Warning "Unsupported requirements format in '$requirementsPath'."
+        return
+    }
+
+    if ($newContent -ne $rawContent -and $PSCmdlet.ShouldProcess($requirementsPath, 'Update dependency requirements')) {
+        [System.IO.File]::WriteAllText($requirementsPath, $newContent, [System.Text.UTF8Encoding]::new($false))
     }
 }
 
 function Update-PinnedPSScriptAnalyzerSettingsUri {
-    [CmdletBinding(SupportsShouldProcess = $true)]
+    [CmdletBinding(SupportsShouldProcess)]
     param()
 
     $settingsFilePath = 'standards/PSScriptAnalyzerSettings.psd1'
@@ -86,7 +159,7 @@ function Update-PinnedPSScriptAnalyzerSettingsUri {
     }
 
     if (-not $response -or -not $response[0] -or -not $response[0].sha) {
-        throw 'No commit data returned for shared PSScriptAnalyzer settings.'
+        throw "No commit data returned for shared PSScriptAnalyzer settings."
     }
 
     $latestCommit = $response[0].sha
@@ -96,24 +169,19 @@ function Update-PinnedPSScriptAnalyzerSettingsUri {
     $newUriLine = "`$psScriptAnalyzerSettingsUri = '$newUri'"
 
     if ($setupContent -notmatch $oldUriPattern) {
-        Write-Warning 'Unable to locate pinned PSScriptAnalyzer URI in setup.ps1; skipping.'
+        Write-Warning "Unable to locate pinned PSScriptAnalyzer URI in setup.ps1; skipping."
         return
     }
 
-    $updatedContent = [System.Text.RegularExpressions.Regex]::Replace(
-        $setupContent,
-        $oldUriPattern,
-        $newUriLine,
-        [System.Text.RegularExpressions.RegexOptions]::Multiline
-    )
+    $updatedContent = [System.Text.RegularExpressions.Regex]::Replace($setupContent, $oldUriPattern, $newUriLine, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     if ($updatedContent -eq $setupContent) {
-        Write-Output 'Pinned PSScriptAnalyzer URI already up to date.'
+        Write-Output "Pinned PSScriptAnalyzer URI already up to date."
         return
     }
 
     if ($PSCmdlet.ShouldProcess($setupScriptPath, 'Update pinned PSScriptAnalyzer settings URI')) {
         $updatedContent = $updatedContent -replace "`r?`n", "`r`n"
-        [System.IO.File]::WriteAllText($setupScriptPath, $updatedContent, [System.Text.UTF8Encoding]::new($true))
+        [System.IO.File]::WriteAllText($setupScriptPath, $updatedContent, [System.Text.UTF8Encoding]::new($false))
         Write-Output "Updated pinned PSScriptAnalyzer URI to commit $latestCommit"
     }
 }
