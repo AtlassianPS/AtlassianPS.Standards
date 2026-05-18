@@ -13,7 +13,7 @@ Describe 'Sync-ScriptAnalyzerSettings' {
 
     It 'copies shared analyzer settings to the destination file' {
         $destinationPath = Join-Path -Path $TestDrive -ChildPath 'PSScriptAnalyzerSettings.psd1'
-        $sourcePath = Get-AtlassianPSScriptAnalyzerSettingsPath
+        $sourcePath = InModuleScope AtlassianPS.Standards { Get-ScriptAnalyzerSettingsPath }
 
         $syncedPath = Sync-AtlassianPSScriptAnalyzerSettings -DestinationPath $destinationPath
 

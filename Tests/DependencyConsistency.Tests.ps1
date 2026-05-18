@@ -19,6 +19,12 @@ BeforeAll {
             [string]$requirement.ModuleName
         }
     )
+    $script:publicFunctionNames = @(
+        Get-ChildItem -Path (Join-Path -Path $projectRoot -ChildPath 'AtlassianPS.Standards/Public/*.ps1') -ErrorAction SilentlyContinue
+    ).BaseName
+    $script:privateFunctionNames = @(
+        Get-ChildItem -Path (Join-Path -Path $projectRoot -ChildPath 'AtlassianPS.Standards/Private/*.ps1') -ErrorAction SilentlyContinue
+    ).BaseName
 }
 
 Describe 'Dependency declarations' -Tag 'Lint' {
@@ -44,5 +50,16 @@ Describe 'Dependency declarations' -Tag 'Lint' {
 
     It 'keeps InvokeBuild in build requirements' {
         $script:buildRequirementNames | Should -Contain 'InvokeBuild'
+    }
+
+    It 'does not export functions implemented under Private' {
+        $script:publicFunctionNames.Count | Should -BeGreaterThan 0
+        $privateExports = @(
+            $script:publicFunctionNames | Where-Object { $_ -in $script:privateFunctionNames }
+        )
+
+        if ($privateExports.Count -gt 0) {
+            throw "Private functions must not be part of the build export set. Found duplicate names: $($privateExports -join ', ')"
+        }
     }
 }
