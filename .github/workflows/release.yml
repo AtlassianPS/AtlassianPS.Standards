@@ -59,6 +59,7 @@ jobs:
         with:
           tag_name: ${{ steps.release_ref.outputs.release_tag }}
           name: ${{ steps.release_ref.outputs.release_tag }}
+          generate_release_notes: true
           files: ./Release/AtlassianPS.Standards.zip
           fail_on_unmatched_files: true
           draft: false

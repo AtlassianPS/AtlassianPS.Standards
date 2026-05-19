@@ -31,7 +31,7 @@
             Prerelease   = ''
             LicenseUri   = 'https://github.com/AtlassianPS/AtlassianPS.Standards/blob/master/LICENSE'
             ProjectUri   = 'https://github.com/AtlassianPS/AtlassianPS.Standards'
-            ReleaseNotes = 'Initial shared standards module release.'
+            ReleaseNotes = 'v0.1.4: Backfill release metadata after v0.1.3 and align source versioning convention. Full release history: https://github.com/AtlassianPS/AtlassianPS.Standards/blob/master/CHANGELOG.md'
         }
     }
 }

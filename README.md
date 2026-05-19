@@ -54,3 +54,4 @@ Tag-based CD runs on `v*` tags and will:
 3. Create a GitHub release with a zipped module artifact.
 
 The source manifest intentionally uses a major/minor `ModuleVersion` (`x.y`) as a maintenance baseline. Release tags (`vX.Y.Z`) provide the full semantic version, and the publish pipeline stamps that exact tag version into the built manifest.
+Update `CHANGELOG.md` before cutting a release tag so both GitHub and PSGallery release metadata reflect the shipped changes.

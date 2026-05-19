@@ -2,13 +2,19 @@
 
 ## Unreleased
 
-- Reduced exported command surface by keeping `Get-BuildEnvironmentInfo` and `Get-ScriptAnalyzerSettingsPath` internal-only.
-- Removed public availability of `Get-AtlassianPSBuildEnvironmentInfo` and `Get-AtlassianPSScriptAnalyzerSettingsPath`.
-- Use public alternatives instead: `Initialize-AtlassianPSBuildEnvironment`, `Write-AtlassianPSBuildInfo`, and `Sync-AtlassianPSScriptAnalyzerSettings`.
-- Made `Update-DependencyReference` fail fast on module version lookup errors by default, with explicit `-AllowLookupFailure` opt-out.
-- Added script-level tests for `Tools/setup.ps1` entrypoint wiring and fail-fast behavior.
-- Added comment-based help to dependency setup/update commands and test coverage for help availability.
-- Aligned source manifest `ModuleVersion` to the repository major/minor convention (`x.y`) and documented tag-stamped release versioning.
+## v0.1.4
+
+- Backfilled release metadata after v0.1.3 by adding explicit release notes to the GitHub release and packaging corrected release notes metadata for PSGallery.
+- Aligned source manifest `ModuleVersion` to the repository major/minor convention (`x.y`) to avoid implying manual patch bumps in source.
+
+## v0.1.3
+
+- Added shared dependency setup/update flow (`Install-DependencyRequirement`, `Update-DependencyReference`) and wired `Tools/setup.ps1` / `Tools/update.dependencies.ps1` to shared command delegation.
+- Made dependency lookup failures fail fast by default in `Update-DependencyReference`, with explicit `-AllowLookupFailure` opt-out for manual non-blocking runs.
+- Added script-level entrypoint tests for setup and dependency update tooling.
+- Added comment-based help coverage for exported dependency commands.
+- Deduplicated tool-entrypoint test harness bootstrap via shared test helper extraction.
+- Improved README guidance for dependency setup/update behavior.
 
 ## v0.1.1
 
