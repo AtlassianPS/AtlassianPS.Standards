@@ -14,7 +14,10 @@
         [Switch]$SkipBuildRequirement,
 
         [Parameter()]
-        [Switch]$SkipManifestRequirement
+        [Switch]$SkipManifestRequirement,
+
+        [Parameter()]
+        [Switch]$AllowLookupFailure
     )
 
     function Get-FileTextState {
@@ -169,7 +172,10 @@
 
             [Parameter(Mandatory)]
             [ValidateNotNull()]
-            [System.Collections.IDictionary]$Cache
+            [System.Collections.IDictionary]$Cache,
+
+            [Parameter()]
+            [Switch]$AllowLookupFailure
         )
 
         $cacheKey = $ModuleName.ToLowerInvariant()
@@ -185,7 +191,12 @@
             }
         }
         catch {
-            Write-Warning "Unable to resolve latest version for module '$ModuleName'. Keeping existing version."
+            if ($AllowLookupFailure) {
+                Write-Warning "Unable to resolve latest version for module '$ModuleName'. Keeping existing version."
+            }
+            else {
+                throw "Unable to resolve latest version for module '$ModuleName'. Use -AllowLookupFailure to continue without updating that module. Original error: $($_.Exception.Message)"
+            }
         }
 
         $Cache[$cacheKey] = $latestVersion
@@ -290,13 +301,11 @@
 
         $blockLength = ($blockEndIndex - $blockStartIndex) + 1
         $blockContent = $Content.Substring($blockStartIndex, $blockLength)
+        $replacementValue = '${head}' + $LatestVersion + '${tail}'
         $updatedBlockContent = [System.Text.RegularExpressions.Regex]::Replace(
             $blockContent,
             "(?<head>$VersionProperty\s*=\s*['""])[^'""]+(?<tail>['""])",
-            {
-                param($versionMatch)
-                "$($versionMatch.Groups['head'].Value)$LatestVersion$($versionMatch.Groups['tail'].Value)"
-            },
+            $replacementValue,
             1
         )
 
@@ -353,7 +362,7 @@
             }
 
             $updatedVersion = $currentVersion
-            $latestVersion = Get-ModuleVersionString -ModuleName $moduleName -Cache $versionCache
+            $latestVersion = Get-ModuleVersionString -ModuleName $moduleName -Cache $versionCache -AllowLookupFailure:$AllowLookupFailure
             if ($latestVersion -and (Test-IsVersionUpgrade -CurrentVersion $currentVersion -LatestVersion $latestVersion)) {
                 $updatedVersion = $latestVersion
                 $buildRequirementUpdated = $true
@@ -415,7 +424,7 @@
                 continue
             }
 
-            $latestVersion = Get-ModuleVersionString -ModuleName $moduleName -Cache $versionCache
+            $latestVersion = Get-ModuleVersionString -ModuleName $moduleName -Cache $versionCache -AllowLookupFailure:$AllowLookupFailure
             if (-not $latestVersion -or -not (Test-IsVersionUpgrade -CurrentVersion $currentVersion -LatestVersion $latestVersion)) {
                 continue
             }

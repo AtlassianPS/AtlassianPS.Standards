@@ -79,6 +79,7 @@ Describe 'Update-DependencyReference' {
             BuildRequirementsPath = $buildRequirementsPath
         } {
             param($BuildRequirementsPath)
+            $null = $BuildRequirementsPath
 
             {
                 Update-DependencyReference `
@@ -163,6 +164,59 @@ Describe 'Update-DependencyReference' {
 
             $result.BuildRequirementUpdated | Should -BeFalse
             $result.ManifestUpdated | Should -BeFalse
+            $result.UpdatedModuleCount | Should -Be 0
+        }
+    }
+
+    It 'throws when module lookup fails by default' {
+        $buildRequirementsPath = Join-Path -Path $TestDrive -ChildPath 'build-lookup-error.requirements.psd1'
+        Set-Content -LiteralPath $buildRequirementsPath -Value @'
+@(
+    @{ ModuleName = "InvokeBuild"; RequiredVersion = "5.14.23" }
+)
+'@
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            BuildRequirementsPath = $buildRequirementsPath
+        } {
+            param($BuildRequirementsPath)
+            $null = $BuildRequirementsPath
+
+            Mock -CommandName Find-Module -MockWith {
+                throw 'network lookup failed'
+            }
+
+            {
+                Update-DependencyReference `
+                    -BuildRequirementsPath $BuildRequirementsPath `
+                    -SkipManifestRequirement
+            } | Should -Throw -ExpectedMessage '*Unable to resolve latest version for module ''InvokeBuild''*'
+        }
+    }
+
+    It 'can continue when lookup fails with explicit opt-out' {
+        $buildRequirementsPath = Join-Path -Path $TestDrive -ChildPath 'build-lookup-warning.requirements.psd1'
+        Set-Content -LiteralPath $buildRequirementsPath -Value @'
+@(
+    @{ ModuleName = "InvokeBuild"; RequiredVersion = "5.14.23" }
+)
+'@
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            BuildRequirementsPath = $buildRequirementsPath
+        } {
+            param($BuildRequirementsPath)
+
+            Mock -CommandName Find-Module -MockWith {
+                throw 'network lookup failed'
+            }
+
+            $result = Update-DependencyReference `
+                -BuildRequirementsPath $BuildRequirementsPath `
+                -SkipManifestRequirement `
+                -AllowLookupFailure
+
+            $result.BuildRequirementUpdated | Should -BeFalse
             $result.UpdatedModuleCount | Should -Be 0
         }
     }

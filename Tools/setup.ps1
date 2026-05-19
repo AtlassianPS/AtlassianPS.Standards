@@ -15,4 +15,5 @@ Import-Module -Name $moduleSourcePath -Force -ErrorAction Stop
 
 $null = AtlassianPS.Standards\Install-DependencyRequirement `
     -BuildRequirementsPath (Join-Path -Path $projectRoot -ChildPath 'Tools/build.requirements.psd1') `
-    -ManifestPath (Join-Path -Path $projectRoot -ChildPath 'AtlassianPS.Standards/AtlassianPS.Standards.psd1')
+    -ManifestPath (Join-Path -Path $projectRoot -ChildPath 'AtlassianPS.Standards/AtlassianPS.Standards.psd1') `
+    -ErrorAction Stop
