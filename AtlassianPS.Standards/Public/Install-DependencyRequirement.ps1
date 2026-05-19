@@ -1,4 +1,25 @@
-﻿function Install-DependencyRequirement {
+﻿<#
+.SYNOPSIS
+Installs required module dependencies for AtlassianPS standards workflows.
+
+.DESCRIPTION
+Reads dependency requirements from the build requirements data file and the
+module manifest, normalizes entries to ModuleName/RequiredVersion pairs, and
+installs any missing versions from PSGallery for the current user.
+
+.PARAMETER BuildRequirementsPath
+Path to the build requirements data file (for example, Tools/build.requirements.psd1).
+
+.PARAMETER ManifestPath
+Path to the module manifest file containing RequiredModules entries.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Install-DependencyRequirement -BuildRequirementsPath './Tools/build.requirements.psd1' -ManifestPath './AtlassianPS.Standards/AtlassianPS.Standards.psd1'
+#>
+function Install-DependencyRequirement {
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([PSCustomObject])]
     param(

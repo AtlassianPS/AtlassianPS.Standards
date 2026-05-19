@@ -11,6 +11,12 @@ Describe 'Install-DependencyRequirement' {
         $command | Should -Not -BeNullOrEmpty
     }
 
+    It 'provides comment-based help' {
+        $help = Get-Help -Name 'Install-AtlassianPSDependencyRequirement' -ErrorAction Stop
+        $help.Synopsis | Should -Not -BeNullOrEmpty
+        $help.Description.Text | Should -Not -BeNullOrEmpty
+    }
+
     It 'installs missing requirements and skips already installed versions' {
         $buildRequirementsPath = Join-Path -Path $TestDrive -ChildPath 'build.requirements.psd1'
         $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module.psd1'

@@ -11,6 +11,12 @@ Describe 'Update-DependencyReference' {
         $command | Should -Not -BeNullOrEmpty
     }
 
+    It 'provides comment-based help' {
+        $help = Get-Help -Name 'Update-AtlassianPSDependencyReference' -ErrorAction Stop
+        $help.Synopsis | Should -Not -BeNullOrEmpty
+        $help.Description.Text | Should -Not -BeNullOrEmpty
+    }
+
     It 'updates array build requirements and manifest requirements' {
         $buildRequirementsPath = Join-Path -Path $TestDrive -ChildPath 'build.requirements.psd1'
         $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module.psd1'

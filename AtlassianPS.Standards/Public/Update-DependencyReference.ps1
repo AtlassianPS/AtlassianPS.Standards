@@ -1,4 +1,38 @@
-﻿function Update-DependencyReference {
+﻿<#
+.SYNOPSIS
+Updates pinned dependency versions in build requirements and module manifests.
+
+.DESCRIPTION
+Resolves latest module versions from PSGallery and updates pinned version
+entries in the provided build requirements and/or manifest files. By default,
+lookup failures are terminating to prevent silent partial updates.
+
+.PARAMETER BuildRequirementsPath
+Path to the build requirements data file to update.
+
+.PARAMETER ManifestPath
+Path to the module manifest file to update.
+
+.PARAMETER SkipBuildRequirement
+Skips updates to the build requirements file.
+
+.PARAMETER SkipManifestRequirement
+Skips updates to the module manifest file.
+
+.PARAMETER AllowLookupFailure
+Continues when a module version lookup fails, leaving the current version unchanged.
+Use this only for explicitly non-blocking/manual update runs.
+
+.OUTPUTS
+PSCustomObject
+
+.EXAMPLE
+Update-DependencyReference -BuildRequirementsPath './Tools/build.requirements.psd1' -ManifestPath './AtlassianPS.Standards/AtlassianPS.Standards.psd1'
+
+.EXAMPLE
+Update-DependencyReference -AllowLookupFailure
+#>
+function Update-DependencyReference {
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([PSCustomObject])]
     param(
