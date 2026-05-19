@@ -12,7 +12,10 @@
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [String]$VersionToPublish
+        [String]$VersionToPublish,
+
+        [Parameter()]
+        [String]$ReleaseNotes
     )
 
     if (-not (Get-Command -Name 'Metadata\Update-Metadata' -ErrorAction SilentlyContinue)) {
@@ -78,6 +81,10 @@
 
     $normalizedVersion = ConvertTo-VersionDescriptor -VersionText $VersionToPublish
 
+    if ($PSBoundParameters.ContainsKey('ReleaseNotes') -and [string]::IsNullOrWhiteSpace($ReleaseNotes)) {
+        throw 'ReleaseNotes cannot be empty when provided.'
+    }
+
     $published = Find-Module -Name $ModuleName -ErrorAction SilentlyContinue
     if ($published) {
         $latestPublished = ConvertTo-VersionDescriptor -VersionText $published.Version.ToString()
@@ -95,6 +102,10 @@
         }
         else {
             Metadata\Update-Metadata -Path $BuiltManifestPath -PropertyName 'Prerelease' -Value ''
+        }
+
+        if ($PSBoundParameters.ContainsKey('ReleaseNotes')) {
+            Metadata\Update-Metadata -Path $BuiltManifestPath -PropertyName 'ReleaseNotes' -Value $ReleaseNotes
         }
     }
 

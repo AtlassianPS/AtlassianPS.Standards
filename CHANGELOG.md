@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.1.5
+
+- Added shared dependency setup/update flow (`Install-DependencyRequirement`, `Update-DependencyReference`) and wired `Tools/setup.ps1` / `Tools/update.dependencies.ps1` to shared command delegation. (Backfilled in PSGallery metadata after the v0.1.3 metadata miss.)
+- Automated release metadata generation by deriving PSGallery `ReleaseNotes` from the matching `CHANGELOG.md` version section during publish.
+- Hardened release automation so missing changelog sections fail the publish step instead of silently shipping stale release metadata.
+
 ## v0.1.4
 
 - Backfilled release metadata after v0.1.3 by adding explicit release notes to the GitHub release and packaging corrected release notes metadata for PSGallery.

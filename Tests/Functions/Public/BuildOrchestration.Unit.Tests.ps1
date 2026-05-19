@@ -101,7 +101,7 @@ Describe 'Invoke-ModuleTests' {
 }
 
 Describe 'Set-ModuleManifestVersion' {
-    It 'updates module version and prerelease metadata fields' {
+    It 'updates module version, prerelease metadata, and release notes' {
         $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module.psd1'
         Set-Content -LiteralPath $manifestPath -Value "@{ ModuleVersion = '0.1.0' }"
 
@@ -116,15 +116,22 @@ Describe 'Set-ModuleManifestVersion' {
             Mock -CommandName Find-Module -MockWith { $null }
             Mock -CommandName 'Metadata\Update-Metadata' -MockWith {}
 
-            $version = Set-ModuleManifestVersion -BuiltManifestPath $BuiltManifestPath -ModuleName 'AtlassianPS.Standards' -VersionToPublish 'v1.2.3-alpha'
+            $version = Set-ModuleManifestVersion `
+                -BuiltManifestPath $BuiltManifestPath `
+                -ModuleName 'AtlassianPS.Standards' `
+                -VersionToPublish 'v1.2.3-alpha' `
+                -ReleaseNotes '- Added dependency flow'
 
             $version | Should -Be '1.2.3'
-            Should -Invoke -CommandName 'Metadata\Update-Metadata' -Times 2 -Exactly -Scope It
+            Should -Invoke -CommandName 'Metadata\Update-Metadata' -Times 3 -Exactly -Scope It
             Should -Invoke -CommandName 'Metadata\Update-Metadata' -Scope It -ParameterFilter {
                 $PropertyName -eq 'ModuleVersion' -and $Value -eq '1.2.3'
             }
             Should -Invoke -CommandName 'Metadata\Update-Metadata' -Scope It -ParameterFilter {
                 $PropertyName -eq 'Prerelease' -and $Value -eq 'alpha'
+            }
+            Should -Invoke -CommandName 'Metadata\Update-Metadata' -Scope It -ParameterFilter {
+                $PropertyName -eq 'ReleaseNotes' -and $Value -eq '- Added dependency flow'
             }
         }
     }
@@ -190,6 +197,30 @@ Describe 'Set-ModuleManifestVersion' {
             {
                 Set-ModuleManifestVersion -BuiltManifestPath $BuiltManifestPath -ModuleName 'AtlassianPS.Standards' -VersionToPublish '1.2.5'
             } | Should -Throw -ExpectedMessage 'Metadata\Update-Metadata is not available*'
+        }
+    }
+
+    It 'throws when release notes are blank' {
+        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-empty-release-notes.psd1'
+        Set-Content -LiteralPath $manifestPath -Value "@{ ModuleVersion = '0.1.0' }"
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            BuiltManifestPath = $manifestPath
+        } {
+            param($BuiltManifestPath)
+
+            Mock -CommandName Get-Command -MockWith {
+                [PSCustomObject]@{ Name = 'Metadata\Update-Metadata' }
+            } -ParameterFilter { $Name -eq 'Metadata\Update-Metadata' }
+            Mock -CommandName Find-Module -MockWith { $null }
+
+            {
+                Set-ModuleManifestVersion `
+                    -BuiltManifestPath $BuiltManifestPath `
+                    -ModuleName 'AtlassianPS.Standards' `
+                    -VersionToPublish '1.2.6' `
+                    -ReleaseNotes '   '
+            } | Should -Throw -ExpectedMessage 'ReleaseNotes cannot be empty when provided.'
         }
     }
 }
