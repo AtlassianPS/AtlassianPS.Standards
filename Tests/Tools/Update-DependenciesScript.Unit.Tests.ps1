@@ -2,37 +2,6 @@
 
 BeforeAll {
     . "$PSScriptRoot/../Helpers/TestTools.ps1"
-    $script:projectRoot = Resolve-ProjectRoot
-    $script:sourceScriptPath = Join-Path -Path $script:projectRoot -ChildPath 'Tools/update.dependencies.ps1'
-
-    function Initialize-UpdateDependencyHarness {
-        [CmdletBinding()]
-        [OutputType([PSCustomObject])]
-        param(
-            [Parameter(Mandatory)]
-            [ValidateNotNullOrEmpty()]
-            [String]
-            $ModuleContent
-        )
-
-        $harnessRoot = Join-Path -Path $TestDrive -ChildPath ([System.Guid]::NewGuid().ToString())
-        $toolsPath = Join-Path -Path $harnessRoot -ChildPath 'Tools'
-        $modulePath = Join-Path -Path $harnessRoot -ChildPath 'AtlassianPS.Standards'
-
-        $null = New-Item -Path $toolsPath -ItemType Directory -Force
-        $null = New-Item -Path $modulePath -ItemType Directory -Force
-
-        $scriptPath = Join-Path -Path $toolsPath -ChildPath 'update.dependencies.ps1'
-        $moduleSourcePath = Join-Path -Path $modulePath -ChildPath 'AtlassianPS.Standards.psm1'
-
-        Set-Content -LiteralPath $scriptPath -Value (Get-Content -LiteralPath $script:sourceScriptPath -Raw)
-        Set-Content -LiteralPath $moduleSourcePath -Value $ModuleContent
-
-        return [PSCustomObject]@{
-            Root       = $harnessRoot
-            ScriptPath = $scriptPath
-        }
-    }
 }
 
 Describe 'Tools/update.dependencies.ps1' {
@@ -43,7 +12,7 @@ Describe 'Tools/update.dependencies.ps1' {
     }
 
     It 'invokes shared updater with expected default paths and switches' {
-        $harness = Initialize-UpdateDependencyHarness -ModuleContent @'
+        $harness = Initialize-ToolScriptHarness -ScriptRelativePath 'Tools/update.dependencies.ps1' -ModuleContent @'
 function Update-DependencyReference {
     [CmdletBinding()]
     param(
@@ -73,7 +42,7 @@ Export-ModuleMember -Function Update-DependencyReference
     }
 
     It 'fails fast when shared updater emits a non-terminating error' {
-        $harness = Initialize-UpdateDependencyHarness -ModuleContent @'
+        $harness = Initialize-ToolScriptHarness -ScriptRelativePath 'Tools/update.dependencies.ps1' -ModuleContent @'
 function Update-DependencyReference {
     [CmdletBinding()]
     param(

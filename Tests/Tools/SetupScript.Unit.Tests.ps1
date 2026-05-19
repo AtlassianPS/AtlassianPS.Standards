@@ -2,37 +2,6 @@
 
 BeforeAll {
     . "$PSScriptRoot/../Helpers/TestTools.ps1"
-    $script:projectRoot = Resolve-ProjectRoot
-    $script:sourceScriptPath = Join-Path -Path $script:projectRoot -ChildPath 'Tools/setup.ps1'
-
-    function Initialize-SetupHarness {
-        [CmdletBinding()]
-        [OutputType([PSCustomObject])]
-        param(
-            [Parameter(Mandatory)]
-            [ValidateNotNullOrEmpty()]
-            [String]
-            $ModuleContent
-        )
-
-        $harnessRoot = Join-Path -Path $TestDrive -ChildPath ([System.Guid]::NewGuid().ToString())
-        $toolsPath = Join-Path -Path $harnessRoot -ChildPath 'Tools'
-        $modulePath = Join-Path -Path $harnessRoot -ChildPath 'AtlassianPS.Standards'
-
-        $null = New-Item -Path $toolsPath -ItemType Directory -Force
-        $null = New-Item -Path $modulePath -ItemType Directory -Force
-
-        $scriptPath = Join-Path -Path $toolsPath -ChildPath 'setup.ps1'
-        $moduleSourcePath = Join-Path -Path $modulePath -ChildPath 'AtlassianPS.Standards.psm1'
-
-        Set-Content -LiteralPath $scriptPath -Value (Get-Content -LiteralPath $script:sourceScriptPath -Raw)
-        Set-Content -LiteralPath $moduleSourcePath -Value $ModuleContent
-
-        return [PSCustomObject]@{
-            Root       = $harnessRoot
-            ScriptPath = $scriptPath
-        }
-    }
 }
 
 Describe 'Tools/setup.ps1' {
@@ -45,7 +14,7 @@ Describe 'Tools/setup.ps1' {
     It 'invokes shared installer with expected default paths' {
         $capturePath = Join-Path -Path $TestDrive -ChildPath 'setup-args.json'
         $escapedCapturePath = $capturePath.Replace("'", "''")
-        $harness = Initialize-SetupHarness -ModuleContent @"
+        $harness = Initialize-ToolScriptHarness -ScriptRelativePath 'Tools/setup.ps1' -ModuleContent @"
 function Install-DependencyRequirement {
     [CmdletBinding()]
     param(
@@ -70,7 +39,7 @@ Export-ModuleMember -Function Install-DependencyRequirement
     }
 
     It 'fails fast when shared installer emits a non-terminating error' {
-        $harness = Initialize-SetupHarness -ModuleContent @'
+        $harness = Initialize-ToolScriptHarness -ScriptRelativePath 'Tools/setup.ps1' -ModuleContent @'
 function Install-DependencyRequirement {
     [CmdletBinding()]
     param(
