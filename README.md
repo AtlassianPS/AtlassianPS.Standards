@@ -9,6 +9,7 @@ Exported helpers cover:
 - build output orchestration (`Copy-ModuleArtifacts`, `Join-ModuleSource`)
 - manifest and release helpers (`Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `New-ModulePackage`, `Publish-ModuleRelease`)
 - Pester orchestration (`Invoke-ModuleTests`)
+- dependency bootstrap and maintenance (`Install-DependencyRequirement`, `Update-DependencyReference`)
 
 ## Usage
 
@@ -35,6 +36,8 @@ The module manifest sets `DefaultCommandPrefix = 'AtlassianPS'`, so consumers ca
 ```
 
 `setup.ps1` installs the union of runtime dependencies from `AtlassianPS.Standards.psd1` (`RequiredModules`) and build-only dependencies from `Tools/build.requirements.psd1`.
+
+Use `Tools/update.dependencies.ps1` to refresh pinned dependency versions in `Tools/build.requirements.psd1` and `AtlassianPS.Standards.psd1`. The default behavior is fail-fast on lookup errors; use `Update-AtlassianPSDependencyReference -AllowLookupFailure` only for explicit non-blocking/manual update runs.
 
 ## Build, Lint, Test
 
