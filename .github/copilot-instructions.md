@@ -4,6 +4,7 @@ Use canonical project guidance from:
 
 - `AGENTS.md`
 - `.github/ai-context/powershell-rules.md`
+- `.github/instructions/`
 
 If guidance conflicts, `AGENTS.md` is authoritative.
 
@@ -11,7 +12,9 @@ If guidance conflicts, `AGENTS.md` is authoritative.
 
 1. Keep exported standards helpers compatible for downstream AtlassianPS repositories.
 2. Follow compatibility/versioning/dependency guardrails from `AGENTS.md`.
-3. Run from repository root:
+3. During iteration, run focused tests when possible (for example `Invoke-Pester -Path 'Tests/Functions/Public/Invoke-Lint.Unit.Tests.ps1'`).
+4. Before finalizing, run from repository root:
    - `./Tools/setup.ps1`
    - `Invoke-Build -Task Lint, Build, Test`
-4. Keep tests, `README.md`, and `CHANGELOG.md` aligned with user-visible changes.
+5. Keep tests, `README.md`, and `CHANGELOG.md` aligned with user-visible changes.
+6. Instruction-only changes may be skipped by CI path filters; run local validation and report exact command outcomes.

@@ -13,10 +13,11 @@ Focused iteration commands are allowed, for example:
 
 ```powershell
 Invoke-Build -Task Lint
-Invoke-Pester -Path ./Tests/Functions/Public
+Invoke-Pester -Path 'Tests/Functions/Public/Invoke-Lint.Unit.Tests.ps1'
 ```
 
-Run the full pipeline before finalizing.
+Before finalizing, run the full pipeline: `Invoke-Build -Task Lint, Build, Test`.
+Instruction-only changes may be skipped by CI path filters; run local validation and report exact command outcomes.
 
 ## Compatibility Targets
 

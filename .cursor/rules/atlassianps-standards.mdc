@@ -16,7 +16,9 @@ If rules conflict, `AGENTS.md` is authoritative.
 
 1. Preserve compatibility for downstream repositories consuming this standards module.
 2. Follow compatibility/versioning/dependency guardrails from `AGENTS.md`.
-3. Run from repo root:
+3. During iteration, run focused tests when possible (for example `Invoke-Pester -Path 'Tests/Functions/Public/Invoke-Lint.Unit.Tests.ps1'`).
+4. Before finalizing, run from repo root:
    - `./Tools/setup.ps1`
    - `Invoke-Build -Task Lint, Build, Test`
-4. Keep tests/docs/changelog synchronized with behavior changes.
+5. Keep tests/docs/changelog synchronized with behavior changes.
+6. Instruction-only changes may be skipped by CI path filters; run local validation and report exact command outcomes.

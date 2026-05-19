@@ -7,7 +7,7 @@ Optimize for stable contracts, predictable build behavior, and low-noise changes
 
 1. `AGENTS.md` (this file) is the canonical policy.
 2. `.github/ai-context/powershell-rules.md` defines implementation/build/test specifics.
-3. Tool entry points (`CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.cursor/rules/*.mdc`) must mirror this guidance and not introduce conflicting rules.
+3. Tool entry points (`CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`, `.cursor/rules/*.mdc`) must mirror this guidance and not introduce conflicting rules.
 
 If guidance conflicts, follow this file first.
 
@@ -34,7 +34,8 @@ If guidance conflicts, follow this file first.
 Invoke-Build -Task Lint, Build, Test
 ```
 
-During iteration, focused runs are allowed (for example `Invoke-Build -Task Lint` or targeted `Invoke-Pester`), but always run the full pipeline before finalizing.
+During iteration, run focused validation (for example `Invoke-Pester -Path 'Tests/Functions/Public/Invoke-Lint.Unit.Tests.ps1'`).
+Before finalizing, always run the full pipeline: `Invoke-Build -Task Lint, Build, Test`.
 
 ## Change Scope and Quality Bar
 
@@ -50,3 +51,18 @@ During iteration, focused runs are allowed (for example `Invoke-Build -Task Lint
 - Tests: `Tests/`
 - Dependency bootstrap: `Tools/setup.ps1`
 - CI workflows: `.github/workflows/`
+
+## AI Tool Compatibility
+
+| Tool | Entry point | Canonical references |
+|------|-------------|----------------------|
+| GitHub Copilot | `.github/copilot-instructions.md` | `AGENTS.md`, `.github/ai-context/powershell-rules.md` |
+| GitHub Copilot (file rules) | `.github/instructions/standards-compatibility.instructions.md` | `.github/ai-context/powershell-rules.md` |
+| Cursor | `.cursor/rules/atlassianps-standards.mdc` | `AGENTS.md`, `.github/ai-context/powershell-rules.md` |
+| Claude Code | `CLAUDE.md` | `AGENTS.md`, `.github/ai-context/powershell-rules.md` |
+| Gemini/Antigravity | `GEMINI.md` | `AGENTS.md`, `.github/ai-context/powershell-rules.md` |
+
+## CI/CD Notes
+
+- `.github/workflows/ci.yml` is the required quality gate for runtime/code changes.
+- Instruction-only changes can be skipped by CI path filters; run local validation and report exact command outcomes.
