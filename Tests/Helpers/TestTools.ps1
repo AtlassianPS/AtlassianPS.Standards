@@ -220,6 +220,66 @@ function Resolve-ProjectRoot {
     throw "Could not find project root (no CODEOWNERS file found in any parent of $($script:_TestToolsDir))"
 }
 
+function Initialize-ToolScriptHarness {
+    <#
+    .SYNOPSIS
+        Creates an isolated script harness for tool entrypoint tests.
+
+    .DESCRIPTION
+        Copies a tool script from the repository into a fresh TestDrive harness
+        folder and writes a test-specific AtlassianPS.Standards module source
+        file, so tests can validate script wiring and error behavior without
+        mutating repository files.
+
+    .PARAMETER ScriptRelativePath
+        Path to the source script relative to the repository root
+        (for example, Tools/setup.ps1).
+
+    .PARAMETER ModuleContent
+        Module source content to write to
+        AtlassianPS.Standards/AtlassianPS.Standards.psm1 in the harness.
+
+    .OUTPUTS
+        [PSCustomObject] with Root, ScriptPath, and ModuleSourcePath.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [String]$ScriptRelativePath,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [String]$ModuleContent
+    )
+
+    $projectRoot = Resolve-ProjectRoot
+    $sourceScriptPath = Join-Path -Path $projectRoot -ChildPath $ScriptRelativePath
+    if (-not (Test-Path -LiteralPath $sourceScriptPath -PathType Leaf)) {
+        throw "Tool script was not found at '$sourceScriptPath'."
+    }
+
+    $harnessRoot = Join-Path -Path $TestDrive -ChildPath ([System.Guid]::NewGuid().ToString())
+    $toolsPath = Join-Path -Path $harnessRoot -ChildPath 'Tools'
+    $modulePath = Join-Path -Path $harnessRoot -ChildPath 'AtlassianPS.Standards'
+
+    $null = New-Item -Path $toolsPath -ItemType Directory -Force
+    $null = New-Item -Path $modulePath -ItemType Directory -Force
+
+    $scriptPath = Join-Path -Path $toolsPath -ChildPath (Split-Path -Path $sourceScriptPath -Leaf)
+    $moduleSourcePath = Join-Path -Path $modulePath -ChildPath 'AtlassianPS.Standards.psm1'
+
+    Set-Content -LiteralPath $scriptPath -Value (Get-Content -LiteralPath $sourceScriptPath -Raw)
+    Set-Content -LiteralPath $moduleSourcePath -Value $ModuleContent
+
+    return [PSCustomObject]@{
+        Root             = $harnessRoot
+        ScriptPath       = $scriptPath
+        ModuleSourcePath = $moduleSourcePath
+    }
+}
+
 function Write-MockDebugInfo {
     <#
     .SYNOPSIS

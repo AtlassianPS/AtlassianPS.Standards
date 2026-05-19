@@ -5,6 +5,9 @@
 - Reduced exported command surface by keeping `Get-BuildEnvironmentInfo` and `Get-ScriptAnalyzerSettingsPath` internal-only.
 - Removed public availability of `Get-AtlassianPSBuildEnvironmentInfo` and `Get-AtlassianPSScriptAnalyzerSettingsPath`.
 - Use public alternatives instead: `Initialize-AtlassianPSBuildEnvironment`, `Write-AtlassianPSBuildInfo`, and `Sync-AtlassianPSScriptAnalyzerSettings`.
+- Made `Update-DependencyReference` fail fast on module version lookup errors by default, with explicit `-AllowLookupFailure` opt-out.
+- Added script-level tests for `Tools/setup.ps1` entrypoint wiring and fail-fast behavior.
+- Added comment-based help to dependency setup/update commands and test coverage for help availability.
 
 ## v0.1.1
 
