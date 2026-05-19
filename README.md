@@ -52,3 +52,5 @@ Tag-based CD runs on `v*` tags and will:
 1. Build the module.
 2. Publish to PowerShell Gallery (when `PSGALLERY_API_KEY` is configured).
 3. Create a GitHub release with a zipped module artifact.
+
+The source manifest intentionally uses a major/minor `ModuleVersion` (`x.y`) as a maintenance baseline. Release tags (`vX.Y.Z`) provide the full semantic version, and the publish pipeline stamps that exact tag version into the built manifest.
