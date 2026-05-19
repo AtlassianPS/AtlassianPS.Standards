@@ -2,25 +2,15 @@
 
 ## Unreleased
 
-## v0.1.5
-
-- Added shared dependency setup/update flow (`Install-DependencyRequirement`, `Update-DependencyReference`) and wired `Tools/setup.ps1` / `Tools/update.dependencies.ps1` to shared command delegation. (Backfilled in PSGallery metadata after the v0.1.3 metadata miss.)
-- Automated release metadata generation by deriving PSGallery `ReleaseNotes` from the matching `CHANGELOG.md` version section during publish.
-- Hardened release automation so missing changelog sections fail the publish step instead of silently shipping stale release metadata.
-
-## v0.1.4
-
-- Backfilled release metadata after v0.1.3 by adding explicit release notes to the GitHub release and packaging corrected release notes metadata for PSGallery.
-- Aligned source manifest `ModuleVersion` to the repository major/minor convention (`x.y`) to avoid implying manual patch bumps in source.
-
-## v0.1.3
+## v0.1.6
 
 - Added shared dependency setup/update flow (`Install-DependencyRequirement`, `Update-DependencyReference`) and wired `Tools/setup.ps1` / `Tools/update.dependencies.ps1` to shared command delegation.
 - Made dependency lookup failures fail fast by default in `Update-DependencyReference`, with explicit `-AllowLookupFailure` opt-out for manual non-blocking runs.
-- Added script-level entrypoint tests for setup and dependency update tooling.
+- Added script-level entrypoint tests for setup and dependency update tooling and deduplicated tool-entrypoint test harness bootstrap via shared test helper extraction.
 - Added comment-based help coverage for exported dependency commands.
-- Deduplicated tool-entrypoint test harness bootstrap via shared test helper extraction.
-- Improved README guidance for dependency setup/update behavior.
+- Aligned source manifest `ModuleVersion` to the repository major/minor convention (`x.y`) to avoid implying manual patch bumps in source.
+- Improved README guidance for dependency setup/update behavior and release process expectations.
+- Automated release metadata generation by deriving PSGallery `ReleaseNotes` from the matching `CHANGELOG.md` version section during publish, and failing publish when that section is missing or empty.
 
 ## v0.1.1
 

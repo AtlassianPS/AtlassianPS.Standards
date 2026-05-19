@@ -54,12 +54,20 @@ jobs:
         run: Invoke-Build -Task Publish -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -PSGalleryAPIKey ${{ secrets.PSGALLERY_API_KEY }}
         shell: pwsh
 
+      - name: Build release notes from changelog
+        id: changelog
+        uses: MatteoCampinoti94/changelog-to-release@v1.0.6
+        with:
+          version-name: ${{ steps.release_ref.outputs.release_tag }}
+          configuration: ./.github/changelog.configuration.json
+        if: ${{ hashFiles('CHANGELOG.md') != '' }}
+
       - name: Create Release and Upload Asset
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.release_ref.outputs.release_tag }}
           name: ${{ steps.release_ref.outputs.release_tag }}
-          generate_release_notes: true
+          body: ${{ steps.changelog.outputs.body }}
           files: ./Release/AtlassianPS.Standards.zip
           fail_on_unmatched_files: true
           draft: false
