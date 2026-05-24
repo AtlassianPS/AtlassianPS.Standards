@@ -10,6 +10,7 @@ Exported helpers cover:
 - manifest and release helpers (`Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `New-ModulePackage`, `Test-ModulePackage`, `Invoke-ModulePublishDryRun`, `Publish-ModuleRelease`)
 - help generation helpers (`Update-ExternalHelp`, `Remove-OrphanedExternalHelp`)
 - Pester orchestration (`Invoke-ModuleTests`, `Invoke-ParallelPester`)
+- test bootstrap helpers (`Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment`)
 - integration-test helpers (`Import-DotEnvFile`, `Initialize-IntegrationEnvironment`, `Invoke-DockerIntegrationTrack`)
 - dependency bootstrap and maintenance (`Install-DependencyRequirement`, `Update-DependencyReference`)
 
@@ -114,6 +115,43 @@ Invoke-AtlassianPSParallelPester `
     -OutputPath 'Test-Integration.xml' `
     -SuiteName 'JiraPS Integration Tests'
 ```
+
+Downstream repositories that still expose a repo-local `Tests/Invoke-ParallelPester.ps1` should reduce it to a thin compatibility wrapper rather than keeping a copied runner implementation.
+
+```powershell
+#requires -Module AtlassianPS.Standards
+[CmdletBinding()]
+param(
+    [string[]]$Path = './Tests/Integration/',
+    [int]$ThrottleLimit = 4,
+    [string[]]$Tag,
+    [string[]]$ExcludeTag,
+    [ValidateSet('None', 'Normal', 'Detailed', 'Diagnostic')]
+    [string]$Output = 'Normal',
+    [string]$OutputPath
+)
+
+Invoke-AtlassianPSParallelPester @PSBoundParameters `
+    -ProjectRoot (Resolve-AtlassianPSProjectRoot -StartPath $PSScriptRoot) `
+    -EnvironmentFilePath (Join-Path (Resolve-AtlassianPSProjectRoot -StartPath $PSScriptRoot) '.env')
+```
+
+### Test Bootstrap
+
+Use `Initialize-AtlassianPSModuleTestEnvironment` from Pester `BeforeAll` blocks instead of carrying repo-local copies of module import/cache helpers.
+It resolves the source or release manifest, computes a source fingerprint, and reloads the module only when the on-disk module changed.
+
+```powershell
+BeforeAll {
+    Import-Module AtlassianPS.Standards
+    $script:moduleToTest = Initialize-AtlassianPSModuleTestEnvironment `
+        -ModuleName 'JiraPS' `
+        -StartPath $PSScriptRoot
+}
+```
+
+Use `Resolve-AtlassianPSProjectRoot` and `Resolve-AtlassianPSModuleSource` directly when a test needs only path resolution.
+Keep product-specific fixture/session helpers, such as Jira issue creation or Confluence space setup, in the product repository.
 
 ### Docker Integration Track
 

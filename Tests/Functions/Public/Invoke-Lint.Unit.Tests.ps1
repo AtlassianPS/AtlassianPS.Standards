@@ -81,6 +81,7 @@ Describe 'Invoke-Lint' {
     }
 
     It 'aggregates style and analyzer failures into one error' {
+        $originalGitHubActions = $env:GITHUB_ACTIONS
         $projectPath = Join-Path -Path $TestDrive -ChildPath 'project-failure'
         $modulePath = Join-Path -Path $projectPath -ChildPath 'AtlassianPS.Standards'
         $testsPath = Join-Path -Path $projectPath -ChildPath 'Tests'
@@ -94,34 +95,41 @@ Describe 'Invoke-Lint' {
         Set-Content -LiteralPath $settingsPath -Value '@{ IncludeRules = @() }'
         Set-Content -LiteralPath $buildScriptPath -Value '$null = $true'
 
-        InModuleScope AtlassianPS.Standards -Parameters @{
-            ProjectPath     = $projectPath
-            ModulePath      = $modulePath
-            BuildScriptPath = $buildScriptPath
-            SettingsPath    = $settingsPath
-        } {
-            param($ProjectPath, $ModulePath, $BuildScriptPath, $SettingsPath)
+        try {
+            $env:GITHUB_ACTIONS = $null
 
-            Mock -CommandName Invoke-Pester -MockWith {
-                [PSCustomObject]@{ FailedCount = 1 }
-            }
-            Mock -CommandName Invoke-ScriptAnalyzer -MockWith {
-                @(
-                    [PSCustomObject]@{
-                        Severity   = 'Warning'
-                        ScriptName = 'AtlassianPS.Standards.build.ps1'
-                        ScriptPath = $BuildScriptPath
-                        Line       = 12
-                        Column     = 4
-                        RuleName   = 'PSRule'
-                        Message    = 'Mock warning'
-                    }
-                )
-            }
+            InModuleScope AtlassianPS.Standards -Parameters @{
+                ProjectPath     = $projectPath
+                ModulePath      = $modulePath
+                BuildScriptPath = $buildScriptPath
+                SettingsPath    = $settingsPath
+            } {
+                param($ProjectPath, $ModulePath, $BuildScriptPath, $SettingsPath)
 
-            {
-                Invoke-Lint -ProjectPath $ProjectPath -ModulePath $ModulePath -BuildScriptPath $BuildScriptPath -AnalyzerSettingsPath $SettingsPath
-            } | Should -Throw -ExpectedMessage "Lint failed:*style test(s) failed.*PSScriptAnalyzer issue(s) found.*"
+                Mock -CommandName Invoke-Pester -MockWith {
+                    [PSCustomObject]@{ FailedCount = 1 }
+                }
+                Mock -CommandName Invoke-ScriptAnalyzer -MockWith {
+                    @(
+                        [PSCustomObject]@{
+                            Severity   = 'Warning'
+                            ScriptName = 'AtlassianPS.Standards.build.ps1'
+                            ScriptPath = $BuildScriptPath
+                            Line       = 12
+                            Column     = 4
+                            RuleName   = 'PSRule'
+                            Message    = 'Mock warning'
+                        }
+                    )
+                }
+
+                {
+                    Invoke-Lint -ProjectPath $ProjectPath -ModulePath $ModulePath -BuildScriptPath $BuildScriptPath -AnalyzerSettingsPath $SettingsPath
+                } | Should -Throw -ExpectedMessage "Lint failed:*style test(s) failed.*PSScriptAnalyzer issue(s) found.*"
+            }
+        }
+        finally {
+            $env:GITHUB_ACTIONS = $originalGitHubActions
         }
     }
 }
