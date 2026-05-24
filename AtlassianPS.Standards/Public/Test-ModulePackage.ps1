@@ -5,8 +5,9 @@
 
     .DESCRIPTION
         Checks that the built module directory, manifest, and package archive exist,
-        then validates the manifest metadata resolves to the expected module name and
-        a concrete version.
+        validates the manifest metadata resolves to the expected module name and a
+        concrete version, then expands the package to verify that the archive contains
+        the expected module manifest.
 
     .PARAMETER BuildOutputPath
         Path to the build output directory, usually Release.
@@ -54,6 +55,30 @@
     }
     if ($null -eq $manifest.Version) {
         throw 'Release manifest version could not be resolved.'
+    }
+
+    $packageValidationRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath "AtlassianPS-PackageValidation-$([Guid]::NewGuid().ToString('N'))"
+    try {
+        $null = New-Item -Path $packageValidationRoot -ItemType Directory -Force
+        Expand-Archive -LiteralPath $PackagePath -DestinationPath $packageValidationRoot -Force
+        $packagedManifestPath = Join-Path -Path (Join-Path -Path $packageValidationRoot -ChildPath $ModuleName) -ChildPath "$ModuleName.psd1"
+        if (-not (Test-Path -LiteralPath $packagedManifestPath -PathType Leaf)) {
+            throw "Release package '$PackagePath' does not contain expected manifest '$ModuleName/$ModuleName.psd1'."
+        }
+
+        $packagedManifest = Test-ModuleManifest -Path $packagedManifestPath -ErrorAction Stop
+        if ($packagedManifest.Name -ne $ModuleName) {
+            throw "Packaged manifest name '$($packagedManifest.Name)' does not match '$ModuleName'."
+        }
+        if ($packagedManifest.Version -ne $manifest.Version) {
+            throw "Packaged manifest version '$($packagedManifest.Version)' does not match release manifest version '$($manifest.Version)'."
+        }
+    }
+    catch {
+        throw "Release package validation failed for '$PackagePath': $($_.Exception.Message)"
+    }
+    finally {
+        Remove-Item -LiteralPath $packageValidationRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     [PSCustomObject]@{

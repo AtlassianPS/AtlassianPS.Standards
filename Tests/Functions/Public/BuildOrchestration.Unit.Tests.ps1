@@ -55,6 +55,9 @@ Describe 'Invoke-ModuleBuild' {
             Should -Invoke -CommandName Copy-ModuleArtifacts -Times 1 -Exactly -Scope It -ParameterFilter {
                 $IncludeTests -and $ModuleName -eq 'BuildModule'
             }
+            Should -Invoke -CommandName Remove-OrphanedExternalHelp -Times 1 -Exactly -Scope It -ParameterFilter {
+                $CommandRelativePath -eq 'commands/*.md'
+            }
         }
     }
 

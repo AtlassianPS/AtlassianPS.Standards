@@ -46,8 +46,11 @@ Describe 'Initialize-IntegrationEnvironment' {
 
         $result.Track | Should -Be 'Cloud'
         $result.IsDefaultTrack | Should -BeTrue
-        $result.Values.ATLAS_CLOUD_URL | Should -Be 'https://example.atlassian.net'
-        $result.Values.ATLAS_OPTIONAL | Should -Be 'fixture'
+        $result.RequiredVariables | Should -Contain 'ATLAS_CLOUD_URL'
+        $result.OptionalVariables | Should -Contain 'ATLAS_OPTIONAL'
+        $result.PSObject.Properties.Name | Should -Not -Contain 'Values'
+        $env:ATLAS_CLOUD_URL | Should -Be 'https://example.atlassian.net'
+        $env:ATLAS_OPTIONAL | Should -Be 'fixture'
     }
 
     It 'throws when required variables for the selected track are missing' {
@@ -154,5 +157,18 @@ Describe 'Invoke-DockerIntegrationTrack' {
         }
 
         Get-Content -LiteralPath $logPath -Raw | Should -Match 'container log line'
+    }
+}
+
+Describe 'New-AtlassianPSPesterFailureResult' {
+    It 'creates a consistent failure result object' {
+        InModuleScope AtlassianPS.Standards {
+            $result = New-AtlassianPSPesterFailureResult -File 'Thing.Tests.ps1' -Name 'Timeout' -Message 'Timed out.' -Duration ([TimeSpan]::FromSeconds(2))
+
+            $result.File | Should -Be 'Thing.Tests.ps1'
+            $result.Failed | Should -Be 1
+            $result.FailedTests[0].Name | Should -Be 'Timeout'
+            $result.Duration.TotalSeconds | Should -Be 2
+        }
     }
 }

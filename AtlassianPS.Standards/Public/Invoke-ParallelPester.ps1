@@ -174,7 +174,7 @@ catch {
 '@
 
     if ($canParallel) {
-        $jobInfos = New-Object System.Collections.Generic.List[Object]
+        $pendingJobs = [System.Collections.Generic.List[Object]]::new()
         foreach ($testFile in $testFiles) {
             $job = Start-ThreadJob `
                 -ScriptBlock ([ScriptBlock]::Create($runTestBodyText)) `
@@ -182,51 +182,42 @@ catch {
                 -ThrottleLimit $ThrottleLimit `
                 -StreamingHost $Host `
                 -Name "Pester:$($testFile.BaseName)"
-            $jobInfos.Add([PSCustomObject]@{ File = $testFile; Job = $job })
+            $pendingJobs.Add([PSCustomObject]@{
+                    File      = $testFile
+                    Job       = $job
+                    StartedAt = Get-Date
+                })
         }
 
-        foreach ($info in $jobInfos) {
-            $job = $info.Job
-            $file = $info.File
-            $finished = Wait-Job -Job $job -Timeout $PerFileTimeoutSeconds
-            if (-not $finished) {
-                Write-Warning "Test file [$($file.Name)] exceeded ${PerFileTimeoutSeconds}s budget; stopping the runspace and recording an orchestrator timeout."
-                try { Stop-Job -Job $job -ErrorAction SilentlyContinue } catch { Write-Warning "Stop-Job [$($job.Name)] threw: $_" }
-                $results += [PSCustomObject]@{
-                    File         = $file.Name
-                    Passed       = 0
-                    Failed       = 1
-                    Skipped      = 0
-                    Duration     = [TimeSpan]::FromSeconds($PerFileTimeoutSeconds)
-                    Success      = $false
-                    Error        = "Per-file orchestrator timeout (${PerFileTimeoutSeconds}s)."
-                    FailedTests  = @([PSCustomObject]@{ Name = 'Orchestrator timeout'; ErrorMessage = "Test file [$($file.Name)] timed out after ${PerFileTimeoutSeconds}s." })
-                    SkippedTests = @()
-                    XmlPath      = $null
-                }
-            }
-            else {
-                try {
-                    $jobOutput = Receive-Job -Job $job -ErrorAction Stop 6> $null
-                    if ($null -ne $jobOutput) { $results += $jobOutput }
-                }
-                catch {
-                    Write-Warning "Receive-Job [$($job.Name)] threw: $_"
-                    $results += [PSCustomObject]@{
-                        File         = $file.Name
-                        Passed       = 0
-                        Failed       = 1
-                        Skipped      = 0
-                        Duration     = [TimeSpan]::Zero
-                        Success      = $false
-                        Error        = "Receive-Job failed: $_"
-                        FailedTests  = @([PSCustomObject]@{ Name = 'Receive-Job failure'; ErrorMessage = $_.Exception.Message })
-                        SkippedTests = @()
-                        XmlPath      = $null
+        while ($pendingJobs.Count -gt 0) {
+            $now = Get-Date
+            $ready = @(
+                foreach ($info in $pendingJobs) {
+                    if ($info.Job.State -notin 'NotStarted', 'Running') {
+                        $info
+                    }
+                    elseif (($now - $info.StartedAt).TotalSeconds -ge $PerFileTimeoutSeconds) {
+                        $info
                     }
                 }
+            )
+
+            if ($ready.Count -eq 0) {
+                $remainingSeconds = @(
+                    foreach ($info in $pendingJobs) {
+                        [Math]::Max(1, $PerFileTimeoutSeconds - [Int](($now - $info.StartedAt).TotalSeconds))
+                    }
+                ) | Sort-Object | Select-Object -First 1
+                $jobs = @($pendingJobs | ForEach-Object { $_.Job })
+                $null = Wait-Job -Job $jobs -Any -Timeout ([Math]::Min(5, $remainingSeconds))
+                continue
             }
-            try { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue } catch { Write-Warning "Remove-Job [$($job.Name)] threw: $_" }
+
+            foreach ($info in $ready) {
+                $jobOutput = Receive-AtlassianPSPesterJob -JobInfo $info -PerFileTimeoutSeconds $PerFileTimeoutSeconds
+                if ($null -ne $jobOutput) { $results += $jobOutput }
+                $null = $pendingJobs.Remove($info)
+            }
         }
     }
     else {

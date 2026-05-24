@@ -9,8 +9,9 @@
         track metadata and requested environment values.
 
         Product-specific helpers should pass their Cloud/Data Center schemas here,
-        then map the returned values into JiraPS or ConfluencePS-specific test
-        objects.
+        then read the validated environment variables directly when constructing
+        JiraPS or ConfluencePS-specific test objects. Values are not returned to
+        avoid accidentally writing secrets to build logs.
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
@@ -79,16 +80,10 @@
         throw $message
     }
 
-    $values = [Ordered]@{}
-    foreach ($name in @($requiredVariables + $optionalVariables | Select-Object -Unique)) {
-        $values[$name] = [Environment]::GetEnvironmentVariable($name)
-    }
-
     return [PSCustomObject]@{
         Track             = $track
         IsDefaultTrack    = $track -eq $DefaultTrack
         RequiredVariables = $requiredVariables
         OptionalVariables = $optionalVariables
-        Values            = [PSCustomObject]$values
     }
 }

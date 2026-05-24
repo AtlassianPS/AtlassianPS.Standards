@@ -74,7 +74,7 @@
             elseif ($byName) { 'True (ByPropertyName)' }
             else { 'False' }
             $pNode.SetAttribute('pipelineInput', $pipelineText)
-            if ($pNode.ParentNode.LocalName -eq 'parameters' -and $p.DefaultValue) {
+            if ($pNode.ParentNode.LocalName -eq 'parameters' -and $null -ne $p.DefaultValue) {
                 $existing = $pNode.SelectSingleNode('dev:defaultValue', $ns)
                 if ($existing) { [void]$pNode.RemoveChild($existing) }
                 $dv = $xml.CreateElement('dev', 'defaultValue', 'http://schemas.microsoft.com/maml/dev/2004/10')

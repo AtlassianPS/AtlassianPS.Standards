@@ -31,6 +31,9 @@
         [String]$ModuleName,
 
         [Parameter()]
+        [String]$CommandRelativePath = 'commands/*.md',
+
+        [Parameter()]
         [String[]]$AboutTopicRelativePath = @('about_*.md')
     )
 
@@ -57,7 +60,7 @@
         }
 
         $expected = [System.Collections.Generic.HashSet[String]]::new([System.StringComparer]::OrdinalIgnoreCase)
-        $hasCommandHelp = Get-ChildItem -Path (Join-Path -Path $localeDocs -ChildPath 'commands/*.md') -File -ErrorAction SilentlyContinue |
+        $hasCommandHelp = Get-ChildItem -Path (Join-Path -Path $localeDocs -ChildPath $CommandRelativePath) -File -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -ne 'index.md' -and $_.Name -notlike 'about_*.md' } |
             Select-Object -First 1
         if ($hasCommandHelp) {

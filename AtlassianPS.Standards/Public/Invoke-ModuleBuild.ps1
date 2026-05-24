@@ -95,6 +95,7 @@
             -ModulePath $sourceModulePath `
             -DocsPath $DocsPath `
             -ModuleName $ModuleName `
+            -CommandRelativePath $CommandHelpRelativePath `
             -AboutTopicRelativePath $AboutTopicRelativePath
     }
 

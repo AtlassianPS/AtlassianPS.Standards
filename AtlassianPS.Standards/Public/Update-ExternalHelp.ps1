@@ -38,6 +38,7 @@
         throw "Module path '$ModulePath' was not found."
     }
 
+    $platyPSWasLoaded = [Boolean](Get-Module -Name Microsoft.PowerShell.PlatyPS)
     Import-Module Microsoft.PowerShell.PlatyPS -Force
     try {
         foreach ($locale in (Get-ChildItem -LiteralPath $DocsPath -Directory)) {
@@ -81,6 +82,8 @@
         }
     }
     finally {
-        Remove-Module Microsoft.PowerShell.PlatyPS -ErrorAction SilentlyContinue
+        if (-not $platyPSWasLoaded) {
+            Remove-Module Microsoft.PowerShell.PlatyPS -ErrorAction SilentlyContinue
+        }
     }
 }

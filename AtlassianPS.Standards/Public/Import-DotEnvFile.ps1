@@ -19,7 +19,8 @@
         Environment variable names to skip while loading the file.
 
     .OUTPUTS
-        PSCustomObject records describing loaded variables.
+        PSCustomObject records describing loaded variable names. Values are not
+        emitted to avoid leaking secrets to build logs.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Loading a .env file into process-scoped environment variables is intentional and idempotent.')]
     [CmdletBinding()]
@@ -75,8 +76,7 @@
 
         [System.Environment]::SetEnvironmentVariable($name, $value)
         [PSCustomObject]@{
-            Name  = $name
-            Value = $value
+            Name = $name
         }
     }
 }

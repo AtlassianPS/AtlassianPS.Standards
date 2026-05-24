@@ -36,6 +36,7 @@ Describe 'Import-DotEnvFile' {
         $env:ATLAS_TEST_ENV_EXISTING | Should -Be 'from-file'
         $env:ATLAS_TEST_ENV_ALLOWED | Should -Be 'value'
         @($result).Name | Should -Contain 'ATLAS_TEST_ENV_EXISTING'
+        @($result).PSObject.Properties.Name | Should -Not -Contain 'Value'
     }
 
     It 'preserves hash characters inside values and skips excluded names' {
@@ -68,7 +69,7 @@ Describe 'Test-ModulePackage' {
         $null = New-Item -Path $modulePath -ItemType Directory -Force
         New-ModuleManifest -Path (Join-Path -Path $modulePath -ChildPath "$moduleName.psd1") -RootModule "$moduleName.psm1" -ModuleVersion '1.2.3'
         Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value ''
-        Set-Content -LiteralPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip") -Value 'zip'
+        Compress-Archive -Path $modulePath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
 
         $result = Test-AtlassianPSModulePackage -BuildOutputPath $buildOutput -ModuleName $moduleName
 
@@ -87,6 +88,22 @@ Describe 'Test-ModulePackage' {
         {
             Test-AtlassianPSModulePackage -BuildOutputPath $buildOutput -ModuleName $moduleName
         } | Should -Throw -ExpectedMessage 'Release package was not created*'
+    }
+
+    It 'throws when the release package does not contain the expected manifest' {
+        $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-invalid-package'
+        $moduleName = 'InvalidPackage'
+        $modulePath = Join-Path -Path $buildOutput -ChildPath $moduleName
+        $otherPath = Join-Path -Path $buildOutput -ChildPath 'OtherModule'
+        $null = New-Item -Path $modulePath, $otherPath -ItemType Directory -Force
+        New-ModuleManifest -Path (Join-Path -Path $modulePath -ChildPath "$moduleName.psd1") -RootModule "$moduleName.psm1" -ModuleVersion '1.0.0'
+        Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value ''
+        Set-Content -LiteralPath (Join-Path -Path $otherPath -ChildPath 'OtherModule.psd1') -Value '@{ ModuleVersion = ''1.0.0'' }'
+        Compress-Archive -Path $otherPath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
+
+        {
+            Test-AtlassianPSModulePackage -BuildOutputPath $buildOutput -ModuleName $moduleName
+        } | Should -Throw -ExpectedMessage '*does not contain expected manifest*'
     }
 }
 
@@ -110,5 +127,21 @@ Describe 'Remove-OrphanedExternalHelp' {
         Test-Path -LiteralPath (Join-Path -Path $localeOut -ChildPath 'Module-help.xml') | Should -BeTrue
         Test-Path -LiteralPath (Join-Path -Path $localeOut -ChildPath 'about_Module.help.txt') | Should -BeTrue
         Test-Path -LiteralPath (Join-Path -Path $localeOut -ChildPath 'orphan.help.txt') | Should -BeFalse
+    }
+
+    It 'honors a custom command help relative path' {
+        $root = Join-Path -Path $TestDrive -ChildPath 'custom-help'
+        $modulePath = Join-Path -Path $root -ChildPath 'Module'
+        $docsPath = Join-Path -Path $root -ChildPath 'docs'
+        $localeOut = Join-Path -Path $modulePath -ChildPath 'en-US'
+        $localeDocs = Join-Path -Path $docsPath -ChildPath 'en-US'
+        $referencePath = Join-Path -Path $localeDocs -ChildPath 'reference'
+        $null = New-Item -Path $localeOut, $referencePath -ItemType Directory -Force
+        Set-Content -LiteralPath (Join-Path -Path $referencePath -ChildPath 'Get-Thing.md') -Value '# Get-Thing'
+        Set-Content -LiteralPath (Join-Path -Path $localeOut -ChildPath 'Module-help.xml') -Value '<help />'
+
+        Remove-AtlassianPSOrphanedExternalHelp -ModulePath $modulePath -DocsPath $docsPath -ModuleName 'Module' -CommandRelativePath 'reference/*.md'
+
+        Test-Path -LiteralPath (Join-Path -Path $localeOut -ChildPath 'Module-help.xml') | Should -BeTrue
     }
 }
