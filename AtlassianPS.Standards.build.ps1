@@ -111,7 +111,16 @@ Task CopyBuildArtifacts {
         -IncludeTests
 }
 
-Task Build Clean, CopyBuildArtifacts, CompileModule, UpdateManifest
+Task Build {
+    $null = Invoke-AtlassianPSModuleBuild `
+        -ProjectPath $env:BHProjectPath `
+        -ModuleName $env:BHProjectName `
+        -BuildOutputPath $env:BHBuildOutput `
+        -BuiltManifestPath $script:BuildInfo.BuiltManifestPath `
+        -AdditionalFiles @('CHANGELOG.md', 'README.md', 'LICENSE') `
+        -IncludeTests `
+        -Clean
+}
 
 # Synopsis: Compile all functions into the .psm1 file
 Task CompileModule {
@@ -162,6 +171,12 @@ Task SetVersion {
 
 Task Package {
     $null = New-AtlassianPSModulePackage `
+        -BuildOutputPath $env:BHBuildOutput `
+        -ModuleName $env:BHProjectName
+}
+
+Task TestPublish Build, {
+    $null = Invoke-AtlassianPSModulePublishDryRun `
         -BuildOutputPath $env:BHBuildOutput `
         -ModuleName $env:BHProjectName
 }

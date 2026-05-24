@@ -5,6 +5,108 @@ BeforeAll {
     $script:moduleToTest = Initialize-TestEnvironment
 }
 
+Describe 'Invoke-ModuleBuild' {
+    It 'runs the shared module build steps and returns build metadata' {
+        $projectRoot = Join-Path -Path $TestDrive -ChildPath 'build-project'
+        $moduleName = 'BuildModule'
+        $modulePath = Join-Path -Path $projectRoot -ChildPath $moduleName
+        $releaseModulePath = Join-Path -Path $projectRoot -ChildPath "Release/$moduleName"
+        $builtManifestPath = Join-Path -Path $releaseModulePath -ChildPath "$moduleName.psd1"
+        $null = New-Item -Path $modulePath -ItemType Directory -Force
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            ProjectRoot       = $projectRoot
+            ModuleName        = $moduleName
+            ReleaseModulePath = $releaseModulePath
+            BuiltManifestPath = $builtManifestPath
+        } {
+            param($ProjectRoot, $ModuleName, $ReleaseModulePath, $BuiltManifestPath)
+
+            Mock -CommandName Update-ExternalHelp -MockWith { $script:Called += 'help' }
+            Mock -CommandName Remove-OrphanedExternalHelp -MockWith { $script:Called += 'orphan' }
+            Mock -CommandName Copy-ModuleArtifacts -MockWith {
+                $script:Called += 'copy'
+                [PSCustomObject]@{ ReleaseModulePath = $ReleaseModulePath }
+            }
+            Mock -CommandName Join-ModuleSource -MockWith {
+                $script:Called += 'compile'
+                Join-Path -Path $ReleaseModulePath -ChildPath "$ModuleName.psm1"
+            }
+            Mock -CommandName Update-ModuleManifestExports -MockWith {
+                $script:Called += 'manifest'
+                [PSCustomObject]@{
+                    FunctionsToExport = @('Get-Thing')
+                    AliasesToExport   = @('gt')
+                }
+            }
+
+            $script:Called = @()
+
+            $result = Invoke-ModuleBuild `
+                -ProjectPath $ProjectRoot `
+                -ModuleName $ModuleName `
+                -BuiltManifestPath $BuiltManifestPath `
+                -IncludeTests `
+                -GenerateExternalHelp
+
+            $script:Called | Should -Be @('help', 'orphan', 'copy', 'compile', 'manifest')
+            $result.ReleaseModulePath | Should -Be $ReleaseModulePath
+            $result.FunctionsToExport | Should -Contain 'Get-Thing'
+            Should -Invoke -CommandName Copy-ModuleArtifacts -Times 1 -Exactly -Scope It -ParameterFilter {
+                $IncludeTests -and $ModuleName -eq 'BuildModule'
+            }
+        }
+    }
+
+    It 'throws when the source module path is missing' {
+        $projectRoot = Join-Path -Path $TestDrive -ChildPath 'missing-build-project'
+        $null = New-Item -Path $projectRoot -ItemType Directory -Force
+
+        {
+            Invoke-AtlassianPSModuleBuild -ProjectPath $projectRoot -ModuleName 'MissingModule'
+        } | Should -Throw -ExpectedMessage "Module source path*was not found."
+    }
+}
+
+Describe 'Invoke-ModulePublishDryRun' {
+    It 'creates a package and validates it' {
+        InModuleScope AtlassianPS.Standards {
+            Mock -CommandName New-ModulePackage -MockWith { '/tmp/Module.zip' }
+            Mock -CommandName Test-ModulePackage -MockWith {
+                [PSCustomObject]@{
+                    ModulePath   = '/tmp/Module'
+                    ManifestPath = '/tmp/Module/Module.psd1'
+                    PackagePath  = $PackagePath
+                    Name         = $ModuleName
+                    Version      = [Version]'1.0.0'
+                }
+            }
+
+            $result = Invoke-ModulePublishDryRun -BuildOutputPath '/tmp' -ModuleName 'Module'
+
+            $result.PackagePath | Should -Be '/tmp/Module.zip'
+            Should -Invoke -CommandName New-ModulePackage -Times 1 -Exactly -Scope It
+            Should -Invoke -CommandName Test-ModulePackage -Times 1 -Exactly -Scope It -ParameterFilter {
+                $PackagePath -eq '/tmp/Module.zip'
+            }
+        }
+    }
+
+    It 'uses an explicit package path without repackaging' {
+        InModuleScope AtlassianPS.Standards {
+            Mock -CommandName New-ModulePackage -MockWith { throw 'should not package' }
+            Mock -CommandName Test-ModulePackage -MockWith {
+                [PSCustomObject]@{ PackagePath = $PackagePath }
+            }
+
+            $result = Invoke-ModulePublishDryRun -BuildOutputPath '/tmp' -ModuleName 'Module' -PackagePath '/tmp/custom.zip'
+
+            $result.PackagePath | Should -Be '/tmp/custom.zip'
+            Should -Invoke -CommandName New-ModulePackage -Times 0 -Exactly -Scope It
+        }
+    }
+}
+
 Describe 'Invoke-ModuleTests' {
     It 'merges tag filters and clears excluded paths for Integration runs' {
         $testsPath = Join-Path -Path $TestDrive -ChildPath 'tests'

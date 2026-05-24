@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added shared blueprint helpers for .env loading, release package validation, external help generation/orphan cleanup, and file-level parallel Pester orchestration.
+- Added shared integration orchestration helpers for track-specific environment validation and Docker Compose-backed integration lifecycles.
+- Added shared module build and publish dry-run orchestration helpers, and dogfooded publish dry-run validation in the Standards build.
+- Documented downstream adoption patterns for shared JiraPS blueprint helpers.
+
 ## v0.1.6
 
 - Added shared dependency setup/update flow (`Install-DependencyRequirement`, `Update-DependencyReference`) and wired `Tools/setup.ps1` / `Tools/update.dependencies.ps1` to shared command delegation.
