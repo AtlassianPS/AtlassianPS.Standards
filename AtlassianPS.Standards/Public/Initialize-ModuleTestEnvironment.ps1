@@ -40,7 +40,7 @@
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [String]$StartPath = (Get-Location).Path,
+        [String]$StartPath = '.',
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]

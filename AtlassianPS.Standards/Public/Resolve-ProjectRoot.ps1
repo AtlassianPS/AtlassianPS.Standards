@@ -1,7 +1,7 @@
 ﻿function Resolve-ProjectRoot {
     <#
     .SYNOPSIS
-        Resolves a repository root by walking up from a starting path.
+        Resolves a repository root from a starting path.
 
     .DESCRIPTION
         Uses git rev-parse when StartPath is inside a Git worktree, then falls
@@ -27,7 +27,7 @@
     param(
         [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [String]$StartPath = (Get-Location).Path,
+        [String]$StartPath = '.',
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]
@@ -42,20 +42,15 @@
         $resolvedStartPath
     }
 
-    $gitCommand = Get-Command -Name git -ErrorAction SilentlyContinue
-    if ($gitCommand) {
-        $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-        $startInfo.FileName = $gitCommand.Source
-        $startInfo.Arguments = "-C `"$candidate`" rev-parse --show-toplevel"
-        $startInfo.RedirectStandardOutput = $true
-        $startInfo.RedirectStandardError = $true
-        $startInfo.UseShellExecute = $false
-
-        $git = [System.Diagnostics.Process]::Start($startInfo)
-        $gitRoot = $git.StandardOutput.ReadToEnd()
-        $git.WaitForExit()
-        if ($git.ExitCode -eq 0 -and -not [String]::IsNullOrWhiteSpace($gitRoot)) {
-            return (Resolve-Path -LiteralPath $gitRoot.Trim()).ProviderPath
+    if (Get-Command -Name git -ErrorAction SilentlyContinue) {
+        try {
+            $gitRoot = & git -C $candidate rev-parse --show-toplevel 2>&1
+            if ($LASTEXITCODE -eq 0 -and -not [String]::IsNullOrWhiteSpace($gitRoot)) {
+                return (Resolve-Path -LiteralPath ([String]$gitRoot).Trim()).ProviderPath
+            }
+        }
+        catch {
+            Write-Verbose "git rev-parse did not resolve a project root: $($_.Exception.Message)"
         }
     }
 

@@ -34,22 +34,22 @@
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [String]$StartPath = (Get-Location).Path,
+        [String]$StartPath = '.',
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]
         [String]$MarkerFileName = 'CODEOWNERS'
     )
 
-    $projectRoot = Resolve-ProjectRoot -StartPath $StartPath -MarkerFileName $MarkerFileName
-    ${/} = [System.IO.Path]::DirectorySeparatorChar
+    $root = Resolve-ProjectRoot -StartPath $StartPath -MarkerFileName $MarkerFileName
     $resolvedStartPath = (Resolve-Path -LiteralPath $StartPath).ProviderPath
 
-    if ($resolvedStartPath -like "*${/}Release${/}*") {
-        $projectRoot = Join-Path -Path $projectRoot -ChildPath 'Release'
+    $releaseRoot = Join-Path -Path $root -ChildPath 'Release'
+    if ($resolvedStartPath.StartsWith($releaseRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $root = $releaseRoot
     }
 
-    $moduleManifest = Join-Path -Path $projectRoot -ChildPath "$ModuleName/$ModuleName.psd1"
+    $moduleManifest = Join-Path -Path $root -ChildPath "$ModuleName/$ModuleName.psd1"
     if (-not (Test-Path -LiteralPath $moduleManifest -PathType Leaf)) {
         throw "Could not find module '$ModuleName' at '$moduleManifest'."
     }
