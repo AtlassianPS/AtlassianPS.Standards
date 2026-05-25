@@ -1,13 +1,12 @@
 ﻿function Initialize-ModuleTestEnvironment {
     <#
     .SYNOPSIS
-        Imports a module under test only when the on-disk source changed.
+        Resolves and imports a module under test for Pester.
 
     .DESCRIPTION
-        Resolves a module manifest, computes a lightweight source fingerprint from
-        PowerShell and C# source files, and reuses the already-loaded module when it
-        matches the current source tree. This gives Pester BeforeAll blocks a shared
-        replacement for repo-local TestTools.ps1 import bootstrapping.
+        Resolves the source or release manifest for a module under test, removes any
+        currently loaded copy of that module, then imports the manifest with -Force.
+        Product-specific fixtures remain in the repository test helpers.
 
     .PARAMETER ModuleName
         Name of the module under test.
@@ -22,7 +21,7 @@
         Imports the module into the global session state. Use this when Pester tests need the module visible outside the helper scope.
 
     .OUTPUTS
-        String. The manifest path used to import or reuse the module under test.
+        String. The manifest path used to import the module under test.
 
     .EXAMPLE
         BeforeAll {
@@ -30,7 +29,7 @@
             $script:moduleToTest = Initialize-AtlassianPSModuleTestEnvironment -ModuleName 'JiraPS' -StartPath $PSScriptRoot
         }
 
-        Imports JiraPS for a Pester file, reusing the loaded module when its source fingerprint is unchanged.
+        Imports JiraPS for a Pester file and returns the manifest path used for the import.
     #>
     [CmdletBinding()]
     [OutputType([String])]
@@ -52,47 +51,12 @@
     )
 
     $manifestPath = Resolve-ModuleSource -ModuleName $ModuleName -StartPath $StartPath -MarkerFileName $MarkerFileName
-    $moduleDir = Split-Path -Path $manifestPath -Parent
-
-    $fingerprint = (
-        Get-ChildItem -LiteralPath $moduleDir -Recurse -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.Extension -in '.ps1', '.psm1', '.psd1', '.cs' } |
-            ForEach-Object { $_.LastWriteTimeUtc.Ticks } |
-            Measure-Object -Maximum
-    ).Maximum
-
-    $loaded = @(
-        Get-Module -Name $ModuleName |
-            Where-Object { $_.ModuleBase -eq $moduleDir } |
-            Sort-Object -Property Version -Descending |
-            Select-Object -First 1
-    )
-
-    if ($loaded.Count -gt 0) {
-        $cached = & $loaded[0] { $script:__AtlassianPSTestImportFingerprint }
-        if ($cached -eq $fingerprint) {
-            return $manifestPath
-        }
-    }
-
     Get-Module |
         Where-Object { $_.RequiredModules.Name -eq $ModuleName } |
         Remove-Module -Force -ErrorAction SilentlyContinue
     Remove-Module -Name $ModuleName -Force -ErrorAction SilentlyContinue
 
     Import-Module -Name $manifestPath -Force -Global:$Global -ErrorAction Stop
-
-    $loadedModule = @(
-        Get-Module -Name $ModuleName |
-            Where-Object { $_.ModuleBase -eq $moduleDir } |
-            Sort-Object -Property Version -Descending |
-            Select-Object -First 1
-    )
-    if ($loadedModule.Count -eq 0) {
-        throw "Failed to load module '$ModuleName' from '$moduleDir'."
-    }
-
-    & $loadedModule[0] { param($Fingerprint) $script:__AtlassianPSTestImportFingerprint = $Fingerprint } $fingerprint
 
     return $manifestPath
 }
