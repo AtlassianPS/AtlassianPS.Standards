@@ -4,9 +4,9 @@
         Resolves a repository root by walking up from a starting path.
 
     .DESCRIPTION
-        Walks from StartPath up to the filesystem root until a configured marker
-        file is found. AtlassianPS repositories use CODEOWNERS as the default root
-        marker for test and build helper discovery.
+        Uses git rev-parse when StartPath is inside a Git worktree, then falls
+        back to walking parent directories until a configured marker file is found.
+        The fallback supports copied release artifacts and non-Git test fixtures.
 
     .PARAMETER StartPath
         Directory or file path to start searching from. Defaults to the current directory.
@@ -34,9 +34,19 @@
         [String]$MarkerFileName = 'CODEOWNERS'
     )
 
-    $candidate = (Resolve-Path -LiteralPath $StartPath).ProviderPath
-    if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-        $candidate = Split-Path -Path $candidate -Parent
+    $resolvedStartPath = (Resolve-Path -LiteralPath $StartPath).ProviderPath
+    $candidate = if (Test-Path -LiteralPath $resolvedStartPath -PathType Leaf) {
+        Split-Path -Path $resolvedStartPath -Parent
+    }
+    else {
+        $resolvedStartPath
+    }
+
+    if (Get-Command -Name git -ErrorAction SilentlyContinue) {
+        $gitRoot = & git -C $candidate rev-parse --show-toplevel 2>$null
+        if ($LASTEXITCODE -eq 0 -and -not [String]::IsNullOrWhiteSpace($gitRoot)) {
+            return (Resolve-Path -LiteralPath $gitRoot.Trim()).ProviderPath
+        }
     }
 
     while ($candidate -and ($candidate -ne [System.IO.Path]::GetPathRoot($candidate))) {

@@ -110,11 +110,8 @@ Describe 'Set-ModuleManifestVersion' {
         } {
             param($BuiltManifestPath)
 
-            Mock -CommandName Get-Command -MockWith {
-                [PSCustomObject]@{ Name = 'Metadata\Update-Metadata' }
-            } -ParameterFilter { $Name -eq 'Metadata\Update-Metadata' }
             Mock -CommandName Find-Module -MockWith { $null }
-            Mock -CommandName 'Metadata\Update-Metadata' -MockWith {}
+            Mock -CommandName Update-ModuleManifest -MockWith {}
 
             $version = Set-ModuleManifestVersion `
                 -BuiltManifestPath $BuiltManifestPath `
@@ -123,15 +120,8 @@ Describe 'Set-ModuleManifestVersion' {
                 -ReleaseNotes '- Added dependency flow'
 
             $version | Should -Be '1.2.3'
-            Should -Invoke -CommandName 'Metadata\Update-Metadata' -Times 3 -Exactly -Scope It
-            Should -Invoke -CommandName 'Metadata\Update-Metadata' -Scope It -ParameterFilter {
-                $PropertyName -eq 'ModuleVersion' -and $Value -eq '1.2.3'
-            }
-            Should -Invoke -CommandName 'Metadata\Update-Metadata' -Scope It -ParameterFilter {
-                $PropertyName -eq 'Prerelease' -and $Value -eq 'alpha'
-            }
-            Should -Invoke -CommandName 'Metadata\Update-Metadata' -Scope It -ParameterFilter {
-                $PropertyName -eq 'ReleaseNotes' -and $Value -eq '- Added dependency flow'
+            Should -Invoke -CommandName Update-ModuleManifest -Times 1 -Exactly -Scope It -ParameterFilter {
+                $ModuleVersion -eq '1.2.3' -and $Prerelease -eq 'alpha' -and $ReleaseNotes -eq '- Added dependency flow'
             }
         }
     }
@@ -145,9 +135,6 @@ Describe 'Set-ModuleManifestVersion' {
         } {
             param($BuiltManifestPath)
 
-            Mock -CommandName Get-Command -MockWith {
-                [PSCustomObject]@{ Name = 'Metadata\Update-Metadata' }
-            } -ParameterFilter { $Name -eq 'Metadata\Update-Metadata' }
             Mock -CommandName Find-Module -MockWith {
                 [PSCustomObject]@{
                     Version = [Version]'1.2.3'
@@ -169,34 +156,14 @@ Describe 'Set-ModuleManifestVersion' {
         } {
             param($BuiltManifestPath)
 
-            Mock -CommandName Get-Command -MockWith {
-                [PSCustomObject]@{ Name = 'Metadata\Update-Metadata' }
-            } -ParameterFilter { $Name -eq 'Metadata\Update-Metadata' }
             Mock -CommandName Find-Module -MockWith { $null }
-            Mock -CommandName 'Metadata\Update-Metadata' -MockWith {}
+            Mock -CommandName Update-ModuleManifest -MockWith {}
 
             $null = Set-ModuleManifestVersion -BuiltManifestPath $BuiltManifestPath -ModuleName 'AtlassianPS.Standards' -VersionToPublish '1.2.4'
 
-            Should -Invoke -CommandName 'Metadata\Update-Metadata' -Scope It -ParameterFilter {
-                $PropertyName -eq 'Prerelease' -and $Value -eq ''
+            Should -Invoke -CommandName Update-ModuleManifest -Scope It -ParameterFilter {
+                $ModuleVersion -eq '1.2.4' -and $Prerelease -eq ''
             }
-        }
-    }
-
-    It 'throws when metadata tooling command is missing' {
-        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-no-metadata-cmd.psd1'
-        Set-Content -LiteralPath $manifestPath -Value "@{ ModuleVersion = '0.1.0' }"
-
-        InModuleScope AtlassianPS.Standards -Parameters @{
-            BuiltManifestPath = $manifestPath
-        } {
-            param($BuiltManifestPath)
-
-            Mock -CommandName Get-Command -MockWith { $null } -ParameterFilter { $Name -eq 'Metadata\Update-Metadata' }
-
-            {
-                Set-ModuleManifestVersion -BuiltManifestPath $BuiltManifestPath -ModuleName 'AtlassianPS.Standards' -VersionToPublish '1.2.5'
-            } | Should -Throw -ExpectedMessage 'Metadata\Update-Metadata is not available*'
         }
     }
 
@@ -209,9 +176,6 @@ Describe 'Set-ModuleManifestVersion' {
         } {
             param($BuiltManifestPath)
 
-            Mock -CommandName Get-Command -MockWith {
-                [PSCustomObject]@{ Name = 'Metadata\Update-Metadata' }
-            } -ParameterFilter { $Name -eq 'Metadata\Update-Metadata' }
             Mock -CommandName Find-Module -MockWith { $null }
 
             {
@@ -244,9 +208,6 @@ Describe 'Update-ModuleManifestExports' {
         } {
             param($SourceModulePath, $BuiltManifestPath)
 
-            Mock -CommandName Get-Command -MockWith {
-                [PSCustomObject]@{ Name = 'Metadata\Update-Metadata' }
-            } -ParameterFilter { $Name -eq 'Metadata\Update-Metadata' }
             Mock -CommandName Test-ModuleManifest -MockWith {
                 [PSCustomObject]@{
                     ExportedAliases = @{
@@ -254,7 +215,7 @@ Describe 'Update-ModuleManifestExports' {
                     }
                 }
             }
-            Mock -CommandName 'Metadata\Update-Metadata' -MockWith {}
+            Mock -CommandName Update-ModuleManifest -MockWith {}
 
             $result = Update-ModuleManifestExports `
                 -SourceModulePath $SourceModulePath `
@@ -264,28 +225,9 @@ Describe 'Update-ModuleManifestExports' {
             $result.FunctionsToExport | Should -Contain 'Get-Thing'
             $result.FunctionsToExport | Should -Contain 'Set-Thing'
             $result.AliasesToExport | Should -Contain 'gt'
-            Should -Invoke -CommandName 'Metadata\Update-Metadata' -Times 3 -Exactly -Scope It
-        }
-    }
-
-    It 'throws when metadata tooling is not available' {
-        $sourceModulePath = Join-Path -Path $TestDrive -ChildPath 'AtlassianPS.Standards-no-metadata'
-        $builtManifestPath = Join-Path -Path $TestDrive -ChildPath 'built-no-metadata.psd1'
-        $null = New-Item -Path (Join-Path -Path $sourceModulePath -ChildPath 'Public') -ItemType Directory -Force
-        Set-Content -LiteralPath (Join-Path -Path $sourceModulePath -ChildPath 'AtlassianPS.Standards.psd1') -Value "@{ RootModule = 'AtlassianPS.Standards.psm1' }"
-        Set-Content -LiteralPath $builtManifestPath -Value "@{ ModuleVersion = '0.1.0' }"
-
-        InModuleScope AtlassianPS.Standards -Parameters @{
-            SourceModulePath  = $sourceModulePath
-            BuiltManifestPath = $builtManifestPath
-        } {
-            param($SourceModulePath, $BuiltManifestPath)
-
-            Mock -CommandName Get-Command -MockWith { $null } -ParameterFilter { $Name -eq 'Metadata\Update-Metadata' }
-
-            {
-                Update-ModuleManifestExports -SourceModulePath $SourceModulePath -BuiltManifestPath $BuiltManifestPath -ModuleName 'AtlassianPS.Standards'
-            } | Should -Throw -ExpectedMessage 'Metadata\Update-Metadata is not available*'
+            Should -Invoke -CommandName Update-ModuleManifest -Times 1 -Exactly -Scope It -ParameterFilter {
+                @($FunctionsToExport) -contains 'Get-Thing' -and @($AliasesToExport) -contains 'gt'
+            }
         }
     }
 
@@ -300,10 +242,6 @@ Describe 'Update-ModuleManifestExports' {
             BuiltManifestPath = $builtManifestPath
         } {
             param($SourceModulePath, $BuiltManifestPath)
-
-            Mock -CommandName Get-Command -MockWith {
-                [PSCustomObject]@{ Name = 'Metadata\Update-Metadata' }
-            } -ParameterFilter { $Name -eq 'Metadata\Update-Metadata' }
 
             {
                 Update-ModuleManifestExports -SourceModulePath $SourceModulePath -BuiltManifestPath $BuiltManifestPath -ModuleName 'AtlassianPS.Standards'

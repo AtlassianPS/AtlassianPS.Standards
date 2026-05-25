@@ -18,10 +18,6 @@
         [String]$ReleaseNotes
     )
 
-    if (-not (Get-Command -Name 'Metadata\Update-Metadata' -ErrorAction SilentlyContinue)) {
-        throw "Metadata\Update-Metadata is not available. Ensure the required metadata tooling is installed."
-    }
-
     if (-not (Test-Path -LiteralPath $BuiltManifestPath -PathType Leaf)) {
         throw "Built module manifest '$BuiltManifestPath' was not found."
     }
@@ -95,18 +91,18 @@
 
     $versionString = "{0}.{1}.{2}" -f $normalizedVersion.Major, $normalizedVersion.Minor, $normalizedVersion.Patch
     if ($PSCmdlet.ShouldProcess($BuiltManifestPath, "Set module version to $versionString")) {
-        Metadata\Update-Metadata -Path $BuiltManifestPath -PropertyName 'ModuleVersion' -Value $versionString
+        $parameters = @{
+            Path          = $BuiltManifestPath
+            ModuleVersion = $versionString
+        }
 
-        if ($normalizedVersion.PreReleaseLabel) {
-            Metadata\Update-Metadata -Path $BuiltManifestPath -PropertyName 'Prerelease' -Value $normalizedVersion.PreReleaseLabel
-        }
-        else {
-            Metadata\Update-Metadata -Path $BuiltManifestPath -PropertyName 'Prerelease' -Value ''
-        }
+        $parameters.Prerelease = if ($normalizedVersion.PreReleaseLabel) { $normalizedVersion.PreReleaseLabel } else { '' }
 
         if ($PSBoundParameters.ContainsKey('ReleaseNotes')) {
-            Metadata\Update-Metadata -Path $BuiltManifestPath -PropertyName 'ReleaseNotes' -Value $ReleaseNotes
+            $parameters.ReleaseNotes = $ReleaseNotes
         }
+
+        Update-ModuleManifest @parameters
     }
 
     return $versionString

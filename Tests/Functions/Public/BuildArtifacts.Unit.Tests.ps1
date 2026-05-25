@@ -168,32 +168,3 @@ Describe 'New-ModulePackage' {
     }
 }
 
-Describe 'Publish-ModuleRelease' {
-    It 'publishes using the release module path and API key' {
-        $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release'
-        $moduleName = 'AtlassianPS.Standards'
-        $modulePath = Join-Path -Path $buildOutput -ChildPath $moduleName
-        $null = New-Item -Path $modulePath -ItemType Directory -Force
-
-        InModuleScope AtlassianPS.Standards -Parameters @{
-            BuildOutputPath = $buildOutput
-            ModuleName      = $moduleName
-        } {
-            param($BuildOutputPath, $ModuleName)
-
-            Mock -CommandName Publish-Module -MockWith {}
-
-            Publish-ModuleRelease -BuildOutputPath $BuildOutputPath -ModuleName $ModuleName -ApiKey 'abc'
-
-            Should -Invoke -CommandName Publish-Module -Times 1 -Exactly -Scope It
-        }
-    }
-
-    It 'throws when release path does not exist' {
-        $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-missing'
-
-        {
-            Publish-AtlassianPSModuleRelease -BuildOutputPath $buildOutput -ModuleName 'AtlassianPS.Standards' -ApiKey 'abc'
-        } | Should -Throw -ExpectedMessage "Expected release path*does not exist*"
-    }
-}

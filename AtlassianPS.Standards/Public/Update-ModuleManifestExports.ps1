@@ -16,10 +16,6 @@
         [String]$ModuleName
     )
 
-    if (-not (Get-Command -Name 'Metadata\Update-Metadata' -ErrorAction SilentlyContinue)) {
-        throw "Metadata\Update-Metadata is not available. Ensure the required metadata tooling is installed."
-    }
-
     if (-not (Test-Path -LiteralPath $BuiltManifestPath -PathType Leaf)) {
         throw "Built module manifest '$BuiltManifestPath' was not found."
     }
@@ -36,12 +32,10 @@
     $moduleAlias = @($sourceModuleInfo.ExportedAliases.Keys)
 
     if ($PSCmdlet.ShouldProcess($BuiltManifestPath, 'Update exported functions and aliases')) {
-        Metadata\Update-Metadata -Path $BuiltManifestPath -PropertyName 'FunctionsToExport' -Value @($moduleFunctions)
-        Metadata\Update-Metadata -Path $BuiltManifestPath -PropertyName 'AliasesToExport' -Value ''
-
-        if ($moduleAlias.Count -gt 0) {
-            Metadata\Update-Metadata -Path $BuiltManifestPath -PropertyName 'AliasesToExport' -Value @($moduleAlias)
-        }
+        Update-ModuleManifest `
+            -Path $BuiltManifestPath `
+            -FunctionsToExport @($moduleFunctions) `
+            -AliasesToExport @($moduleAlias)
     }
 
     return [PSCustomObject]@{
