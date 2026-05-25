@@ -42,9 +42,19 @@
         $resolvedStartPath
     }
 
-    if (Get-Command -Name git -ErrorAction SilentlyContinue) {
-        $gitRoot = & git -C $candidate rev-parse --show-toplevel 2>$null
-        if ($LASTEXITCODE -eq 0 -and -not [String]::IsNullOrWhiteSpace($gitRoot)) {
+    $gitCommand = Get-Command -Name git -ErrorAction SilentlyContinue
+    if ($gitCommand) {
+        $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = $gitCommand.Source
+        $startInfo.Arguments = "-C `"$candidate`" rev-parse --show-toplevel"
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $startInfo.UseShellExecute = $false
+
+        $git = [System.Diagnostics.Process]::Start($startInfo)
+        $gitRoot = $git.StandardOutput.ReadToEnd()
+        $git.WaitForExit()
+        if ($git.ExitCode -eq 0 -and -not [String]::IsNullOrWhiteSpace($gitRoot)) {
             return (Resolve-Path -LiteralPath $gitRoot.Trim()).ProviderPath
         }
     }
