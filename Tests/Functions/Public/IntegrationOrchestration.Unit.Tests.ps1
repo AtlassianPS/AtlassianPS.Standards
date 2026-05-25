@@ -172,3 +172,36 @@ Describe 'New-AtlassianPSPesterFailureResult' {
         }
     }
 }
+
+Describe 'Resolve-AtlassianPSPesterTestFile' {
+    It 'resolves test files from directories and explicit file paths' {
+        $root = Join-Path -Path $TestDrive -ChildPath 'pester-files'
+        $nested = Join-Path -Path $root -ChildPath 'Nested'
+        $null = New-Item -Path $nested -ItemType Directory -Force
+        $first = Join-Path -Path $root -ChildPath 'First.Tests.ps1'
+        $second = Join-Path -Path $nested -ChildPath 'Second.Tests.ps1'
+        $ignored = Join-Path -Path $nested -ChildPath 'Ignored.ps1'
+        Set-Content -LiteralPath $first -Value 'Describe First {}'
+        Set-Content -LiteralPath $second -Value 'Describe Second {}'
+        Set-Content -LiteralPath $ignored -Value '$true'
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            Root   = $root
+            Second = $second
+        } {
+            param($Root, $Second)
+
+            $result = Resolve-AtlassianPSPesterTestFile -Path @($Root, $Second)
+
+            @($result).Name | Should -Be @('First.Tests.ps1', 'Second.Tests.ps1')
+        }
+    }
+}
+
+Describe 'New-AtlassianPSPesterRunScriptBlock' {
+    It 'returns an executable scriptblock' {
+        InModuleScope AtlassianPS.Standards {
+            New-AtlassianPSPesterRunScriptBlock | Should -BeOfType [ScriptBlock]
+        }
+    }
+}

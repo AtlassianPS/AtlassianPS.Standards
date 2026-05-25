@@ -61,21 +61,7 @@
     }
     $null = Import-DotEnvFile -Path $EnvironmentFilePath -ExcludeName $EnvironmentExcludeName
 
-    $testFiles = @()
-    foreach ($item in $Path) {
-        $resolvedPath = Resolve-Path -Path $item -ErrorAction SilentlyContinue
-        if ($resolvedPath) {
-            foreach ($pathInfo in $resolvedPath) {
-                if (Test-Path -LiteralPath $pathInfo.ProviderPath -PathType Container) {
-                    $testFiles += Get-ChildItem -LiteralPath $pathInfo.ProviderPath -Filter '*.Tests.ps1' -File
-                }
-                else {
-                    $testFiles += Get-Item -LiteralPath $pathInfo.ProviderPath
-                }
-            }
-        }
-    }
-    $testFiles = @($testFiles | Sort-Object -Property FullName -Unique)
+    $testFiles = @(Resolve-AtlassianPSPesterTestFile -Path $Path)
 
     if ($testFiles.Count -eq 0) {
         Write-Warning "No test files found in: $($Path -join ', ')"
@@ -99,132 +85,32 @@
     Write-Host ''
 
     $startTime = Get-Date
-    $results = @()
-    $runTestBodyText = @'
-param($testFile, $projectRoot, $tagFilter, $excludeTagFilter, $outputVerbosity, $tempResultsDir, $generateXml)
-
-try {
-    function Get-PesterTestInBlock {
-        param($Block)
-        foreach ($test in $Block.Tests) { $test }
-        foreach ($childBlock in $Block.Blocks) { Get-PesterTestInBlock -Block $childBlock }
-    }
-
-    Import-Module Pester -MinimumVersion 5.0 -Force
-    Set-Location $projectRoot
-
-    $config = New-PesterConfiguration
-    $config.Run.Path = $testFile.FullName
-    $config.Run.PassThru = $true
-    $config.Output.Verbosity = $outputVerbosity
-    if ($generateXml -and $tempResultsDir) {
-        $config.TestResult.Enabled = $true
-        $config.TestResult.OutputFormat = 'NUnitXml'
-        $config.TestResult.OutputPath = Join-Path $tempResultsDir "$($testFile.BaseName).xml"
-    }
-    if ($tagFilter) { $config.Filter.Tag = $tagFilter }
-    if ($excludeTagFilter) { $config.Filter.ExcludeTag = $excludeTagFilter }
-
-    $result = Invoke-Pester -Configuration $config
-    $failedTests = @()
-    $skippedTests = @()
-    $allTests = foreach ($container in $result.Containers) {
-        foreach ($block in $container.Blocks) { Get-PesterTestInBlock -Block $block }
-    }
-    foreach ($test in $allTests) {
-        if ($test.Result -eq 'Failed') {
-            $failedTests += [PSCustomObject]@{
-                Name = if ($test.ExpandedPath) { $test.ExpandedPath } else { $test.Name }
-                ErrorMessage = if ($test.ErrorRecord) { $test.ErrorRecord[0].Exception.Message } else { 'Unknown error' }
-            }
-        }
-        if ($test.Result -eq 'Skipped') {
-            $skippedTests += [PSCustomObject]@{
-                Name = if ($test.ExpandedPath) { $test.ExpandedPath } else { $test.Name }
-                Reason = if ($test.ErrorRecord) { ($test.ErrorRecord | ForEach-Object { $_.Exception.Message }) -join '; ' } else { 'No skip reason reported' }
-            }
-        }
-    }
-    [PSCustomObject]@{
-        File = $testFile.Name
-        Passed = $result.PassedCount
-        Failed = $result.FailedCount
-        Skipped = $result.SkippedCount
-        Duration = $result.Duration
-        Success = $result.FailedCount -eq 0
-        FailedTests = $failedTests
-        SkippedTests = $skippedTests
-        XmlPath = if ($generateXml) { Join-Path $tempResultsDir "$($testFile.BaseName).xml" } else { $null }
-    }
-}
-catch {
-    [PSCustomObject]@{
-        File = $testFile.Name
-        Passed = 0
-        Failed = 1
-        Skipped = 0
-        Duration = [TimeSpan]::Zero
-        Success = $false
-        Error = $_.Exception.Message
-        FailedTests = @([PSCustomObject]@{ Name = 'Script execution'; ErrorMessage = $_.Exception.Message })
-        SkippedTests = @()
-        XmlPath = $null
-    }
-}
-'@
+    $runTestScriptBlock = New-AtlassianPSPesterRunScriptBlock
 
     if ($canParallel) {
-        $pendingJobs = [System.Collections.Generic.List[Object]]::new()
-        foreach ($testFile in $testFiles) {
-            $job = Start-ThreadJob `
-                -ScriptBlock ([ScriptBlock]::Create($runTestBodyText)) `
-                -ArgumentList @($testFile, $resolvedProjectRoot, $Tag, $ExcludeTag, $Output, $tempResultsDir, $generateXml) `
-                -ThrottleLimit $ThrottleLimit `
-                -StreamingHost $Host `
-                -Name "Pester:$($testFile.BaseName)"
-            $pendingJobs.Add([PSCustomObject]@{
-                    File      = $testFile
-                    Job       = $job
-                    StartedAt = Get-Date
-                })
-        }
-
-        while ($pendingJobs.Count -gt 0) {
-            $now = Get-Date
-            $ready = @(
-                foreach ($info in $pendingJobs) {
-                    if ($info.Job.State -notin 'NotStarted', 'Running') {
-                        $info
-                    }
-                    elseif (($now - $info.StartedAt).TotalSeconds -ge $PerFileTimeoutSeconds) {
-                        $info
-                    }
-                }
-            )
-
-            if ($ready.Count -eq 0) {
-                $remainingSeconds = @(
-                    foreach ($info in $pendingJobs) {
-                        [Math]::Max(1, $PerFileTimeoutSeconds - [Int](($now - $info.StartedAt).TotalSeconds))
-                    }
-                ) | Sort-Object | Select-Object -First 1
-                $jobs = @($pendingJobs | ForEach-Object { $_.Job })
-                $null = Wait-Job -Job $jobs -Any -Timeout ([Math]::Min(5, $remainingSeconds))
-                continue
-            }
-
-            foreach ($info in $ready) {
-                $jobOutput = Receive-AtlassianPSPesterJob -JobInfo $info -PerFileTimeoutSeconds $PerFileTimeoutSeconds
-                if ($null -ne $jobOutput) { $results += $jobOutput }
-                $null = $pendingJobs.Remove($info)
-            }
-        }
+        $results = Invoke-AtlassianPSPesterJobSet `
+            -TestFile $testFiles `
+            -RunTestScriptBlock $runTestScriptBlock `
+            -ProjectRoot $resolvedProjectRoot `
+            -Tag $Tag `
+            -ExcludeTag $ExcludeTag `
+            -Output $Output `
+            -TempResultsDir $tempResultsDir `
+            -GenerateXml $generateXml `
+            -ThrottleLimit $ThrottleLimit `
+            -PerFileTimeoutSeconds $PerFileTimeoutSeconds `
+            -StreamingHost $Host
     }
     else {
-        $runTestFile = [ScriptBlock]::Create($runTestBodyText)
-        foreach ($testFile in $testFiles) {
-            $results += & $runTestFile $testFile $resolvedProjectRoot $Tag $ExcludeTag $Output $tempResultsDir $generateXml
-        }
+        $results = Invoke-AtlassianPSPesterFileSet `
+            -TestFile $testFiles `
+            -RunTestScriptBlock $runTestScriptBlock `
+            -ProjectRoot $resolvedProjectRoot `
+            -Tag $Tag `
+            -ExcludeTag $ExcludeTag `
+            -Output $Output `
+            -TempResultsDir $tempResultsDir `
+            -GenerateXml $generateXml
     }
 
     $endTime = Get-Date
