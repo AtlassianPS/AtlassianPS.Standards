@@ -30,7 +30,6 @@ Describe 'Update-DependencyReference' {
         Set-Content -LiteralPath $manifestPath -Value @'
 @{
     RequiredModules = @(
-        @{ ModuleName = 'Metadata'; RequiredVersion = '1.5.7' }
         @{ ModuleName = 'PSScriptAnalyzer'; RequiredVersion = '1.25.0' }
     )
 }
@@ -46,7 +45,6 @@ Describe 'Update-DependencyReference' {
                 switch ($Name) {
                     'InvokeBuild' { [PSCustomObject]@{ Version = [Version]'5.14.30' } }
                     'Pester' { [PSCustomObject]@{ Version = [Version]'5.7.2' } }
-                    'Metadata' { [PSCustomObject]@{ Version = [Version]'1.5.8' } }
                     'PSScriptAnalyzer' { [PSCustomObject]@{ Version = [Version]'1.25.2' } }
                     default { throw "Unexpected module lookup: $Name" }
                 }
@@ -63,7 +61,6 @@ Describe 'Update-DependencyReference' {
 
         (Get-Content -LiteralPath $buildRequirementsPath -Raw) | Should -Match 'InvokeBuild"; RequiredVersion = "5.14.30"'
         (Get-Content -LiteralPath $buildRequirementsPath -Raw) | Should -Match 'Pester"; RequiredVersion = "5.7.2"'
-        (Get-Content -LiteralPath $manifestPath -Raw) | Should -Match "Metadata'; RequiredVersion = '1.5.8'"
         (Get-Content -LiteralPath $manifestPath -Raw) | Should -Match "PSScriptAnalyzer'; RequiredVersion = '1.25.2'"
     }
 
@@ -146,7 +143,7 @@ Describe 'Update-DependencyReference' {
         Set-Content -LiteralPath $manifestPath -Value @'
 @{
     RequiredModules = @(
-        @{ ModuleName = 'Metadata'; RequiredVersion = '1.5.8' }
+        @{ ModuleName = 'PSScriptAnalyzer'; RequiredVersion = '1.25.2' }
     )
 }
 '@
@@ -160,7 +157,7 @@ Describe 'Update-DependencyReference' {
                 param([String]$Name)
                 switch ($Name) {
                     'InvokeBuild' { [PSCustomObject]@{ Version = [Version]'5.14.30' } }
-                    'Metadata' { [PSCustomObject]@{ Version = [Version]'1.5.8' } }
+                    'PSScriptAnalyzer' { [PSCustomObject]@{ Version = [Version]'1.25.2' } }
                     default { throw "Unexpected module lookup: $Name" }
                 }
             }

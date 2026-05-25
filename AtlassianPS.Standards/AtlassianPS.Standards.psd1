@@ -8,7 +8,6 @@
     Description          = 'Shared analyzer settings and standards utilities for AtlassianPS modules.'
     PowerShellVersion    = '5.1'
     RequiredModules      = @(
-        @{ ModuleName = 'Metadata'; RequiredVersion = '1.5.7' }
         @{ ModuleName = 'PSScriptAnalyzer'; RequiredVersion = '1.25.0' }
     )
 
