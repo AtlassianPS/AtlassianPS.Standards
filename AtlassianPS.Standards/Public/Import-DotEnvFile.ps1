@@ -21,6 +21,11 @@
     .OUTPUTS
         PSCustomObject records describing loaded variable names. Values are not
         emitted to avoid leaking secrets to build logs.
+
+    .EXAMPLE
+        Import-AtlassianPSDotEnvFile -Path './.env' -ExcludeName 'CI'
+
+        Loads process-scoped variables from .env while preserving CI-provided values.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Loading a .env file into process-scoped environment variables is intentional and idempotent.')]
     [CmdletBinding()]

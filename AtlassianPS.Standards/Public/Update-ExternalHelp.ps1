@@ -9,6 +9,29 @@
         by AtlassianPS modules: flatten nested module output, restore aliases,
         pipeline input, default values, and split example prose/code into the nodes
         consumed by Get-Help.
+
+    .PARAMETER DocsPath
+        Documentation root containing one folder per locale.
+
+    .PARAMETER ModulePath
+        Module source or release directory where generated locale help folders are written.
+
+    .PARAMETER ModuleName
+        Module name used for generated command MAML file names.
+
+    .PARAMETER CommandRelativePath
+        Relative glob pattern below each locale docs folder for command markdown files.
+
+    .PARAMETER AboutTopicRelativePath
+        Relative glob patterns below each locale docs folder for about-topic markdown files.
+
+    .OUTPUTS
+        None. Writes generated help files under ModulePath.
+
+    .EXAMPLE
+        Update-AtlassianPSExternalHelp -DocsPath './docs' -ModulePath './JiraPS' -ModuleName 'JiraPS'
+
+        Generates command and about-topic help for each locale below docs.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param(

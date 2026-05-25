@@ -8,6 +8,29 @@
         PowerShell and C# source files, and reuses the already-loaded module when it
         matches the current source tree. This gives Pester BeforeAll blocks a shared
         replacement for repo-local TestTools.ps1 import bootstrapping.
+
+    .PARAMETER ModuleName
+        Name of the module under test.
+
+    .PARAMETER StartPath
+        Directory or file path to start repository-root discovery from. Defaults to the current directory.
+
+    .PARAMETER MarkerFileName
+        Repository-root marker file name. Defaults to CODEOWNERS.
+
+    .PARAMETER Global
+        Imports the module into the global session state. Use this when Pester tests need the module visible outside the helper scope.
+
+    .OUTPUTS
+        String. The manifest path used to import or reuse the module under test.
+
+    .EXAMPLE
+        BeforeAll {
+            Import-Module AtlassianPS.Standards
+            $script:moduleToTest = Initialize-AtlassianPSModuleTestEnvironment -ModuleName 'JiraPS' -StartPath $PSScriptRoot
+        }
+
+        Imports JiraPS for a Pester file, reusing the loaded module when its source fingerprint is unchanged.
     #>
     [CmdletBinding()]
     [OutputType([String])]

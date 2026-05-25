@@ -8,6 +8,47 @@
         on PowerShell 7+ with a per-file timeout. This preserves isolation between
         integration files while preventing one hung runspace from blocking summary
         and result generation for all other files.
+
+    .PARAMETER Path
+        Test directory paths or explicit test file paths. Directories are searched for *.Tests.ps1 files.
+
+    .PARAMETER ThrottleLimit
+        Maximum number of concurrently running test files on PowerShell 7+.
+
+    .PARAMETER Tag
+        Pester tags to include.
+
+    .PARAMETER ExcludeTag
+        Pester tags to exclude.
+
+    .PARAMETER Output
+        Pester output verbosity.
+
+    .PARAMETER OutputPath
+        Optional merged NUnit XML output path.
+
+    .PARAMETER ProjectRoot
+        Repository root used as the working directory for each Pester invocation.
+
+    .PARAMETER EnvironmentFilePath
+        Optional .env file to load before running tests. Defaults to .env under ProjectRoot.
+
+    .PARAMETER EnvironmentExcludeName
+        Environment variable names to skip when loading EnvironmentFilePath.
+
+    .PARAMETER PerFileTimeoutSeconds
+        Per-test-file timeout budget for parallel runs.
+
+    .PARAMETER SuiteName
+        Suite name used when merging NUnit XML output.
+
+    .OUTPUTS
+        PSCustomObject with Passed, Failed, Skipped, Duration, and per-file Results.
+
+    .EXAMPLE
+        Invoke-AtlassianPSParallelPester -Path './Tests/Integration' -Tag Integration -ThrottleLimit 4 -OutputPath 'Test-Integration.xml'
+
+        Runs integration test files in parallel and writes one merged test result file.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'Interactive build/test helper with colored operator output.')]
     [CmdletBinding()]

@@ -7,6 +7,20 @@
         Walks from StartPath up to the filesystem root until a configured marker
         file is found. AtlassianPS repositories use CODEOWNERS as the default root
         marker for test and build helper discovery.
+
+    .PARAMETER StartPath
+        Directory or file path to start searching from. Defaults to the current directory.
+
+    .PARAMETER MarkerFileName
+        Repository-root marker file name. Defaults to CODEOWNERS.
+
+    .OUTPUTS
+        String. The resolved repository root path.
+
+    .EXAMPLE
+        Resolve-AtlassianPSProjectRoot -StartPath $PSScriptRoot
+
+        Resolves the repository root for a test file or helper script.
     #>
     [CmdletBinding()]
     [OutputType([String])]

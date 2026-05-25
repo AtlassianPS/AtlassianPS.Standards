@@ -12,6 +12,53 @@
         Repository build scripts remain responsible for declaring Invoke-Build tasks
         and any product-specific pre/post steps. This command centralizes the
         repeated implementation inside those tasks.
+
+    .PARAMETER ProjectPath
+        Repository root path that contains the source module directory.
+
+    .PARAMETER ModuleName
+        Name of the module directory and manifest.
+
+    .PARAMETER BuildOutputPath
+        Build output root. Defaults to Release below ProjectPath.
+
+    .PARAMETER BuiltManifestPath
+        Path to the manifest in the built module. Defaults to <BuildOutputPath>/<ModuleName>/<ModuleName>.psd1.
+
+    .PARAMETER AdditionalFiles
+        Additional repository files to copy into the release module directory.
+
+    .PARAMETER IncludeTests
+        Copies the repository Tests directory into the build output.
+
+    .PARAMETER Clean
+        Removes the build output and Test*.xml files before building.
+
+    .PARAMETER GenerateExternalHelp
+        Generates external help from markdown and removes stale generated help files before copying artifacts.
+
+    .PARAMETER DocsPath
+        Documentation root containing locale folders. Defaults to docs below ProjectPath.
+
+    .PARAMETER AboutTopicRelativePath
+        Relative glob patterns below each locale docs folder for about-topic markdown files.
+
+    .PARAMETER CommandHelpRelativePath
+        Relative glob pattern below each locale docs folder for command markdown files.
+
+    .PARAMETER RegionsToKeep
+        Region names to preserve from the source .psm1 before appending Public and Private source files.
+
+    .PARAMETER SourceFolders
+        Source folders below the release module path to merge into the built .psm1.
+
+    .OUTPUTS
+        PSCustomObject with source, release, compiled module, manifest, function export, and alias export metadata.
+
+    .EXAMPLE
+        Invoke-AtlassianPSModuleBuild -ProjectPath $env:BHProjectPath -ModuleName $env:BHProjectName -BuildOutputPath $env:BHBuildOutput -IncludeTests -Clean
+
+        Runs the common module build pipeline from an Invoke-Build task.
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]

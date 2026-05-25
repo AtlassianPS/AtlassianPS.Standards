@@ -12,8 +12,19 @@
     .PARAMETER ModuleName
         Module name used for command MAML file names.
 
+    .PARAMETER CommandRelativePath
+        Relative glob pattern below each locale docs folder for command markdown files.
+
     .PARAMETER AboutTopicRelativePath
         Relative glob patterns below each locale docs folder that contain about-topic markdown files.
+
+    .OUTPUTS
+        None. Removes generated help files and directories when their markdown sources no longer exist.
+
+    .EXAMPLE
+        Remove-AtlassianPSOrphanedExternalHelp -ModulePath './JiraPS' -DocsPath './docs' -ModuleName 'JiraPS'
+
+        Removes stale generated help artifacts from locale folders in the JiraPS module directory.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Build helper removes generated help artifacts only from generated locale output folders.')]
     [CmdletBinding(SupportsShouldProcess)]

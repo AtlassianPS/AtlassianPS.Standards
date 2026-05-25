@@ -17,6 +17,14 @@
 
     .PARAMETER PackagePath
         Optional explicit package archive path. Defaults to <BuildOutputPath>/<ModuleName>.zip.
+
+    .OUTPUTS
+        PSCustomObject with ModulePath, ManifestPath, PackagePath, Name, and Version.
+
+    .EXAMPLE
+        Test-AtlassianPSModulePackage -BuildOutputPath './Release' -ModuleName 'JiraPS'
+
+        Validates that Release/JiraPS and Release/JiraPS.zip contain matching manifests.
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]

@@ -10,6 +10,41 @@
 
         Product-specific provisioning stays in the readiness script; this helper only
         owns the lifecycle pattern shared across AtlassianPS module repositories.
+
+    .PARAMETER ComposeFile
+        Docker Compose file to start and tear down.
+
+    .PARAMETER ServiceName
+        Compose service name used for failure log capture.
+
+    .PARAMETER TestScriptBlock
+        Script block that runs the integration tests after the service is ready.
+
+    .PARAMETER WaitScriptPath
+        Optional product-specific readiness or provisioning script to run after compose up.
+
+    .PARAMETER WaitScriptArgumentList
+        Arguments passed to WaitScriptPath.
+
+    .PARAMETER EnvironmentDefault
+        Environment variables to set only when not already set.
+
+    .PARAMETER LogPath
+        Path for captured service logs on failure. Defaults beside the compose file.
+
+    .PARAMETER SkipDockerCheck
+        Skips the upfront docker command availability check.
+
+    .PARAMETER SkipTeardown
+        Leaves the compose stack running after tests complete or fail.
+
+    .OUTPUTS
+        PSCustomObject with ComposeFile, ServiceName, LogPath, and Duration on success.
+
+    .EXAMPLE
+        Invoke-AtlassianPSDockerIntegrationTrack -ComposeFile ./docker-compose.yml -ServiceName jira -WaitScriptPath ./Tools/Wait-JiraServer.ps1 -TestScriptBlock { Invoke-Build -Task TestIntegration }
+
+        Starts the compose stack, waits for Jira provisioning, runs integration tests, and tears the stack down.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingInvokeExpression', '', Justification = 'No Invoke-Expression is used; suppression retained only for conservative static rules around command invocation scriptblocks.')]
     [CmdletBinding()]

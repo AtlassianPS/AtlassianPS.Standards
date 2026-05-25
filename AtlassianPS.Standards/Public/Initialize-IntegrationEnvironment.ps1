@@ -12,6 +12,35 @@
         then read the validated environment variables directly when constructing
         JiraPS or ConfluencePS-specific test objects. Values are not returned to
         avoid accidentally writing secrets to build logs.
+
+    .PARAMETER TrackEnvironmentVariableName
+        Environment variable name that selects the integration track, for example CI_JIRA_TYPE.
+
+    .PARAMETER DefaultTrack
+        Track to use when TrackEnvironmentVariableName is unset.
+
+    .PARAMETER RequiredVariableByTrack
+        Hashtable keyed by track name, with required environment variable names as values.
+
+    .PARAMETER OptionalVariableByTrack
+        Hashtable keyed by track name, with optional environment variable names as values.
+
+    .PARAMETER DotEnvPath
+        Optional .env file to load before validating variables.
+
+    .PARAMETER DotEnvExcludeName
+        Environment variable names to skip when loading DotEnvPath.
+
+    .PARAMETER WarnOnly
+        Writes a warning and returns null instead of throwing when required variables are missing.
+
+    .OUTPUTS
+        PSCustomObject with Track, IsDefaultTrack, RequiredVariables, and OptionalVariables. Returns null in WarnOnly mode when required variables are missing.
+
+    .EXAMPLE
+        Initialize-AtlassianPSIntegrationEnvironment -TrackEnvironmentVariableName 'CI_JIRA_TYPE' -DefaultTrack 'Cloud' -RequiredVariableByTrack @{ Cloud = @('JIRA_CLOUD_URL'); Server = @('CI_JIRA_URL') }
+
+        Validates the variables required by the selected integration test track.
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
