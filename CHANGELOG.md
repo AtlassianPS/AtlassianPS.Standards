@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.1.9
+
+- Fixed `Invoke-Lint` so downstream modules can call the exported prefixed command without depending on private helper command visibility at runtime.
+
 ## v0.1.8
 
 - Fixed `Invoke-Lint` so downstream modules can call the exported prefixed command without losing access to lint output helpers at runtime.

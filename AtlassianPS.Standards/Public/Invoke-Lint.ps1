@@ -64,6 +64,39 @@
 
         Write-Output $Message
     }
+    $getProjectRelativePath = {
+        param(
+            [Parameter(Mandatory)]
+            [String]$BasePath,
+
+            [Parameter(Mandatory)]
+            [String]$TargetPath
+        )
+
+        $getRelativePathMethod = [System.IO.Path].GetMethod('GetRelativePath', [Type[]]@([String], [String]))
+        if ($getRelativePathMethod) {
+            return [System.IO.Path]::GetRelativePath($BasePath, $TargetPath)
+        }
+
+        if ($TargetPath.StartsWith($BasePath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $TargetPath.Substring($BasePath.Length).TrimStart('\', '/')
+        }
+
+        return $TargetPath
+    }
+    function Write-LocalWorkflowCommand {
+        [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+            'PSAvoidUsingWriteHost', '',
+            Justification = 'GitHub Actions workflow commands must reach stdout; Write-Output is captured by Invoke-Build pipelines.'
+        )]
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [String]$Command
+        )
+
+        Write-Host $Command
+    }
 
     if (-not $BuildScriptPath -and $env:BHProjectName) {
         $BuildScriptPath = Join-Path -Path $projectPathResolved -ChildPath "$($env:BHProjectName).build.ps1"
@@ -74,7 +107,12 @@
     }
 
     if (-not $AnalyzerSettingsPath) {
-        $AnalyzerSettingsPath = Get-ScriptAnalyzerSettingsPath
+        $moduleBase = $ExecutionContext.SessionState.Module.ModuleBase
+        if (-not $moduleBase) {
+            throw 'Unable to resolve AtlassianPS.Standards module base path.'
+        }
+
+        $AnalyzerSettingsPath = Join-Path -Path $moduleBase -ChildPath 'PSScriptAnalyzerSettings.psd1'
     }
 
     if (-not $AnalyzerPaths) {
@@ -97,10 +135,35 @@
     if (-not $SkipStyleTests) {
         if (Test-Path -LiteralPath $StyleTestPath -PathType Leaf) {
             & $writeLintMessage -Color Gray -Message 'Running style tests...'
-            $testResults = Invoke-StyleLintTests `
-                -StyleTestPath $StyleTestPath `
-                -PesterVerbosity $PesterVerbosity `
-                -MinimumPesterVersion $MinimumPesterVersion
+            $pesterVersion = Get-Module -Name 'Pester' -ListAvailable |
+                Sort-Object -Property Version -Descending |
+                Where-Object { $_.Version -ge $MinimumPesterVersion } |
+                Select-Object -First 1 -ExpandProperty Version
+            if (-not $pesterVersion) {
+                throw "Pester version $MinimumPesterVersion or newer is required, but no installed version satisfies that range."
+            }
+
+            $loadedPester = Get-Module -Name 'Pester' |
+                Sort-Object -Property Version -Descending |
+                Select-Object -First 1
+            if ((-not $loadedPester) -or ($loadedPester.Version -ne $pesterVersion)) {
+                if ($loadedPester) {
+                    Get-Module -Name 'Pester' | Remove-Module -Force -ErrorAction SilentlyContinue
+                }
+                Import-Module -Name 'Pester' -RequiredVersion $pesterVersion -ErrorAction Stop
+            }
+
+            $pesterConfigHash = @{
+                Run    = @{
+                    PassThru = $true
+                    Path     = $StyleTestPath
+                }
+                Output = @{
+                    Verbosity = $PesterVerbosity
+                }
+            }
+            $pesterConfig = New-PesterConfiguration -Hashtable $pesterConfigHash
+            $testResults = Invoke-Pester -Configuration $pesterConfig
 
             $styleFailures = [int]$testResults.FailedCount
             if ($styleFailures -gt 0) {
@@ -118,12 +181,29 @@
     if (-not $SkipScriptAnalyzer) {
         & $writeLintMessage -Color Gray -Message 'Running PSScriptAnalyzer...'
 
-        $results = Invoke-ScriptAnalyzerLint `
-            -AnalyzerPaths $AnalyzerPaths `
-            -AnalyzerSettingsPath $AnalyzerSettingsPath `
-            -Severity $Severity `
-            -ProjectPath $projectPathResolved `
-            -IsGitHubActions $isGitHubActions
+        $analyzerParams = @{
+            Settings = $AnalyzerSettingsPath
+            Severity = $Severity
+            Recurse  = $true
+        }
+        $results = @(
+            foreach ($path in $AnalyzerPaths) {
+                Invoke-ScriptAnalyzer -Path $path @analyzerParams
+            }
+        )
+
+        foreach ($result in $results) {
+            $color = if ($result.Severity -eq 'Error') { 'Red' } else { 'Yellow' }
+            $location = if ($result.ScriptName) { $result.ScriptName } else { '<unknown>' }
+            & $writeLintMessage -Color $color -Message "[$($result.Severity)] ${location}:$($result.Line) - $($result.RuleName): $($result.Message)"
+
+            if ($isGitHubActions -and $result.ScriptPath) {
+                $level = if ($result.Severity -eq 'Error') { 'error' } else { 'warning' }
+                $relativePath = & $getProjectRelativePath -BasePath $projectPathResolved -TargetPath $result.ScriptPath
+                $message = ($result.Message -replace '%', '%25' -replace "`r", '%0D' -replace "`n", '%0A')
+                Write-LocalWorkflowCommand -Command "::${level} file=$relativePath,line=$($result.Line),col=$($result.Column),title=$($result.RuleName)::$message"
+            }
+        }
 
         $analyzerIssueCount = @($results).Count
         if ($analyzerIssueCount -gt 0) {
