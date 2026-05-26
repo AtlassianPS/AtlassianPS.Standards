@@ -15,6 +15,34 @@ Describe 'Invoke-Lint' {
         $lintCommand | Should -Not -BeNullOrEmpty
     }
 
+    It 'runs through the exported prefixed command' {
+        $projectPath = Join-Path -Path $TestDrive -ChildPath 'project-exported-command'
+        $modulePath = Join-Path -Path $projectPath -ChildPath 'AtlassianPS.Standards'
+        $testsPath = Join-Path -Path $projectPath -ChildPath 'Tests'
+        $toolsPath = Join-Path -Path $projectPath -ChildPath 'Tools'
+        $stylePath = Join-Path -Path $testsPath -ChildPath 'Style.Tests.ps1'
+        $settingsPath = Join-Path -Path $modulePath -ChildPath 'PSScriptAnalyzerSettings.psd1'
+        $buildScriptPath = Join-Path -Path $projectPath -ChildPath 'AtlassianPS.Standards.build.ps1'
+
+        $null = New-Item -Path $modulePath -ItemType Directory -Force
+        $null = New-Item -Path $testsPath -ItemType Directory -Force
+        $null = New-Item -Path $toolsPath -ItemType Directory -Force
+        Set-Content -LiteralPath $stylePath -Value 'Describe "style" { It "passes" { $true | Should -BeTrue } }'
+        Set-Content -LiteralPath $settingsPath -Value '@{ IncludeRules = @() }'
+        Set-Content -LiteralPath $buildScriptPath -Value '$null = $true'
+
+        $result = Invoke-AtlassianPSLint `
+            -ProjectPath $projectPath `
+            -ModulePath $modulePath `
+            -BuildScriptPath $buildScriptPath `
+            -AnalyzerSettingsPath $settingsPath `
+            -AnalyzerPaths @($buildScriptPath) `
+            -PesterVerbosity None
+
+        $result.StyleFailedCount | Should -Be 0
+        $result.AnalyzerIssueCount | Should -Be 0
+    }
+
     It 'fails fast when Pester is below the minimum version' {
         $projectPath = Join-Path -Path $TestDrive -ChildPath 'project-old-pester'
         $modulePath = Join-Path -Path $projectPath -ChildPath 'AtlassianPS.Standards'
