@@ -19,9 +19,6 @@
     .PARAMETER ModuleName
         Module name used for generated command MAML file names.
 
-    .PARAMETER CommandRelativePath
-        Relative glob pattern below each locale docs folder for command markdown files.
-
     .PARAMETER AboutTopicRelativePath
         Relative glob patterns below each locale docs folder for about-topic markdown files.
 
@@ -48,9 +45,6 @@
         [String]$ModuleName,
 
         [Parameter()]
-        [String]$CommandRelativePath = 'commands/*.md',
-
-        [Parameter()]
         [String[]]$AboutTopicRelativePath = @('about_*.md')
     )
 
@@ -68,7 +62,7 @@
             $outputPath = Join-Path -Path $ModulePath -ChildPath $locale.BaseName
             $null = New-Item -ItemType Directory -Path $outputPath -Force
 
-            $commandHelpFiles = Get-ChildItem -Path (Join-Path -Path $locale.FullName -ChildPath $CommandRelativePath) -File -ErrorAction SilentlyContinue |
+            $commandHelpFiles = Get-ChildItem -Path (Join-Path -Path $locale.FullName -ChildPath 'commands/*.md') -File -ErrorAction SilentlyContinue |
                 Where-Object { $_.Name -ne 'index.md' -and $_.Name -notlike 'about_*.md' }
 
             if ($commandHelpFiles -and $PSCmdlet.ShouldProcess($outputPath, 'Generate command MAML help')) {

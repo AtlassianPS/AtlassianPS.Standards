@@ -129,19 +129,21 @@ Describe 'Remove-OrphanedExternalHelp' {
         Test-Path -LiteralPath (Join-Path -Path $localeOut -ChildPath 'orphan.help.txt') | Should -BeFalse
     }
 
-    It 'honors a custom command help relative path' {
-        $root = Join-Path -Path $TestDrive -ChildPath 'custom-help'
+    It 'honors additional about-topic relative paths' {
+        $root = Join-Path -Path $TestDrive -ChildPath 'extra-about-help'
         $modulePath = Join-Path -Path $root -ChildPath 'Module'
         $docsPath = Join-Path -Path $root -ChildPath 'docs'
         $localeOut = Join-Path -Path $modulePath -ChildPath 'en-US'
         $localeDocs = Join-Path -Path $docsPath -ChildPath 'en-US'
-        $referencePath = Join-Path -Path $localeDocs -ChildPath 'reference'
-        $null = New-Item -Path $localeOut, $referencePath -ItemType Directory -Force
-        Set-Content -LiteralPath (Join-Path -Path $referencePath -ChildPath 'Get-Thing.md') -Value '# Get-Thing'
-        Set-Content -LiteralPath (Join-Path -Path $localeOut -ChildPath 'Module-help.xml') -Value '<help />'
+        $commandsPath = Join-Path -Path $localeDocs -ChildPath 'commands'
+        $null = New-Item -Path $localeOut, $commandsPath -ItemType Directory -Force
+        Set-Content -LiteralPath (Join-Path -Path $commandsPath -ChildPath 'about_Module.md') -Value '# about'
+        Set-Content -LiteralPath (Join-Path -Path $localeOut -ChildPath 'about_Module.help.txt') -Value 'about'
+        Set-Content -LiteralPath (Join-Path -Path $localeOut -ChildPath 'orphan.help.txt') -Value 'orphan'
 
-        Remove-AtlassianPSOrphanedExternalHelp -ModulePath $modulePath -DocsPath $docsPath -ModuleName 'Module' -CommandRelativePath 'reference/*.md'
+        Remove-AtlassianPSOrphanedExternalHelp -ModulePath $modulePath -DocsPath $docsPath -ModuleName 'Module' -AboutTopicRelativePath @('about_*.md', 'commands/about_*.md')
 
-        Test-Path -LiteralPath (Join-Path -Path $localeOut -ChildPath 'Module-help.xml') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path -Path $localeOut -ChildPath 'about_Module.help.txt') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path -Path $localeOut -ChildPath 'orphan.help.txt') | Should -BeFalse
     }
 }
