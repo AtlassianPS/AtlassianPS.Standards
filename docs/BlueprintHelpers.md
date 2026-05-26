@@ -1,0 +1,100 @@
+# Blueprint Primitives
+
+`AtlassianPS.Standards` provides small helpers for repeated JiraPS-style build and test details.
+Repository build scripts should stay readable: keep task orchestration in the repository and call these commands only for concrete operations.
+
+The module manifest sets `DefaultCommandPrefix = 'AtlassianPS'`.
+Consumers call commands with the prefixed names, for example `Test-AtlassianPSModulePackage`.
+
+## Helper Contracts
+
+| Area | Helpers | Contract |
+|------|---------|----------|
+| Build output | `Copy-ModuleArtifacts`, `Join-ModuleSource` | Copy release artifacts and merge module source folders into the release `.psm1`. |
+| Manifest and package validation | `Update-ModuleManifestExports`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, create the release zip, and validate the package contains the expected manifest. |
+| External help | `Update-ExternalHelp`, `Remove-OrphanedExternalHelp` | Generate PlatyPS external help and remove generated help files that no longer have markdown sources. |
+| Test bootstrap | `Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment` | Resolve repository/module paths and import the module under test for Pester. |
+| Environment loading | `Import-DotEnvFile` | Load `.env` values into process-scoped environment variables without emitting secret values. |
+
+## Readable Build Task Example
+
+Prefer explicit task dependencies and concrete helper calls over a generic build wrapper.
+
+```powershell
+Task Build Clean, CopyBuildArtifacts, CompileModule, UpdateManifest
+
+Task CopyBuildArtifacts {
+    $null = Copy-AtlassianPSModuleArtifacts `
+        -ProjectPath $env:BHProjectPath `
+        -ModuleName $env:BHProjectName `
+        -BuildOutputPath $env:BHBuildOutput `
+        -AdditionalFiles @('CHANGELOG.md', 'README.md', 'LICENSE') `
+        -IncludeTests
+}
+
+Task CompileModule {
+    $releaseModulePath = Join-Path -Path $env:BHBuildOutput -ChildPath $env:BHProjectName
+    $null = Join-AtlassianPSModuleSource -ReleaseModulePath $releaseModulePath
+}
+
+Task UpdateManifest {
+    $null = Update-AtlassianPSModuleManifestExports `
+        -SourceModulePath $env:BHModulePath `
+        -BuiltManifestPath $script:BuildInfo.BuiltManifestPath `
+        -ModuleName $env:BHProjectName
+}
+```
+
+## Publish Dry Run
+
+Package validation is intentionally two visible steps: create the package, then validate it.
+
+```powershell
+Task TestPublish Build, {
+    $packagePath = New-AtlassianPSModulePackage `
+        -BuildOutputPath $env:BHBuildOutput `
+        -ModuleName $env:BHProjectName
+
+    $null = Test-AtlassianPSModulePackage `
+        -BuildOutputPath $env:BHBuildOutput `
+        -ModuleName $env:BHProjectName `
+        -PackagePath $packagePath
+}
+```
+
+## External Help
+
+The help generator wraps the PlatyPS v1 behavior expected by AtlassianPS modules, including nested MAML flattening and MAML metadata repair for aliases, pipeline input, default values, and examples.
+
+```powershell
+Update-AtlassianPSExternalHelp `
+    -DocsPath "$env:BHProjectPath/docs" `
+    -ModulePath $env:BHModulePath `
+    -ModuleName $env:BHProjectName
+
+Remove-AtlassianPSOrphanedExternalHelp `
+    -DocsPath "$env:BHProjectPath/docs" `
+    -ModulePath $env:BHModulePath `
+    -ModuleName $env:BHProjectName
+```
+
+## Test Bootstrap
+
+Use `Initialize-AtlassianPSModuleTestEnvironment` from Pester `BeforeAll` blocks when a repository only needs the standard source/release manifest resolution and module import.
+
+```powershell
+BeforeAll {
+    Import-Module AtlassianPS.Standards
+    $script:moduleToTest = Initialize-AtlassianPSModuleTestEnvironment `
+        -ModuleName 'JiraPS' `
+        -StartPath $PSScriptRoot
+}
+```
+
+Use `Resolve-AtlassianPSProjectRoot` and `Resolve-AtlassianPSModuleSource` directly when a test needs only path resolution.
+
+## Integration Tests
+
+Keep integration orchestration local when it knows product semantics: Cloud/Data Center variable names, typed test contexts, Docker Compose service names, provisioning, fixture setup, and cleanup.
+
+Use `Import-AtlassianPSDotEnvFile` as the shared primitive for local `.env` loading, then validate product-specific environment variables in the repository helper.

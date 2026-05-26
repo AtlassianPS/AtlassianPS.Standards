@@ -30,7 +30,7 @@ Describe 'Install-DependencyRequirement' {
         Set-Content -LiteralPath $manifestPath -Value @'
 @{
     RequiredModules = @(
-        @{ ModuleName = 'Metadata'; RequiredVersion = '1.5.7' }
+        @{ ModuleName = 'PSScriptAnalyzer'; RequiredVersion = '1.25.0' }
         @{ ModuleName = 'Pester'; RequiredVersion = '5.7.1' }
     )
 }
@@ -61,7 +61,7 @@ Describe 'Install-DependencyRequirement' {
 
             Should -Invoke -CommandName Install-Module -Scope It -Times 2 -Exactly
             Should -Invoke -CommandName Install-Module -Scope It -ParameterFilter { $Name -eq 'InvokeBuild' -and $RequiredVersion -eq '5.14.23' }
-            Should -Invoke -CommandName Install-Module -Scope It -ParameterFilter { $Name -eq 'Metadata' -and $RequiredVersion -eq '1.5.7' }
+            Should -Invoke -CommandName Install-Module -Scope It -ParameterFilter { $Name -eq 'PSScriptAnalyzer' -and $RequiredVersion -eq '1.25.0' }
         }
     }
 

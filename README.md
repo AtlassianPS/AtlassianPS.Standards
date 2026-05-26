@@ -6,9 +6,12 @@ Exported helpers cover:
 
 - analyzer settings sync and lint orchestration (`Sync-ScriptAnalyzerSettings`, `Invoke-Lint`)
 - build environment bootstrap and diagnostics (`Initialize-BuildEnvironment`, `Write-BuildInfo`)
-- build output orchestration (`Copy-ModuleArtifacts`, `Join-ModuleSource`)
-- manifest and release helpers (`Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `New-ModulePackage`, `Publish-ModuleRelease`)
+- build output helpers (`Copy-ModuleArtifacts`, `Join-ModuleSource`)
+- manifest and release helpers (`Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `New-ModulePackage`, `Test-ModulePackage`)
+- help generation helpers (`Update-ExternalHelp`, `Remove-OrphanedExternalHelp`)
 - Pester orchestration (`Invoke-ModuleTests`)
+- test bootstrap helpers (`Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment`)
+- integration-test helpers (`Import-DotEnvFile`)
 - dependency bootstrap and maintenance (`Install-DependencyRequirement`, `Update-DependencyReference`)
 
 ## Usage
@@ -20,6 +23,15 @@ Invoke-ScriptAnalyzer -Path ./MyModule -Settings $settingsPath -Recurse
 ```
 
 The module manifest sets `DefaultCommandPrefix = 'AtlassianPS'`, so consumers can call prefixed commands without the function names carrying that infix in source.
+
+## Blueprint Primitives
+
+Blueprint primitives are small shared operations behind the JiraPS blueprint build and test workflow.
+They cover artifact copy, source merge, package validation, external help generation, test bootstrap, and `.env` loading.
+Repository build scripts should keep task orchestration local and readable.
+
+Detailed contracts and examples live in [`docs/BlueprintHelpers.md`](docs/BlueprintHelpers.md).
+Downstream migration guidance lives in [`docs/DownstreamAdoption.md`](docs/DownstreamAdoption.md).
 
 ## Repository Layout
 

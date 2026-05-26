@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## v0.1.7
+
+- Added shared blueprint primitives for .env loading, release package validation, external help generation/orphan cleanup, and source/release test module import.
+- Documented downstream adoption patterns that keep build, integration, Docker, and parallel-test orchestration readable in product repositories.
+
 ## v0.1.6
 
 - Added shared dependency setup/update flow (`Install-DependencyRequirement`, `Update-DependencyReference`) and wired `Tools/setup.ps1` / `Tools/update.dependencies.ps1` to shared command delegation.

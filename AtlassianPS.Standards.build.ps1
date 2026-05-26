@@ -139,10 +139,12 @@ Task Test {
 }
 
 Task Publish SetVersion, Package, {
-    Publish-AtlassianPSModuleRelease `
-        -BuildOutputPath $env:BHBuildOutput `
-        -ModuleName $env:BHProjectName `
-        -ApiKey $PSGalleryAPIKey
+    $releasePath = Join-Path -Path $env:BHBuildOutput -ChildPath $env:BHProjectName
+    if (-not (Test-Path -LiteralPath $releasePath -PathType Container)) {
+        throw "Expected release path '$releasePath' does not exist. Run the Build task before publishing."
+    }
+
+    Publish-Module -Path $releasePath -NuGetApiKey $PSGalleryAPIKey -ErrorAction Stop
 }
 
 Task SetVersion {
@@ -164,6 +166,17 @@ Task Package {
     $null = New-AtlassianPSModulePackage `
         -BuildOutputPath $env:BHBuildOutput `
         -ModuleName $env:BHProjectName
+}
+
+Task TestPublish Build, {
+    $packagePath = New-AtlassianPSModulePackage `
+        -BuildOutputPath $env:BHBuildOutput `
+        -ModuleName $env:BHProjectName
+
+    $null = Test-AtlassianPSModulePackage `
+        -BuildOutputPath $env:BHBuildOutput `
+        -ModuleName $env:BHProjectName `
+        -PackagePath $packagePath
 }
 
 Task . Lint, Build, Test
