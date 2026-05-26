@@ -85,16 +85,17 @@
 
             $utf8Bom = [System.Text.UTF8Encoding]::new($true)
             foreach ($relativePath in $AboutTopicRelativePath) {
-                Get-ChildItem -Path (Join-Path -Path $locale.FullName -ChildPath $relativePath) -File -ErrorAction SilentlyContinue |
-                    ForEach-Object {
-                        $helpTextName = $_.BaseName + '.help.txt'
-                        $content = [System.IO.File]::ReadAllText($_.FullName)
-                        $content = $content -replace '\A---\r?\n[\s\S]*?\r?\n---\r?\n?', ''
-                        $helpTextPath = Join-Path -Path $outputPath -ChildPath $helpTextName
-                        if ($PSCmdlet.ShouldProcess($helpTextPath, 'Write about-topic help text')) {
-                            [System.IO.File]::WriteAllText($helpTextPath, $content, $utf8Bom)
-                        }
+                $aboutTopicFiles = Get-ChildItem -Path (Join-Path -Path $locale.FullName -ChildPath $relativePath) -File -ErrorAction SilentlyContinue
+
+                foreach ($file in $aboutTopicFiles) {
+                    $helpTextName = $file.BaseName + '.help.txt'
+                    $content = [System.IO.File]::ReadAllText($file.FullName)
+                    $content = $content -replace '\A---\r?\n[\s\S]*?\r?\n---\r?\n?', ''
+                    $helpTextPath = Join-Path -Path $outputPath -ChildPath $helpTextName
+                    if ($PSCmdlet.ShouldProcess($helpTextPath, 'Write about-topic help text')) {
+                        [System.IO.File]::WriteAllText($helpTextPath, $content, $utf8Bom)
                     }
+                }
             }
         }
     }
