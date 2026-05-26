@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Hardened release workflow validation so releases require annotated semver tags that point to commits reachable from `origin/master` before publishing.
-- Moved release-note extraction ahead of PSGallery publishing so missing or empty notes fail before immutable package publication.
+- Added pre-publish release-note validation so missing or empty changelog notes fail before immutable package publication.
 - Added a release-artifact downstream contract test that imports the built module in a fresh process and runs the exported prefixed lint command.
 
 ## v0.1.9
