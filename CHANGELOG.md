@@ -2,18 +2,14 @@
 
 ## Unreleased
 
-## v0.1.9
-
-- Fixed `Invoke-Lint` so downstream modules can call the exported prefixed command without depending on private helper command visibility at runtime.
-
-## v0.1.8
-
-- Fixed `Invoke-Lint` so downstream modules can call the exported prefixed command without losing access to lint output helpers at runtime.
-
-## v0.1.7
+## v0.1.10
 
 - Added shared blueprint primitives for .env loading, release package validation, external help generation/orphan cleanup, and source/release test module import.
 - Documented downstream adoption patterns that keep build, integration, Docker, and parallel-test orchestration readable in product repositories.
+- Fixed `Invoke-Lint` so downstream modules can call the exported prefixed command without depending on private helper command visibility at runtime.
+- Hardened release workflow validation so releases require annotated semver tags that point to commits reachable from `origin/master` before publishing.
+- Added pre-publish release-note validation so missing or empty changelog notes fail before immutable package publication.
+- Added a release-artifact downstream contract test that imports the built module in a fresh process and runs the exported prefixed lint command.
 
 ## v0.1.6
 
