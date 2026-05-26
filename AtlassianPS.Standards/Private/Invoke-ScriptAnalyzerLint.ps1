@@ -38,7 +38,13 @@
     foreach ($result in $results) {
         $color = if ($result.Severity -eq 'Error') { 'Red' } else { 'Yellow' }
         $location = if ($result.ScriptName) { $result.ScriptName } else { '<unknown>' }
-        Write-LintMessage -Color $color -Message "[$($result.Severity)] ${location}:$($result.Line) - $($result.RuleName): $($result.Message)"
+        $message = "[$($result.Severity)] ${location}:$($result.Line) - $($result.RuleName): $($result.Message)"
+        if (Get-Command -Name Write-Build -ErrorAction SilentlyContinue) {
+            Write-Build $color $message
+        }
+        else {
+            Write-Output $message
+        }
 
         if ($IsGitHubActions -and $result.ScriptPath) {
             $level = if ($result.Severity -eq 'Error') { 'error' } else { 'warning' }

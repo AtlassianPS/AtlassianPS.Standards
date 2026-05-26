@@ -48,6 +48,22 @@
     $styleFailures = 0
     $analyzerIssueCount = 0
     $isGitHubActions = [bool]$env:GITHUB_ACTIONS
+    $writeLintMessage = {
+        param(
+            [Parameter(Mandatory)]
+            [String]$Color,
+
+            [Parameter(Mandatory)]
+            [String]$Message
+        )
+
+        if (Get-Command -Name Write-Build -ErrorAction SilentlyContinue) {
+            Write-Build $Color $Message
+            return
+        }
+
+        Write-Output $Message
+    }
 
     if (-not $BuildScriptPath -and $env:BHProjectName) {
         $BuildScriptPath = Join-Path -Path $projectPathResolved -ChildPath "$($env:BHProjectName).build.ps1"
@@ -80,7 +96,7 @@
 
     if (-not $SkipStyleTests) {
         if (Test-Path -LiteralPath $StyleTestPath -PathType Leaf) {
-            Write-LintMessage -Color Gray -Message 'Running style tests...'
+            & $writeLintMessage -Color Gray -Message 'Running style tests...'
             $testResults = Invoke-StyleLintTests `
                 -StyleTestPath $StyleTestPath `
                 -PesterVerbosity $PesterVerbosity `
@@ -91,16 +107,16 @@
                 $failures.Add("$styleFailures style test(s) failed.")
             }
             else {
-                Write-LintMessage -Color Green -Message 'Style tests: passed.'
+                & $writeLintMessage -Color Green -Message 'Style tests: passed.'
             }
         }
         else {
-            Write-LintMessage -Color Yellow -Message "Style tests skipped because '$StyleTestPath' was not found."
+            & $writeLintMessage -Color Yellow -Message "Style tests skipped because '$StyleTestPath' was not found."
         }
     }
 
     if (-not $SkipScriptAnalyzer) {
-        Write-LintMessage -Color Gray -Message 'Running PSScriptAnalyzer...'
+        & $writeLintMessage -Color Gray -Message 'Running PSScriptAnalyzer...'
 
         $results = Invoke-ScriptAnalyzerLint `
             -AnalyzerPaths $AnalyzerPaths `
@@ -114,7 +130,7 @@
             $failures.Add("$analyzerIssueCount PSScriptAnalyzer issue(s) found.")
         }
         else {
-            Write-LintMessage -Color Green -Message 'PSScriptAnalyzer: no issues found.'
+            & $writeLintMessage -Color Green -Message 'PSScriptAnalyzer: no issues found.'
         }
     }
 

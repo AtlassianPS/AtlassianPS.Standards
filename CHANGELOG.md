@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.1.8
+
+- Fixed `Invoke-Lint` so downstream modules can call the exported prefixed command without losing access to lint output helpers at runtime.
+
 ## v0.1.7
 
 - Added shared blueprint primitives for .env loading, release package validation, external help generation/orphan cleanup, and source/release test module import.
