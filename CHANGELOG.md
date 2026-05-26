@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Hardened release workflow validation so releases require annotated semver tags that point to commits reachable from `origin/master` before publishing.
+- Moved release-note extraction ahead of PSGallery publishing so missing or empty notes fail before immutable package publication.
+- Added a release-artifact downstream contract test that imports the built module in a fresh process and runs the exported prefixed lint command.
+
 ## v0.1.9
 
 - Fixed `Invoke-Lint` so downstream modules can call the exported prefixed command without depending on private helper command visibility at runtime.
