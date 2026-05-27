@@ -1,0 +1,65 @@
+name: Resolve Release Tag
+description: Validate a v-prefixed annotated release tag and expose its version and commit SHA.
+inputs:
+  tag:
+    description: Release tag to validate. Defaults to GITHUB_REF_NAME.
+    required: false
+  base-ref:
+    description: Remote ref that must contain the release commit.
+    required: false
+    default: origin/master
+outputs:
+  release_tag:
+    description: Validated release tag.
+    value: ${{ steps.resolve.outputs.release_tag }}
+  release_version:
+    description: Release tag without the leading v.
+    value: ${{ steps.resolve.outputs.release_version }}
+  release_sha:
+    description: Commit SHA pointed to by the release tag.
+    value: ${{ steps.resolve.outputs.release_sha }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve release tag
+      id: resolve
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        BASE_REF: ${{ inputs.base-ref }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "$RELEASE_TAG" ]]; then
+          RELEASE_TAG="$GITHUB_REF_NAME"
+        fi
+
+        if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+(\.[0-9]+){1,2}([-.][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+          echo "::error::Release tag '$RELEASE_TAG' does not match the expected v-prefixed version pattern."
+          exit 1
+        fi
+
+        if ! git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+          echo "::error::Release ref '$RELEASE_TAG' is not a tag."
+          exit 1
+        fi
+
+        tag_type="$(git cat-file -t "refs/tags/$RELEASE_TAG")"
+        if [[ "$tag_type" != "tag" ]]; then
+          echo "::error::Release tag '$RELEASE_TAG' must be an annotated tag."
+          exit 1
+        fi
+
+        git fetch --no-tags origin "${BASE_REF#origin/}"
+
+        release_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
+        if ! git merge-base --is-ancestor "$release_sha" "$BASE_REF"; then
+          echo "::error::Release tag '$RELEASE_TAG' does not point to a commit reachable from $BASE_REF."
+          exit 1
+        fi
+
+        {
+          echo "release_tag=$RELEASE_TAG"
+          echo "release_version=${RELEASE_TAG#v}"
+          echo "release_sha=$release_sha"
+        } >> "$GITHUB_OUTPUT"
