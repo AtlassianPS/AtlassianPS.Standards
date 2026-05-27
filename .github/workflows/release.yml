@@ -79,21 +79,7 @@ jobs:
         shell: pwsh
         run: |
           $tag = '${{ steps.release_ref.outputs.release_tag }}'
-          $version = $tag.TrimStart('v')
-          $content = Get-Content -LiteralPath './CHANGELOG.md' -Raw -ErrorAction Stop
-          $escapedVersion = [System.Text.RegularExpressions.Regex]::Escape($version)
-          $match = [System.Text.RegularExpressions.Regex]::Match(
-              $content,
-              "(?ms)^##\s+v$escapedVersion\s*\r?\n(?<body>.*?)(?=^##\s+|\z)"
-          )
-          if (-not $match.Success) {
-              throw "Could not find changelog section '## v$version'."
-          }
-
-          $body = $match.Groups['body'].Value.Trim()
-          if ([string]::IsNullOrWhiteSpace($body)) {
-              throw "Changelog section '## v$version' is empty."
-          }
+          $null = Get-AtlassianPSReleaseNotesFromChangelog -ChangelogPath './CHANGELOG.md' -ReleaseVersion $tag
 
       - name: Publish module
         run: Invoke-Build -Task Publish -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -PSGalleryAPIKey ${{ secrets.PSGALLERY_API_KEY }}

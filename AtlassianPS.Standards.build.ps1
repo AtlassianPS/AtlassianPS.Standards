@@ -112,7 +112,7 @@ Task SetVersion {
     }
 
     $changelogPath = Join-Path -Path $env:BHProjectPath -ChildPath 'CHANGELOG.md'
-    $releaseNotes = Get-ReleaseNotesFromChangelog -ChangelogPath $changelogPath -ReleaseVersion $script:BuildInfo.VersionToPublish
+    $releaseNotes = Get-AtlassianPSReleaseNotesFromChangelog -ChangelogPath $changelogPath -ReleaseVersion $script:BuildInfo.VersionToPublish
 
     $null = Set-AtlassianPSModuleManifestVersion `
         -BuiltManifestPath $script:BuildInfo.BuiltManifestPath `
