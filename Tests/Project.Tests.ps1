@@ -10,6 +10,37 @@
 }
 
 Describe 'Project validation' {
+    It 'exports only the intentional public command surface' {
+        $expectedCommands = @(
+            'Copy-AtlassianPSModuleArtifacts'
+            'Import-AtlassianPSDotEnvFile'
+            'Initialize-AtlassianPSBuildEnvironment'
+            'Initialize-AtlassianPSModuleTestEnvironment'
+            'Install-AtlassianPSDependencyRequirement'
+            'Invoke-AtlassianPSLint'
+            'Invoke-AtlassianPSModuleTests'
+            'Join-AtlassianPSModuleSource'
+            'New-AtlassianPSModulePackage'
+            'Remove-AtlassianPSOrphanedExternalHelp'
+            'Resolve-AtlassianPSModuleSource'
+            'Resolve-AtlassianPSProjectRoot'
+            'Set-AtlassianPSModuleManifestVersion'
+            'Sync-AtlassianPSScriptAnalyzerSettings'
+            'Test-AtlassianPSModulePackage'
+            'Update-AtlassianPSDependencyReference'
+            'Update-AtlassianPSExternalHelp'
+            'Update-AtlassianPSModuleManifestExports'
+            'Write-AtlassianPSBuildInfo'
+        )
+        $actualCommands = @(
+            Get-Command -Module AtlassianPS.Standards -CommandType Function |
+                Select-Object -ExpandProperty Name |
+                Sort-Object
+        )
+
+        Compare-Object -ReferenceObject ($expectedCommands | Sort-Object) -DifferenceObject $actualCommands | Should -BeNullOrEmpty
+    }
+
     It 'does not export internal helper commands' {
         $projectRoot = (Resolve-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..')).ProviderPath
         $manifestPath = Join-Path -Path $projectRoot -ChildPath 'AtlassianPS.Standards/AtlassianPS.Standards.psd1'
