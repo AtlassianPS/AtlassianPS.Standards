@@ -13,6 +13,7 @@ Describe 'Project validation' {
     It 'exports only the intentional public command surface' {
         $expectedCommands = @(
             'Copy-AtlassianPSModuleArtifacts'
+            'Get-AtlassianPSReleaseNotesFromChangelog'
             'Import-AtlassianPSDotEnvFile'
             'Initialize-AtlassianPSBuildEnvironment'
             'Initialize-AtlassianPSModuleTestEnvironment'

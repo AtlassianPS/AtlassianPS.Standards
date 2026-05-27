@@ -33,47 +33,6 @@ $script:BuildInfo = Initialize-AtlassianPSBuildEnvironment `
     -VersionToPublish $VersionToPublish `
     -ResetBuildEnvironmentVariables
 
-function Get-ReleaseNotesFromChangelog {
-    [CmdletBinding()]
-    [OutputType([String])]
-    param(
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [String]$ChangelogPath,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [String]$ReleaseVersion
-    )
-
-    if (-not (Test-Path -LiteralPath $ChangelogPath -PathType Leaf)) {
-        throw "Changelog file was not found at '$ChangelogPath'."
-    }
-
-    $normalizedVersion = $ReleaseVersion.Trim()
-    if ($normalizedVersion.StartsWith('v')) {
-        $normalizedVersion = $normalizedVersion.Substring(1)
-    }
-
-    $escapedVersion = [System.Text.RegularExpressions.Regex]::Escape($normalizedVersion)
-    $content = Get-Content -LiteralPath $ChangelogPath -Raw
-    $match = [System.Text.RegularExpressions.Regex]::Match(
-        $content,
-        "(?ms)^##\s+v$escapedVersion\s*\r?\n(?<body>.*?)(?=^##\s+|\z)"
-    )
-
-    if (-not $match.Success) {
-        throw "Could not find changelog section '## v$normalizedVersion' in '$ChangelogPath'."
-    }
-
-    $releaseNotes = $match.Groups['body'].Value.Trim()
-    if ([string]::IsNullOrWhiteSpace($releaseNotes)) {
-        throw "Changelog section '## v$normalizedVersion' in '$ChangelogPath' is empty."
-    }
-
-    return $releaseNotes
-}
-
 Task ShowDebugInfo {
     Write-AtlassianPSBuildInfo -BuildInfo $script:BuildInfo
 }

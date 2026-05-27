@@ -11,7 +11,7 @@ Consumers call commands with the prefixed names, for example `Test-AtlassianPSMo
 | Area | Helpers | Contract |
 |------|---------|----------|
 | Build output | `Copy-ModuleArtifacts`, `Join-ModuleSource` | Copy release artifacts and merge module source folders into the release `.psm1`. |
-| Manifest and package validation | `Update-ModuleManifestExports`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, create the release zip, and validate the package contains the expected manifest. |
+| Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set publish-time version and release notes, create the release zip, and validate the package contains the expected manifest. |
 | External help | `Update-ExternalHelp`, `Remove-OrphanedExternalHelp` | Generate PlatyPS external help and remove generated help files that no longer have markdown sources. |
 | Test bootstrap | `Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment` | Resolve repository/module paths and import the module under test for Pester. |
 | Environment loading | `Import-DotEnvFile` | Load `.env` values into process-scoped environment variables without emitting secret values. |
@@ -61,6 +61,27 @@ Task TestPublish Build, {
         -PackagePath $packagePath
 }
 ```
+
+## Release Notes
+
+Release builds should derive manifest release notes from the same `CHANGELOG.md` section used for the GitHub release body.
+Use tag-form headings, for example `## v1.2.3`, and pass the validated release tag through the build.
+
+```powershell
+Task SetVersion {
+    $releaseNotes = Get-AtlassianPSReleaseNotesFromChangelog `
+        -ChangelogPath (Join-Path -Path $env:BHProjectPath -ChildPath 'CHANGELOG.md') `
+        -ReleaseVersion $script:BuildInfo.VersionToPublish
+
+    $null = Set-AtlassianPSModuleManifestVersion `
+        -BuiltManifestPath $script:BuildInfo.BuiltManifestPath `
+        -ModuleName $env:BHProjectName `
+        -VersionToPublish $VersionToPublish `
+        -ReleaseNotes $releaseNotes
+}
+```
+
+`Get-AtlassianPSReleaseNotesFromChangelog` also accepts historical headings without the `v` prefix and dated headings like `## 1.2.3 - 2026-05-10`, so repositories can migrate existing changelogs without local parser code.
 
 ## External Help
 
