@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a shared `resolve-release-tag` GitHub Action for downstream release workflows to validate annotated release tags and expose release metadata without duplicating shell logic.
+
 ## v0.1.10
 
 - Added shared blueprint primitives for .env loading, release package validation, external help generation/orphan cleanup, and source/release test module import.
