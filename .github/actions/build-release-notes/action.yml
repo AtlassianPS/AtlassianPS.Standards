@@ -1,0 +1,51 @@
+name: Build Release Notes
+description: Extract release notes from CHANGELOG.md and write them to a GitHub release body file.
+inputs:
+  changelog-path:
+    description: Path to CHANGELOG.md.
+    required: false
+    default: ./CHANGELOG.md
+  release-version:
+    description: Release tag or version to extract, for example v1.2.3.
+    required: true
+  output-path:
+    description: Path for the generated release notes markdown file.
+    required: false
+    default: ./Release/release-notes.md
+  module-path:
+    description: Optional path to AtlassianPS.Standards.psd1. Use this when running from the Standards repository itself.
+    required: false
+outputs:
+  release_notes_path:
+    description: Path to the generated release notes markdown file.
+    value: ${{ steps.build.outputs.release_notes_path }}
+runs:
+  using: composite
+  steps:
+    - name: Build release notes
+      id: build
+      shell: pwsh
+      env:
+        CHANGELOG_PATH: ${{ inputs.changelog-path }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+        OUTPUT_PATH: ${{ inputs.output-path }}
+        MODULE_PATH: ${{ inputs.module-path }}
+      run: |
+        if ($env:MODULE_PATH) {
+            Import-Module $env:MODULE_PATH -Force
+        }
+        else {
+            Import-Module AtlassianPS.Standards -Force
+        }
+
+        $releaseNotes = Get-AtlassianPSReleaseNotesFromChangelog `
+            -ChangelogPath $env:CHANGELOG_PATH `
+            -ReleaseVersion $env:RELEASE_VERSION
+
+        $outputDirectory = Split-Path -Path $env:OUTPUT_PATH -Parent
+        if ($outputDirectory) {
+            New-Item -Path $outputDirectory -ItemType Directory -Force | Out-Null
+        }
+
+        $releaseNotes | Set-Content -LiteralPath $env:OUTPUT_PATH -Encoding utf8
+        "release_notes_path=$env:OUTPUT_PATH" >> $env:GITHUB_OUTPUT

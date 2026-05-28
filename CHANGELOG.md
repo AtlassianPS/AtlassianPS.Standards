@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Added a shared `resolve-release-tag` GitHub Action for downstream release workflows to validate annotated release tags and expose release metadata without duplicating shell logic.
+- Added `Get-AtlassianPSReleaseNotesFromChangelog` so downstream release builds can reuse one changelog parser for PSGallery manifest release notes.
 
 ## v0.1.10
 
