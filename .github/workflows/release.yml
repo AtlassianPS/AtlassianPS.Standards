@@ -78,6 +78,7 @@ jobs:
       - name: Validate release notes from changelog
         shell: pwsh
         run: |
+          Import-Module ./AtlassianPS.Standards/AtlassianPS.Standards.psd1 -Force
           $tag = '${{ steps.release_ref.outputs.release_tag }}'
           $null = Get-AtlassianPSReleaseNotesFromChangelog -ChangelogPath './CHANGELOG.md' -ReleaseVersion $tag
 
