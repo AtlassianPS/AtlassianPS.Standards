@@ -76,12 +76,11 @@ jobs:
       - uses: ./.github/actions/setup-powershell
 
       - name: Build release notes from changelog
-        shell: pwsh
-        run: |
-          Import-Module ./AtlassianPS.Standards/AtlassianPS.Standards.psd1 -Force
-          $tag = '${{ steps.release_ref.outputs.release_tag }}'
-          $releaseNotes = Get-AtlassianPSReleaseNotesFromChangelog -ChangelogPath './CHANGELOG.md' -ReleaseVersion $tag
-          $releaseNotes | Set-Content -LiteralPath './Release/release-notes.md' -Encoding utf8
+        id: release_notes
+        uses: ./.github/actions/build-release-notes
+        with:
+          release-version: ${{ steps.release_ref.outputs.release_tag }}
+          module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1
 
       - name: Publish module
         run: Invoke-Build -Task Publish -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -PSGalleryAPIKey ${{ secrets.PSGALLERY_API_KEY }}
@@ -92,7 +91,7 @@ jobs:
         with:
           tag_name: ${{ steps.release_ref.outputs.release_tag }}
           name: ${{ steps.release_ref.outputs.release_tag }}
-          body_path: ./Release/release-notes.md
+          body_path: ${{ steps.release_notes.outputs.release_notes_path }}
           files: ./Release/AtlassianPS.Standards.zip
           fail_on_unmatched_files: true
           draft: false

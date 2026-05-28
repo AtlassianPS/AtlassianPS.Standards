@@ -66,6 +66,20 @@ Task TestPublish Build, {
 
 Release builds should derive manifest release notes from the same `CHANGELOG.md` section used for the GitHub release body.
 Use tag-form headings, for example `## v1.2.3`, and pass the validated release tag through the build.
+Use the shared `build-release-notes` action in GitHub workflows so repositories do not copy PowerShell plumbing.
+
+```yaml
+- name: Build release notes from changelog
+  id: release_notes
+  uses: AtlassianPS/AtlassianPS.Standards/.github/actions/build-release-notes@<standards-sha>
+  with:
+    release-version: ${{ steps.release_ref.outputs.release_tag }}
+
+- name: Create Release
+  uses: softprops/action-gh-release@v3
+  with:
+    body_path: ${{ steps.release_notes.outputs.release_notes_path }}
+```
 
 ```powershell
 Task SetVersion {
