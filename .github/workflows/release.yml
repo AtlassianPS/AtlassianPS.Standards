@@ -75,9 +75,8 @@ jobs:
 
       - uses: ./.github/actions/setup-powershell
 
-      - name: Build release notes from changelog
+      - uses: ./.github/actions/build-release-notes
         id: release_notes
-        uses: ./.github/actions/build-release-notes
         with:
           release-version: ${{ steps.release_ref.outputs.release_tag }}
           module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1
