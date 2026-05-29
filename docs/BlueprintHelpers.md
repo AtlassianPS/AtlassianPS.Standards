@@ -2,6 +2,7 @@
 
 `AtlassianPS.Standards` provides small helpers for repeated JiraPS-style build and test details.
 Repository build scripts should stay readable: keep task orchestration in the repository and call these commands only for concrete operations.
+For the cross-repository release strategy, see [ReleaseBlueprint.md](ReleaseBlueprint.md).
 
 The module manifest sets `DefaultCommandPrefix = 'AtlassianPS'`.
 Consumers call commands with the prefixed names, for example `Test-AtlassianPSModulePackage`.
