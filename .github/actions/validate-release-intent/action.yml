@@ -116,7 +116,7 @@ runs:
             "`$($env:CHANGELOG_DIRECTORY)/$($env:PR_NUMBER).<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md`"
         )
 
-        $body = $messageLines -join "`n"
+        $body = $messageLines -join [Environment]::NewLine
         $bodyJson = @{ body = $body } | ConvertTo-Json -Compress
 
         if ($existingCommentId) {
