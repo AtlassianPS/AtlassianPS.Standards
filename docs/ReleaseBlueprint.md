@@ -111,6 +111,76 @@ At minimum, test that:
 JiraPS is the reference implementation for these guard tests.
 Future Standards work may consolidate the checks into a shared `Test-AtlassianPSReleaseBlueprint` command.
 
+## Pull Request Release Intent
+
+Module repositories should require each pull request to declare release intent before merge.
+GitHub branch protection cannot require labels directly, so repositories should make a `Release Intent` workflow check required.
+
+Use exactly one release label:
+
+- `release:none` for changes that do not belong in release notes and should not affect release versioning.
+- `release:patch` for bug fixes and other patch releases.
+- `release:minor` for new backward-compatible functionality.
+- `release:major` for breaking changes.
+
+For user-facing changes, use exactly one changelog source: either one changelog label or one valid custom changelog fragment, not both.
+Use a changelog label when the standard generated fragment text is enough:
+
+- `changelog:added`
+- `changelog:changed`
+- `changelog:fixed`
+- `changelog:removed`
+- `changelog:deprecated`
+- `changelog:security`
+- `changelog:breaking`
+
+`changelog:breaking` requires `release:major`.
+
+Custom fragments must be named:
+
+```text
+.changelog/<pr-number>.<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md
+```
+
+Example:
+
+```text
+.changelog/701.patch.fixed.md
+```
+
+Generated fragments should use this content format:
+
+```markdown
+* <PR Title> (#<PR number>, @<PR author>)
+```
+
+Example workflow:
+
+```yaml
+name: Release Intent
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  validate:
+    name: Release Intent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/validate-release-intent@<standards-sha>
+```
+
+The workflow intentionally runs on `pull_request_target` and must not check out or execute pull request code.
+The shared action reads PR labels and changed file names through the GitHub API, then maintains a sticky PR comment when a human needs to fix labels or fragments.
+
+Make the `Release Intent` job a required branch protection check.
+
 ## Migration Checklist
 
 For each existing module repository:
@@ -123,8 +193,9 @@ For each existing module repository:
 6. Update `softprops/action-gh-release` to use `body_path` from the shared action output.
 7. Replace local changelog parsers in build scripts with `Get-AtlassianPSReleaseNotesFromChangelog`.
 8. Add or update drift guard tests.
-9. Update the local release runbook to link back to this blueprint.
-10. Run local workflow syntax, guard tests, lint, build/test, and release metadata preflight before pushing.
+9. Add the `Release Intent` workflow and make it a required check.
+10. Update the local release runbook to link back to this blueprint.
+11. Run local workflow syntax, guard tests, lint, build/test, and release metadata preflight before pushing.
 
 ## Local Release Preflight
 

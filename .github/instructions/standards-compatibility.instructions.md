@@ -14,6 +14,7 @@ This file applies to all `.ps1` files. It references shared rules.
 2. **Dependency/version guardrails** — keep pinned dependency versions and semver expectations aligned with `AGENTS.md`.
 3. **Focused iteration** — run targeted tests when possible (for example `Invoke-Pester -Path 'Tests/Functions/Public/Invoke-Lint.Unit.Tests.ps1'`).
 4. **Final validation** — run `./Tools/setup.ps1` and `Invoke-Build -Task Lint, Build, Test` before finalizing.
-5. **CI path filters** — instruction-only changes may be skipped by CI; run local validation and report exact command outcomes.
+5. **Release flow** — follow `docs/ReleaseBlueprint.md` for release-related changes: release-intent labels/fragments, synchronized release notes, and shared Standards primitives/actions.
+6. **CI path filters** — instruction-only changes may be skipped by CI; run local validation and report exact command outcomes.
 
 For full rules, read `.github/ai-context/powershell-rules.md`.

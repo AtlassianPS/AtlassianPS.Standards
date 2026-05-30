@@ -17,4 +17,5 @@ If guidance conflicts, `AGENTS.md` is authoritative.
    - `./Tools/setup.ps1`
    - `Invoke-Build -Task Lint, Build, Test`
 5. Keep tests, `README.md`, and `CHANGELOG.md` aligned with user-visible changes.
-6. Instruction-only changes may be skipped by CI path filters; run local validation and report exact command outcomes.
+6. For release-related work, follow `docs/ReleaseBlueprint.md`: use release-intent labels/fragments, keep release notes synchronized, and prefer shared Standards primitives/actions over copied workflow logic.
+7. Instruction-only changes may be skipped by CI path filters; run local validation and report exact command outcomes.

@@ -27,6 +27,7 @@ Describe 'Project validation' {
             'Resolve-AtlassianPSProjectRoot'
             'Set-AtlassianPSModuleManifestVersion'
             'Sync-AtlassianPSScriptAnalyzerSettings'
+            'Test-AtlassianPSReleaseIntent'
             'Test-AtlassianPSModulePackage'
             'Update-AtlassianPSDependencyReference'
             'Update-AtlassianPSExternalHelp'

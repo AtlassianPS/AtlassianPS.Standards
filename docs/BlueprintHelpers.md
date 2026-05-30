@@ -13,6 +13,7 @@ Consumers call commands with the prefixed names, for example `Test-AtlassianPSMo
 |------|---------|----------|
 | Build output | `Copy-ModuleArtifacts`, `Join-ModuleSource` | Copy release artifacts and merge module source folders into the release `.psm1`. |
 | Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set publish-time version and release notes, create the release zip, and validate the package contains the expected manifest. |
+| Release intent | `Test-ReleaseIntent` | Validate PR release labels and changelog labels/fragments before merge. |
 | External help | `Update-ExternalHelp`, `Remove-OrphanedExternalHelp` | Generate PlatyPS external help and remove generated help files that no longer have markdown sources. |
 | Test bootstrap | `Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment` | Resolve repository/module paths and import the module under test for Pester. |
 | Environment loading | `Import-DotEnvFile` | Load `.env` values into process-scoped environment variables without emitting secret values. |
