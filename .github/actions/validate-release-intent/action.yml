@@ -78,9 +78,7 @@ runs:
 
         if ($result.IsValid) {
             if ($existingCommentId) {
-                gh api `
-                    --method DELETE `
-                    "repos/$env:GITHUB_REPOSITORY/issues/comments/$existingCommentId" | Out-Null
+                gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/issues/comments/$existingCommentId" | Out-Null
             }
 
             Write-Host "Release intent is valid: release:$($result.ReleaseImpact) changelog:$($result.ChangelogType)"
@@ -117,16 +115,10 @@ runs:
         $bodyJson = @{ body = $body } | ConvertTo-Json -Compress
 
         if ($existingCommentId) {
-            $bodyJson | gh api `
-                --method PATCH `
-                "repos/$env:GITHUB_REPOSITORY/issues/comments/$existingCommentId" `
-                --input - | Out-Null
+            $bodyJson | gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/issues/comments/$existingCommentId" --input - | Out-Null
         }
         else {
-            $bodyJson | gh api `
-                --method POST `
-                "repos/$env:GITHUB_REPOSITORY/issues/$env:PR_NUMBER/comments" `
-                --input - | Out-Null
+            $bodyJson | gh api --method POST "repos/$env:GITHUB_REPOSITORY/issues/$env:PR_NUMBER/comments" --input - | Out-Null
         }
 
         foreach ($message in $result.Messages) {
