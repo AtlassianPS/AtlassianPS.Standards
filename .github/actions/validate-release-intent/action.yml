@@ -56,8 +56,12 @@ runs:
             }
         }
 
-        $labels = @(gh api "repos/$env:GITHUB_REPOSITORY/issues/$env:PR_NUMBER/labels" --paginate --jq '.[].name')
-        $changedFiles = @(gh api "repos/$env:GITHUB_REPOSITORY/pulls/$env:PR_NUMBER/files" --paginate --jq '.[].filename')
+        $issueLabelsRoute = 'repos/{0}/issues/{1}/labels' -f $env:GITHUB_REPOSITORY, $env:PR_NUMBER
+        $pullFilesRoute = 'repos/{0}/pulls/{1}/files' -f $env:GITHUB_REPOSITORY, $env:PR_NUMBER
+        $issueCommentsRoute = 'repos/{0}/issues/{1}/comments' -f $env:GITHUB_REPOSITORY, $env:PR_NUMBER
+
+        $labels = @(gh api $issueLabelsRoute --paginate --jq '.[].name')
+        $changedFiles = @(gh api $pullFilesRoute --paginate --jq '.[].filename')
 
         $result = Test-AtlassianPSReleaseIntent `
             -LabelName $labels `
@@ -73,12 +77,13 @@ runs:
 
         $marker = '<!-- atlassianps-release-intent -->'
         $commentAuthor = gh api user --jq '.login'
-        $existingCommentId = gh api "repos/$env:GITHUB_REPOSITORY/issues/$env:PR_NUMBER/comments" --paginate --jq ".[] | select(.user.login == \"$commentAuthor\" and (.body | startswith(\"$marker\"))) | .id" |
+        $existingCommentId = gh api $issueCommentsRoute --paginate --jq ".[] | select(.user.login == \"$commentAuthor\" and (.body | startswith(\"$marker\"))) | .id" |
             Select-Object -First 1
 
         if ($result.IsValid) {
             if ($existingCommentId) {
-                gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/issues/comments/$existingCommentId" | Out-Null
+                $commentRoute = 'repos/{0}/issues/comments/{1}' -f $env:GITHUB_REPOSITORY, $existingCommentId
+                gh api --method DELETE $commentRoute | Out-Null
             }
 
             Write-Host "Release intent is valid: release:$($result.ReleaseImpact) changelog:$($result.ChangelogType)"
@@ -115,10 +120,11 @@ runs:
         $bodyJson = @{ body = $body } | ConvertTo-Json -Compress
 
         if ($existingCommentId) {
-            $bodyJson | gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/issues/comments/$existingCommentId" --input - | Out-Null
+            $commentRoute = 'repos/{0}/issues/comments/{1}' -f $env:GITHUB_REPOSITORY, $existingCommentId
+            $bodyJson | gh api --method PATCH $commentRoute --input - | Out-Null
         }
         else {
-            $bodyJson | gh api --method POST "repos/$env:GITHUB_REPOSITORY/issues/$env:PR_NUMBER/comments" --input - | Out-Null
+            $bodyJson | gh api --method POST $issueCommentsRoute --input - | Out-Null
         }
 
         foreach ($message in $result.Messages) {
