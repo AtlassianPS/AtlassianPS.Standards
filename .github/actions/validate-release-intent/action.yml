@@ -72,7 +72,8 @@ runs:
         ) | Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
         $marker = '<!-- atlassianps-release-intent -->'
-        $existingCommentId = gh api "repos/$env:GITHUB_REPOSITORY/issues/$env:PR_NUMBER/comments" --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" |
+        $commentAuthor = gh api user --jq '.login'
+        $existingCommentId = gh api "repos/$env:GITHUB_REPOSITORY/issues/$env:PR_NUMBER/comments" --paginate --jq ".[] | select(.user.login == \"$commentAuthor\" and (.body | startswith(\"$marker\"))) | .id" |
             Select-Object -First 1
 
         if ($result.IsValid) {
@@ -89,6 +90,8 @@ runs:
         $messageLines = @(
             $marker
             '## Release Intent Needs Attention'
+            ''
+            '_This comment is managed by the release-intent workflow._'
             ''
             'This PR must declare how it affects releases before it can be merged.'
             ''
