@@ -98,7 +98,7 @@ runs:
             'Required labels:'
             ''
             '- exactly one of `release:none`, `release:patch`, `release:minor`, or `release:major`'
-            '- for user-facing changes, exactly one of `changelog:added`, `changelog:changed`, `changelog:fixed`, `changelog:removed`, `changelog:deprecated`, `changelog:security`, or `changelog:breaking` unless the PR includes a valid custom changelog fragment'
+            '- for user-facing changes, either exactly one `changelog:*` label or one valid custom changelog fragment, not both'
             ''
             'Problems found:'
             ''

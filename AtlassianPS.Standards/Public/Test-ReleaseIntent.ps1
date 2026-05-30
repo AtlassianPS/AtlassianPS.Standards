@@ -121,13 +121,13 @@
             $messages.Add('For release:patch, release:minor, or release:major, add exactly one changelog label or one valid changelog fragment.')
         }
 
+        if ($fragment -and $validChangelogLabels.Count -gt 0) {
+            $messages.Add('Use either one changelog label or one custom changelog fragment, not both.')
+        }
+
         if ($fragment) {
             if ($fragment.Impact -ne $releaseImpact) {
                 $messages.Add("Changelog fragment impact '$($fragment.Impact)' must match release label 'release:$releaseImpact'.")
-            }
-
-            if ($changelogTypeFromLabel -and $fragment.Type -ne $changelogTypeFromLabel) {
-                $messages.Add("Changelog fragment type '$($fragment.Type)' must match label 'changelog:$changelogTypeFromLabel'.")
             }
         }
 

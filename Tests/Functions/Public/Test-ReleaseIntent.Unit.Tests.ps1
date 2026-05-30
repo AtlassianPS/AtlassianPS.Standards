@@ -90,14 +90,22 @@ Describe 'Test-ReleaseIntent' {
         $result.Messages[0] | Should -Be "Changelog fragment '.changelog/41.patch.fixed.md' must be named '.changelog/42.<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md'."
     }
 
-    It 'requires fragment impact and type to match labels when both are present' {
+    It 'rejects changelog labels and custom fragments together' {
         $result = InModuleScope AtlassianPS.Standards {
-            Test-ReleaseIntent -LabelName @('release:patch', 'changelog:fixed') -ChangedFilePath @('.changelog/42.minor.added.md') -PullRequestNumber 42
+            Test-ReleaseIntent -LabelName @('release:patch', 'changelog:fixed') -ChangedFilePath @('.changelog/42.patch.fixed.md') -PullRequestNumber 42
+        }
+
+        $result.IsValid | Should -BeFalse
+        $result.Messages | Should -Contain 'Use either one changelog label or one custom changelog fragment, not both.'
+    }
+
+    It 'requires fragment impact to match release labels' {
+        $result = InModuleScope AtlassianPS.Standards {
+            Test-ReleaseIntent -LabelName @('release:patch') -ChangedFilePath @('.changelog/42.minor.added.md') -PullRequestNumber 42
         }
 
         $result.IsValid | Should -BeFalse
         $result.Messages | Should -Contain "Changelog fragment impact 'minor' must match release label 'release:patch'."
-        $result.Messages | Should -Contain "Changelog fragment type 'added' must match label 'changelog:fixed'."
     }
 
     It 'rejects unknown release and changelog labels' {

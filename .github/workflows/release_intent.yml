@@ -1,0 +1,25 @@
+name: Release Intent
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  validate:
+    name: Release Intent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout trusted base
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Validate release intent
+        uses: ./.github/actions/validate-release-intent
+        with:
+          module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1

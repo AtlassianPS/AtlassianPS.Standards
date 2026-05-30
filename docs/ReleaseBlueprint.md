@@ -123,7 +123,8 @@ Use exactly one release label:
 - `release:minor` for new backward-compatible functionality.
 - `release:major` for breaking changes.
 
-For user-facing changes, also use exactly one changelog label unless the PR includes a valid custom changelog fragment:
+For user-facing changes, use exactly one changelog source: either one changelog label or one valid custom changelog fragment, not both.
+Use a changelog label when the standard generated fragment text is enough:
 
 - `changelog:added`
 - `changelog:changed`
