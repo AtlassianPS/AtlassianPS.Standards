@@ -32,6 +32,14 @@ Instruction-only changes may be skipped by CI path filters; run local validation
 - Treat breaking helper behavior as a major-version concern.
 - Use `vX.Y.Z` tags for release publishing.
 
+## Release Flow Guidance
+
+- Read `docs/ReleaseBlueprint.md` before changing release-related commands, actions, workflows, or documentation.
+- Keep release implementation reusable as small Standards primitives/actions; do not copy broad orchestration into module repositories.
+- PRs declare release intent with `release:*` labels and, for user-facing changes, `changelog:*` labels or `.changelog` fragments. Contributors should not need to pick the final release version.
+- Release notes must come from the same `CHANGELOG.md` section for GitHub release bodies and PSGallery manifest `PrivateData.PSData.ReleaseNotes`.
+- If release flow changes, update the blueprint, helper catalog, tests, changelog, and agent instructions together.
+
 ## Source Layout
 
 - Public helpers: `AtlassianPS.Standards/Public/*.ps1`
