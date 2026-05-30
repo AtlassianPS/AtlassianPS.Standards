@@ -1,0 +1,133 @@
+name: Validate Release Intent
+description: Validate PR release and changelog labels without checking out untrusted pull request code.
+inputs:
+  github-token:
+    description: Token used to read PR metadata and maintain the sticky release-intent comment.
+    required: false
+  pr-number:
+    description: Pull request number. Defaults to github.event.pull_request.number.
+    required: false
+  module-path:
+    description: Optional path to AtlassianPS.Standards.psd1. Use this when running from the Standards repository itself.
+    required: false
+  changelog-directory:
+    description: Directory containing changelog fragments.
+    required: false
+    default: .changelog
+outputs:
+  is_valid:
+    description: Whether the PR release intent is valid.
+    value: ${{ steps.validate.outputs.is_valid }}
+  release_impact:
+    description: Resolved release impact label value.
+    value: ${{ steps.validate.outputs.release_impact }}
+  changelog_type:
+    description: Resolved changelog type value, if any.
+    value: ${{ steps.validate.outputs.changelog_type }}
+runs:
+  using: composite
+  steps:
+    - name: Validate release intent
+      id: validate
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ inputs.github-token || github.token }}
+        PR_NUMBER: ${{ inputs.pr-number || github.event.pull_request.number }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        MODULE_PATH: ${{ inputs.module-path }}
+        CHANGELOG_DIRECTORY: ${{ inputs.changelog-directory }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        if (-not $env:PR_NUMBER) {
+            throw 'validate-release-intent requires a pull request number. Run it from pull_request_target or pass pr-number.'
+        }
+
+        if ($env:MODULE_PATH) {
+            Import-Module $env:MODULE_PATH -Force
+        }
+        else {
+            $actionRepositoryRoot = Resolve-Path -LiteralPath (Join-Path -Path $env:ACTION_PATH -ChildPath '../../..')
+            $actionModulePath = Join-Path -Path $actionRepositoryRoot.ProviderPath -ChildPath 'AtlassianPS.Standards/AtlassianPS.Standards.psd1'
+            if (Test-Path -LiteralPath $actionModulePath -PathType Leaf) {
+                Import-Module $actionModulePath -Force
+            }
+            else {
+                Import-Module AtlassianPS.Standards -Force
+            }
+        }
+
+        $labels = @(gh api "repos/$env:GITHUB_REPOSITORY/issues/$env:PR_NUMBER/labels" --paginate --jq '.[].name')
+        $changedFiles = @(gh api "repos/$env:GITHUB_REPOSITORY/pulls/$env:PR_NUMBER/files" --paginate --jq '.[].filename')
+
+        $result = Test-AtlassianPSReleaseIntent `
+            -LabelName $labels `
+            -ChangedFilePath $changedFiles `
+            -PullRequestNumber ([int]$env:PR_NUMBER) `
+            -ChangelogDirectory $env:CHANGELOG_DIRECTORY
+
+        @(
+            "is_valid=$($result.IsValid.ToString().ToLowerInvariant())"
+            "release_impact=$($result.ReleaseImpact)"
+            "changelog_type=$($result.ChangelogType)"
+        ) | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+        $marker = '<!-- atlassianps-release-intent -->'
+        $existingCommentId = gh api "repos/$env:GITHUB_REPOSITORY/issues/$env:PR_NUMBER/comments" --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" |
+            Select-Object -First 1
+
+        if ($result.IsValid) {
+            if ($existingCommentId) {
+                gh api `
+                    --method DELETE `
+                    "repos/$env:GITHUB_REPOSITORY/issues/comments/$existingCommentId" | Out-Null
+            }
+
+            Write-Host "Release intent is valid: release:$($result.ReleaseImpact) changelog:$($result.ChangelogType)"
+            return
+        }
+
+        $messageLines = @(
+            $marker
+            '## Release Intent Needs Attention'
+            ''
+            'This PR must declare how it affects releases before it can be merged.'
+            ''
+            'Required labels:'
+            ''
+            '- exactly one of `release:none`, `release:patch`, `release:minor`, or `release:major`'
+            '- for user-facing changes, exactly one of `changelog:added`, `changelog:changed`, `changelog:fixed`, `changelog:removed`, `changelog:deprecated`, `changelog:security`, or `changelog:breaking` unless the PR includes a valid custom changelog fragment'
+            ''
+            'Problems found:'
+            ''
+        )
+        foreach ($message in $result.Messages) {
+            $messageLines += "- $message"
+        }
+        $messageLines += @(
+            ''
+            'Custom changelog fragments must be named:'
+            ''
+            "`$($env:CHANGELOG_DIRECTORY)/$($env:PR_NUMBER).<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md`"
+        )
+
+        $body = $messageLines -join "`n"
+        $bodyJson = @{ body = $body } | ConvertTo-Json -Compress
+
+        if ($existingCommentId) {
+            $bodyJson | gh api `
+                --method PATCH `
+                "repos/$env:GITHUB_REPOSITORY/issues/comments/$existingCommentId" `
+                --input - | Out-Null
+        }
+        else {
+            $bodyJson | gh api `
+                --method POST `
+                "repos/$env:GITHUB_REPOSITORY/issues/$env:PR_NUMBER/comments" `
+                --input - | Out-Null
+        }
+
+        foreach ($message in $result.Messages) {
+            Write-Error $message -ErrorAction Continue
+        }
+
+        exit 1

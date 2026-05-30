@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added `Test-AtlassianPSReleaseIntent` to validate PR release and changelog labels before module repositories adopt changelog-fragment based releases.
+
 ## v0.1.11
 
 - Added a shared `resolve-release-tag` GitHub Action for downstream release workflows to validate annotated release tags and expose release metadata without duplicating shell logic.
