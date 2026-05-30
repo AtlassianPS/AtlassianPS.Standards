@@ -109,11 +109,12 @@ runs:
         foreach ($message in $result.Messages) {
             $messageLines += "- $message"
         }
+        $fragmentTemplate = '{0}/{1}.<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md' -f $env:CHANGELOG_DIRECTORY, $env:PR_NUMBER
         $messageLines += @(
             ''
             'Custom changelog fragments must be named:'
             ''
-            "`$($env:CHANGELOG_DIRECTORY)/$($env:PR_NUMBER).<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md`"
+            $fragmentTemplate
         )
 
         $body = $messageLines -join [Environment]::NewLine
