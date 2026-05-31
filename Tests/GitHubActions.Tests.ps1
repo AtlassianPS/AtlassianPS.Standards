@@ -188,28 +188,34 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         }
     }
 
-    It 'continuous release workflow prepares through a PR before publishing' {
+    It 'continuous release workflow commits release metadata before publishing' {
         $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/continuous_release.yml'
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
-        $workflow | Should -Match 'pull-requests: write'
-        $workflow | Should -Match 'Create release preparation pull request'
-        $workflow | Should -Match 'gh pr create --base master --head "\$env:RELEASE_BRANCH"'
-        $workflow | Should -Match 'Stop after opening release preparation PR'
-        $workflow | Should -Match 'Publish release preparation PR'
-        $workflow | Should -Match "(?m)^\s+if: startsWith\(github\.event\.head_commit\.message, 'Prepare v'\) && contains\(github\.event\.head_commit\.message, ' release'\)"
+        $workflow | Should -Match 'ATLASSIANPS_RELEASE_BOT_TOKEN'
+        $workflow | Should -Match 'Commit release metadata'
+        $workflow | Should -Match 'Validate, build, and test release commit'
+        $workflow | Should -Match 'Push release commit and annotated tag'
+        $workflow | Should -Match 'Create GitHub release and upload asset'
+        $workflow | Should -Match 'Notify homepage to update submodule'
+        $workflow | Should -Match 'Report no release required'
+        $workflow | Should -Match 'git push origin HEAD:master "refs/tags/\$\{\{ steps\.plan\.outputs\.release_tag \}\}"'
+        $workflow | Should -Match 'repository: AtlassianPS/AtlassianPS\.github\.io'
+        $workflow | Should -Match 'event-type: module-release'
 
-        $createPrIndex = $workflow.IndexOf('Create release preparation pull request')
-        $stopIndex = $workflow.IndexOf('Stop after opening release preparation PR')
-        $publishIndex = $workflow.IndexOf('Publish release preparation PR')
-        $tagIndex = $workflow.IndexOf('Create annotated release tag')
+        $commitIndex = $workflow.IndexOf('Commit release metadata')
+        $validateIndex = $workflow.IndexOf('Validate, build, and test release commit')
+        $tagIndex = $workflow.IndexOf('Push release commit and annotated tag')
         $publishModuleIndex = $workflow.IndexOf('Publish module')
+        $releaseIndex = $workflow.IndexOf('Create GitHub release and upload asset')
+        $homepageIndex = $workflow.IndexOf('Notify homepage to update submodule')
 
-        $createPrIndex | Should -BeGreaterThan -1
-        $stopIndex | Should -BeGreaterThan $createPrIndex
-        $publishIndex | Should -BeGreaterThan $stopIndex
-        $tagIndex | Should -BeGreaterThan $publishIndex
+        $commitIndex | Should -BeGreaterThan -1
+        $validateIndex | Should -BeGreaterThan $commitIndex
+        $tagIndex | Should -BeGreaterThan $validateIndex
         $publishModuleIndex | Should -BeGreaterThan $tagIndex
+        $releaseIndex | Should -BeGreaterThan $publishModuleIndex
+        $homepageIndex | Should -BeGreaterThan $releaseIndex
         $workflow | Should -Match 'git add CHANGELOG\.md \.changelog AtlassianPS\.Standards/AtlassianPS\.Standards\.psd1'
     }
 

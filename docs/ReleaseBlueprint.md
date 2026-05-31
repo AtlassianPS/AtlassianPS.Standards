@@ -29,7 +29,7 @@ Introductory paragraphs before `###` sections are supported and are included in 
 
 ## Required Continuous Release Flow
 
-The default path is label-based continuous delivery from merged pull requests with an explicit release-preparation checkpoint.
+The default path is label-based continuous delivery from merged pull requests.
 After a normal pull request with `release:patch`, `release:minor`, or `release:major` merges to `master`, the trusted `push` workflow should:
 
 1. Check out the repository with full history and tags.
@@ -39,20 +39,17 @@ After a normal pull request with `release:patch`, `release:minor`, or `release:m
 5. Create a generated `.changelog/<pr>.<impact>.<type>.md` fragment when the PR used a `changelog:*` label.
 6. Run `prepare-release-changelog` to fold pending notes and fragments into the new version section.
 7. Stamp the source module manifest with the exact release version and release notes from the same changelog section.
-8. Open or update a `release/vX.Y.Z` release-preparation PR containing only those release metadata changes.
-9. Stop. Do not publish from the source PR merge.
-
-After the release-preparation PR is reviewed and merged to `master`, the trusted `push` workflow should:
-
-1. Recognize the release-preparation merge commit.
-2. Run the normal build/test gate and `SetVersion` metadata preflight against the exact release tag.
-3. Create an annotated tag on the release-preparation commit.
-4. Build release notes from the committed `CHANGELOG.md` section.
-5. Publish to PSGallery.
-6. Create the GitHub release with the same release notes body.
+8. Commit the release metadata changes directly to `master`.
+9. Run the normal build/test gate and `SetVersion` metadata preflight against the exact release tag.
+10. Create an annotated tag on the release metadata commit and push the commit and tag together.
+11. Build release notes from the committed `CHANGELOG.md` section.
+12. Publish to PSGallery.
+13. Create the GitHub release with the same release notes body.
+14. Notify the website to update its module submodule.
 
 `release:none` merges should stop after planning and must not publish.
 The workflow should be serialized with concurrency so multiple release-labelled merges do not race the next-version calculation.
+Use a dedicated release automation token, for example `ATLASSIANPS_RELEASE_BOT_TOKEN`, when branch protection does not allow the default `GITHUB_TOKEN` to push the release metadata commit and annotated tag to `master`.
 
 ## Required Tag Release Flow
 
@@ -241,9 +238,9 @@ Before creating a release tag, prepare the changelog section, run the module's n
 
 This moves pending `## Unreleased` content and valid `.changelog/*.md` fragments into `## vX.Y.Z - YYYY-MM-DD`, then deletes the consumed fragments.
 The generated release-notes file is written outside the repository by default; commit only `CHANGELOG.md` and consumed fragment deletions.
-In the continuous release flow, the trusted workflow creates these changes automatically after the labelled PR merges, then opens a release-preparation PR for review.
-The same release-preparation commit should update the source module manifest so `CHANGELOG.md`, the tag, the repository manifest, the GitHub release body, and PSGallery metadata all describe the same version.
-For manual/tag releases, review the generated changelog before merging the release-preparation PR.
+In the continuous release flow, the trusted workflow creates and commits these changes automatically after the labelled PR merges.
+The same release metadata commit should update the source module manifest so `CHANGELOG.md`, the tag, the repository manifest, the GitHub release body, and PSGallery metadata all describe the same version.
+For manual/tag releases, review the generated changelog before tagging the release.
 
 ```powershell
 Invoke-Build -Task Build, Test

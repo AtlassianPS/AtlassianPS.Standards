@@ -11,8 +11,7 @@ concurrency:
 permissions:
   actions: read
   contents: write
-  issues: write
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   release:
@@ -22,12 +21,13 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          token: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN || github.token }}
 
       - name: Plan release
         id: plan
         uses: ./.github/actions/plan-merged-release
 
-      - name: Stop when release is not required
+      - name: Report no release required
         if: steps.plan.outputs.should_release != 'true'
         run: |
           echo "Skipping release: ${{ steps.plan.outputs.skip_reason }}"
@@ -68,16 +68,12 @@ jobs:
               -VersionToPublish ${{ steps.plan.outputs.release_tag }} `
               -ReleaseNotes $releaseNotes
 
-      - name: Create release preparation pull request
+      - name: Commit release metadata
         if: steps.plan.outputs.should_release == 'true'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_BRANCH: release/${{ steps.plan.outputs.release_tag }}
-          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
-          PR_NUMBER: ${{ steps.plan.outputs.pr_number }}
-          PR_TITLE: ${{ steps.plan.outputs.pr_title }}
+        shell: bash
         run: |
+          set -euo pipefail
+
           if git diff --quiet -- CHANGELOG.md .changelog AtlassianPS.Standards/AtlassianPS.Standards.psd1; then
             echo "::error::Release planning produced no changelog or manifest changes."
             exit 1
@@ -85,87 +81,33 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$env:RELEASE_BRANCH"
           git add CHANGELOG.md .changelog AtlassianPS.Standards/AtlassianPS.Standards.psd1
-          git commit -m "Prepare $env:RELEASE_TAG release"
-          git push --force-with-lease origin "HEAD:$env:RELEASE_BRANCH"
-
-          $body = @"
-          ## Summary
-          - prepare $env:RELEASE_TAG from merged PR #$env:PR_NUMBER
-          - fold pending changelog entries and fragments into $env:RELEASE_TAG
-          - stamp source manifest release version and release notes before tagging
-
-          Source PR: #$env:PR_NUMBER - $env:PR_TITLE
-
-          ## Validation
-          - Continuous Release will publish only after this release-preparation PR is merged.
-          "@
-
-          $existingPr = gh pr list --head "$env:RELEASE_BRANCH" --base master --state open --json number --jq '.[0].number'
-          if ($existingPr) {
-              gh pr edit $existingPr --title "Prepare $env:RELEASE_TAG release" --body $body
-          }
-          else {
-              gh pr create --base master --head "$env:RELEASE_BRANCH" --title "Prepare $env:RELEASE_TAG release" --body $body --label release:none
-          }
-
-      - name: Stop after opening release preparation PR
-        if: steps.plan.outputs.should_release == 'true'
-        run: |
-          echo "Release preparation PR created for ${{ steps.plan.outputs.release_tag }}. Merge it to publish."
-        shell: bash
-
-  publish:
-    name: Publish release preparation PR
-    runs-on: ubuntu-latest
-    if: startsWith(github.event.head_commit.message, 'Prepare v') && contains(github.event.head_commit.message, ' release')
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Resolve release tag from commit
-        id: prepared_release
-        shell: pwsh
-        run: |
-          if ($env:GITHUB_SHA -ne (git rev-parse HEAD)) {
-              throw 'Checked out commit does not match GITHUB_SHA.'
-          }
-
-          $message = git log -1 --pretty=%s
-          if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+) release(?: \(#[0-9]+\))?$') {
-              throw "Commit message '$message' is not a release-preparation commit."
-          }
-
-          "release_tag=$($Matches.tag)" >> $env:GITHUB_OUTPUT
-
-      - uses: ./.github/actions/setup-powershell
+          git commit -m "Prepare ${{ steps.plan.outputs.release_tag }} release"
 
       - name: Validate, build, and test release commit
+        if: steps.plan.outputs.should_release == 'true'
         shell: pwsh
         run: |
           Invoke-Build -Task Lint, Build, Test
-          Invoke-Build -Task Build, SetVersion -VersionToPublish ${{ steps.prepared_release.outputs.release_tag }}
+          Invoke-Build -Task Build, SetVersion -VersionToPublish ${{ steps.plan.outputs.release_tag }}
 
-      - name: Create annotated release tag
+      - name: Push release commit and annotated tag
+        if: steps.plan.outputs.should_release == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          if git show-ref --verify --quiet "refs/tags/${{ steps.prepared_release.outputs.release_tag }}"; then
-            echo "Release tag ${{ steps.prepared_release.outputs.release_tag }} already exists."
-          else
-            git tag -a "${{ steps.prepared_release.outputs.release_tag }}" -m "${{ steps.prepared_release.outputs.release_tag }}"
-            git push origin "refs/tags/${{ steps.prepared_release.outputs.release_tag }}"
-          fi
+          git tag -a "${{ steps.plan.outputs.release_tag }}" -m "${{ steps.plan.outputs.release_tag }}"
+          git push origin HEAD:master "refs/tags/${{ steps.plan.outputs.release_tag }}"
 
       - name: Resolve release ref
+        if: steps.plan.outputs.should_release == 'true'
         id: release_ref
         uses: ./.github/actions/resolve-release-tag
         with:
-          tag: ${{ steps.prepared_release.outputs.release_tag }}
+          tag: ${{ steps.plan.outputs.release_tag }}
 
       - name: Build release notes
+        if: steps.plan.outputs.should_release == 'true'
         id: release_notes
         uses: ./.github/actions/build-release-notes
         with:
@@ -173,17 +115,18 @@ jobs:
           module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1
 
       - name: Publish module
-        if: vars.ATLASSIANPS_SKIP_PSGALLERY_PUBLISH != 'true'
+        if: steps.plan.outputs.should_release == 'true' && vars.ATLASSIANPS_SKIP_PSGALLERY_PUBLISH != 'true'
         run: Invoke-Build -Task Publish -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -PSGalleryAPIKey ${{ secrets.PSGALLERY_API_KEY }}
         shell: pwsh
 
       - name: Skip PSGallery publish
-        if: vars.ATLASSIANPS_SKIP_PSGALLERY_PUBLISH == 'true'
+        if: steps.plan.outputs.should_release == 'true' && vars.ATLASSIANPS_SKIP_PSGALLERY_PUBLISH == 'true'
         run: |
           echo "Skipping PSGallery publish because ATLASSIANPS_SKIP_PSGALLERY_PUBLISH is true."
         shell: bash
 
       - name: Create GitHub release and upload asset
+        if: steps.plan.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.release_ref.outputs.release_tag }}
@@ -195,3 +138,12 @@ jobs:
           prerelease: ${{ contains(steps.release_ref.outputs.release_tag, 'alpha') || contains(steps.release_ref.outputs.release_tag, 'beta') || contains(steps.release_ref.outputs.release_tag, 'rc') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify homepage to update submodule
+        if: steps.plan.outputs.should_release == 'true' && !contains(steps.release_ref.outputs.release_tag, 'alpha') && !contains(steps.release_ref.outputs.release_tag, 'beta') && !contains(steps.release_ref.outputs.release_tag, 'rc')
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.HOMEPAGE_PAT }}
+          repository: AtlassianPS/AtlassianPS.github.io
+          event-type: module-release
+          client-payload: '{"module": "AtlassianPS.Standards", "version": "${{ steps.release_ref.outputs.release_tag }}"}'
