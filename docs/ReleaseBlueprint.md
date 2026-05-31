@@ -51,25 +51,11 @@ After a normal pull request with `release:patch`, `release:minor`, or `release:m
 The workflow should be serialized with concurrency so multiple release-labelled merges do not race the next-version calculation.
 Use a dedicated release automation token, for example `ATLASSIANPS_RELEASE_BOT_TOKEN`, when branch protection does not allow the default `GITHUB_TOKEN` to push the release metadata commit and annotated tag to `master`.
 
-## Required Tag Release Flow
+## Release Recovery
 
-Keep a tag/manual release workflow as the recovery path for reruns and explicit operator-driven releases.
-It should support skipping PSGallery publish during recovery when the immutable package version already exists but the GitHub release needs to be created or repaired.
-For a manual recovery run, dispatch the tag release workflow with `skip_psgallery_publish: true`.
-For the continuous release workflow, set repository variable `ATLASSIANPS_SKIP_PSGALLERY_PUBLISH=true` only for a deliberate recovery rerun, then remove it after the GitHub release is repaired.
-
-Release workflows should do these steps in order:
-
-1. Check out the repository with full history.
-2. Resolve and validate the annotated release tag with `resolve-release-tag`.
-3. Download the CI `Release` artifact built from the tagged commit.
-4. Set up PowerShell dependencies with `setup-powershell`.
-5. Build `Release/release-notes.md` from `CHANGELOG.md` with `build-release-notes`.
-6. Publish the module, with manifest release notes generated from the same changelog section.
-7. Create the GitHub release with `body_path` pointing at `Release/release-notes.md`.
-
-Release notes must be built before publishing.
-If the changelog section is missing or empty, the workflow must fail before PSGallery receives the package.
+Do not keep a separate tag-triggered release workflow unless it is intentionally idempotent across already-created tags, PSGallery packages, GitHub releases, uploaded assets, and website notifications.
+The default AtlassianPS release path has one publishing workflow: `continuous_release.yml`.
+If a release fails after publishing an immutable PSGallery package, repair the failed downstream artifact directly, for example by creating the missing GitHub release or rerunning the website dispatch, instead of rerunning a workflow that calls `Publish-Module` again.
 
 ## Required Shared Actions
 
@@ -134,6 +120,7 @@ At minimum, test that:
 - The release workflow uses `build-release-notes`.
 - The release workflow uses `body_path: ${{ steps.release_notes.outputs.release_notes_path }}`.
 - The release workflow builds release notes before publishing.
+- The repository does not keep a non-idempotent `.github/workflows/release.yml` beside `continuous_release.yml`.
 - The build script uses `Get-AtlassianPSReleaseNotesFromChangelog` for manifest release notes.
 - The repository does not contain `changelog-to-release`, `.github/changelog.configuration.json`, or copied inline parser/write-file plumbing.
 
@@ -216,17 +203,14 @@ For each existing module repository:
 
 1. Bump `Tools/build.requirements.psd1` to the current `AtlassianPS.Standards` version.
 2. Pin all Standards workflow actions to the same release commit SHA.
-3. Replace local release-tag scripts with `resolve-release-tag`.
-4. Replace third-party or inline GitHub release-note generation with `build-release-notes`.
-5. Remove `.github/changelog.configuration.json` when it only served the old changelog action.
-6. Update `softprops/action-gh-release` to use `body_path` from the shared action output.
-7. Replace local changelog parsers in build scripts with `Get-AtlassianPSReleaseNotesFromChangelog`.
-8. Add or update drift guard tests.
-9. Add the `Release Intent` workflow and make it a required check.
-10. Add the label-based `Continuous Release` workflow.
-11. Configure required labels, secrets, and optional recovery variables.
-12. Update the local release runbook to link back to this blueprint.
-13. Run local workflow syntax, guard tests, lint, build/test, and release metadata preflight before pushing.
+3. Remove non-idempotent tag-triggered release workflows such as `.github/workflows/release.yml`.
+4. Replace local changelog parsers in build scripts with `Get-AtlassianPSReleaseNotesFromChangelog`.
+5. Add or update drift guard tests.
+6. Add the `Release Intent` workflow and make it a required check.
+7. Add the label-based `Continuous Release` workflow.
+8. Configure required labels and secrets.
+9. Update the local release runbook to link back to this blueprint.
+10. Run local workflow syntax, guard tests, lint, build/test, and release metadata preflight before pushing.
 
 ## Implementing Label-Based CD In A Module Repository
 
@@ -268,15 +252,6 @@ ATLASSIANPS_RELEASE_BOT_TOKEN
 
 Use `ATLASSIANPS_RELEASE_BOT_TOKEN` when branch protection or repository rules prevent `GITHUB_TOKEN` from pushing the release metadata commit and annotated tag to `master`.
 If the repository has no branch protection, `GITHUB_TOKEN` is enough.
-
-Recovery variable:
-
-```text
-ATLASSIANPS_SKIP_PSGALLERY_PUBLISH=true
-```
-
-Set this variable only for a deliberate recovery rerun when PSGallery already contains the immutable package version but the GitHub release or website notification needs repair.
-Remove the variable immediately after recovery.
 
 ### Release Intent Workflow
 
@@ -426,15 +401,9 @@ jobs:
           release-version: ${{ steps.release_ref.outputs.release_tag }}
 
       - name: Publish module
-        if: steps.plan.outputs.should_release == 'true' && vars.ATLASSIANPS_SKIP_PSGALLERY_PUBLISH != 'true'
+        if: steps.plan.outputs.should_release == 'true'
         run: Invoke-Build -Task Publish -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -PSGalleryAPIKey ${{ secrets.PSGALLERY_API_KEY }}
         shell: pwsh
-
-      - name: Skip PSGallery publish
-        if: steps.plan.outputs.should_release == 'true' && vars.ATLASSIANPS_SKIP_PSGALLERY_PUBLISH == 'true'
-        run: |
-          echo "Skipping PSGallery publish because ATLASSIANPS_SKIP_PSGALLERY_PUBLISH is true."
-        shell: bash
 
       - name: Create GitHub release and upload asset
         if: steps.plan.outputs.should_release == 'true'
@@ -463,12 +432,6 @@ jobs:
 Use the exact repository secret name for the website token.
 Existing modules use `HOMEPAGE_PAT`; if a repository uses a different name, adjust the snippet instead of creating duplicate secrets.
 
-### Tag Release Recovery Workflow
-
-Keep `.github/workflows/release.yml` for manual recovery and explicit tag reruns.
-It should accept `release_tag` and `skip_psgallery_publish` inputs on `workflow_dispatch`.
-When `skip_psgallery_publish` is true, the workflow should still validate the tag, build release notes, and create or repair the GitHub release without calling `Publish-Module`.
-
 ### Module-Specific Substitutions
 
 When copying templates, replace:
@@ -488,7 +451,7 @@ Do not copy the Standards repository's self-import path unless the target reposi
 Run these checks from the target repository root:
 
 ```bash
-actionlint .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/release_intent.yml .github/workflows/continuous_release.yml
+actionlint .github/workflows/ci.yml .github/workflows/release_intent.yml .github/workflows/continuous_release.yml
 git diff --check
 ```
 

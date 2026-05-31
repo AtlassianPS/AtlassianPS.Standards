@@ -219,13 +219,10 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'git add CHANGELOG\.md \.changelog AtlassianPS\.Standards/AtlassianPS\.Standards\.psd1'
     }
 
-    It 'manual release workflow supports GitHub release recovery without republishing PSGallery' {
+    It 'does not keep a non-idempotent tag release workflow beside continuous release' {
         $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/release.yml'
-        $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
-        $workflow | Should -Match 'skip_psgallery_publish:'
-        $workflow | Should -Match "github\.event_name != 'workflow_dispatch' \|\| !inputs\.skip_psgallery_publish"
-        $workflow | Should -Match 'Skipping PSGallery publish for recovery rerun'
+        Test-Path -LiteralPath $workflowPath | Should -BeFalse
     }
 
     It 'validate-release-intent accepts deleted historical fragments during release preparation' {

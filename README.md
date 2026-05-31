@@ -65,8 +65,7 @@ It computes the next semantic version from the merged PR's `release:*` label, pr
 The release-preparation commit also stamps the source module manifest with the exact released version and release notes so the tagged repository state matches the published package metadata.
 The workflow should use `ATLASSIANPS_RELEASE_BOT_TOKEN` when pushing the release metadata commit and tag if branch protection does not allow the default `GITHUB_TOKEN` to push to `master`.
 
-Tag-based release remains available on `v*` tags and manual dispatch for recovery or explicit operator-driven reruns.
-Both release paths will:
+The continuous release workflow will:
 
 1. Build the module.
 2. Publish to PowerShell Gallery (when `PSGALLERY_API_KEY` is configured).
@@ -74,3 +73,4 @@ Both release paths will:
 
 The source manifest may start a development cycle on a major/minor maintenance baseline, but release-preparation commits stamp the exact `vX.Y.Z` release version before tagging.
 Publish derives PSGallery release notes from the matching changelog version section and fails if that section is missing or empty.
+Do not keep a separate tag-triggered release workflow unless it is intentionally idempotent across already-created tags, PSGallery packages, GitHub releases, and assets.

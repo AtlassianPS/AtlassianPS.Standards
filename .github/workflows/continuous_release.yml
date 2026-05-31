@@ -115,15 +115,9 @@ jobs:
           module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1
 
       - name: Publish module
-        if: steps.plan.outputs.should_release == 'true' && vars.ATLASSIANPS_SKIP_PSGALLERY_PUBLISH != 'true'
+        if: steps.plan.outputs.should_release == 'true'
         run: Invoke-Build -Task Publish -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -PSGalleryAPIKey ${{ secrets.PSGALLERY_API_KEY }}
         shell: pwsh
-
-      - name: Skip PSGallery publish
-        if: steps.plan.outputs.should_release == 'true' && vars.ATLASSIANPS_SKIP_PSGALLERY_PUBLISH == 'true'
-        run: |
-          echo "Skipping PSGallery publish because ATLASSIANPS_SKIP_PSGALLERY_PUBLISH is true."
-        shell: bash
 
       - name: Create GitHub release and upload asset
         if: steps.plan.outputs.should_release == 'true'
