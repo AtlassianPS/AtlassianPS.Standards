@@ -12,10 +12,17 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         @{ ActionName = 'validate-release-intent' }
         @{ ActionName = 'prepare-release-changelog' }
         @{ ActionName = 'plan-merged-release' }
+        @{ ActionName = '_shared/release-intent-core' }
     ) {
         param($ActionName)
 
-        $scriptPath = Join-Path -Path $projectRoot -ChildPath ".github/actions/$ActionName/$ActionName.ps1"
+        $scriptPath = if ($ActionName -eq '_shared/release-intent-core') {
+            Join-Path -Path $projectRoot -ChildPath '.github/actions/_shared/release-intent-core.ps1'
+        }
+        else {
+            $scriptName = Split-Path -Path $ActionName -Leaf
+            Join-Path -Path $projectRoot -ChildPath ".github/actions/$ActionName/$scriptName.ps1"
+        }
         $scriptText = [System.IO.File]::ReadAllText($scriptPath)
         $errors = $null
 
@@ -129,6 +136,90 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output = Get-Content -LiteralPath $outputPath -Raw
         $output | Should -Match 'should_release=false'
         $output | Should -Match 'skip_reason=release:none'
+    }
+
+    It 'plan-merged-release rejects breaking changes without a major release label' {
+        function gh {
+            $arguments = [String[]]$args
+            $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
+
+            if ($route -like 'repos/*/commits/*/pulls') {
+                '{"number":44,"title":"Change defaults","user":"tester"}'
+                return
+            }
+
+            if ($route -like 'repos/*/issues/*/labels') {
+                'release:minor'
+                'changelog:breaking'
+                return
+            }
+
+            throw "Unexpected gh invocation: $($arguments -join ' ')"
+        }
+
+        function git {
+            $arguments = [String[]]$args
+            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--list') {
+                'v1.2.3'
+                return
+            }
+
+            throw "Unexpected git invocation: $($arguments -join ' ')"
+        }
+
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'github-output.txt'
+        $previousRepository = $env:GITHUB_REPOSITORY
+        $previousCommitSha = $env:COMMIT_SHA
+        $previousChangelogDirectory = $env:CHANGELOG_DIRECTORY
+        $previousOutput = $env:GITHUB_OUTPUT
+        try {
+            $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
+            $env:COMMIT_SHA = 'ghi789'
+            $env:CHANGELOG_DIRECTORY = '.changelog'
+            $env:GITHUB_OUTPUT = $outputPath
+
+            { & $script:planMergedReleaseScriptPath } | Should -Throw -ExpectedMessage '*breaking changelog fragments require release:major*'
+        }
+        finally {
+            $env:GITHUB_REPOSITORY = $previousRepository
+            $env:COMMIT_SHA = $previousCommitSha
+            $env:CHANGELOG_DIRECTORY = $previousChangelogDirectory
+            $env:GITHUB_OUTPUT = $previousOutput
+        }
+    }
+
+    It 'continuous release workflow prepares through a PR before publishing' {
+        $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/continuous_release.yml'
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+
+        $workflow | Should -Match 'pull-requests: write'
+        $workflow | Should -Match 'Create release preparation pull request'
+        $workflow | Should -Match 'gh pr create --base master --head "\$env:RELEASE_BRANCH"'
+        $workflow | Should -Match 'Stop after opening release preparation PR'
+        $workflow | Should -Match 'Publish release preparation PR'
+        $workflow | Should -Match "(?m)^\s+if: startsWith\(github\.event\.head_commit\.message, 'Prepare v'\) && contains\(github\.event\.head_commit\.message, ' release'\)"
+
+        $createPrIndex = $workflow.IndexOf('Create release preparation pull request')
+        $stopIndex = $workflow.IndexOf('Stop after opening release preparation PR')
+        $publishIndex = $workflow.IndexOf('Publish release preparation PR')
+        $tagIndex = $workflow.IndexOf('Create annotated release tag')
+        $publishModuleIndex = $workflow.IndexOf('Publish module')
+
+        $createPrIndex | Should -BeGreaterThan -1
+        $stopIndex | Should -BeGreaterThan $createPrIndex
+        $publishIndex | Should -BeGreaterThan $stopIndex
+        $tagIndex | Should -BeGreaterThan $publishIndex
+        $publishModuleIndex | Should -BeGreaterThan $tagIndex
+        $workflow | Should -Match 'git add CHANGELOG\.md \.changelog AtlassianPS\.Standards/AtlassianPS\.Standards\.psd1'
+    }
+
+    It 'manual release workflow supports GitHub release recovery without republishing PSGallery' {
+        $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/release.yml'
+        $workflow = Get-Content -LiteralPath $workflowPath -Raw
+
+        $workflow | Should -Match 'skip_psgallery_publish:'
+        $workflow | Should -Match "github\.event_name != 'workflow_dispatch' \|\| !inputs\.skip_psgallery_publish"
+        $workflow | Should -Match 'Skipping PSGallery publish for recovery rerun'
     }
 
     It 'validate-release-intent accepts deleted historical fragments during release preparation' {

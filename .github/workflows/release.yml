@@ -10,6 +10,11 @@ on:
         description: "Tag to release (for manual reruns)"
         required: true
         type: string
+      skip_psgallery_publish:
+        description: "Skip PSGallery publish when recovering a GitHub release after the package already exists"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   release:
@@ -82,8 +87,15 @@ jobs:
           module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1
 
       - name: Publish module
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.skip_psgallery_publish }}
         run: Invoke-Build -Task Publish -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -PSGalleryAPIKey ${{ secrets.PSGALLERY_API_KEY }}
         shell: pwsh
+
+      - name: Skip PSGallery publish
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_psgallery_publish }}
+        run: |
+          echo "Skipping PSGallery publish for recovery rerun."
+        shell: bash
 
       - name: Create Release and Upload Asset
         uses: softprops/action-gh-release@v3

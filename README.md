@@ -61,7 +61,8 @@ Invoke-Build -Task Lint, Build, Test
 ## Release
 
 Label-based CD runs after release-labelled pull requests merge to `master`.
-It computes the next semantic version from the merged PR's `release:*` label, prepares `CHANGELOG.md`, validates the release metadata, creates an annotated tag, publishes to PowerShell Gallery, and creates the GitHub release from the same changelog section.
+It computes the next semantic version from the merged PR's `release:*` label, prepares `CHANGELOG.md`, stamps the source manifest, and opens a release-preparation PR.
+After that release-preparation PR is reviewed and merged, the workflow validates the release metadata, creates an annotated tag, publishes to PowerShell Gallery, and creates the GitHub release from the same changelog section.
 The release-preparation commit also stamps the source module manifest with the exact released version and release notes so the tagged repository state matches the published package metadata.
 
 Tag-based release remains available on `v*` tags and manual dispatch for recovery or explicit operator-driven reruns.
