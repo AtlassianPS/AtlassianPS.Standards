@@ -30,7 +30,7 @@ Introductory paragraphs before `###` sections are supported and are included in 
 ## Required Continuous Release Flow
 
 The default path is label-based continuous delivery from merged pull requests.
-After a normal pull request with `release:patch`, `release:minor`, or `release:major` merges to `master`, the trusted `push` workflow should:
+After CI succeeds on a normal merged pull request with `release:patch`, `release:minor`, or `release:major`, the trusted `workflow_run` workflow should:
 
 1. Check out the repository with full history and tags.
 2. Resolve the merged pull request associated with the pushed commit.
@@ -40,16 +40,17 @@ After a normal pull request with `release:patch`, `release:minor`, or `release:m
 6. Run `prepare-release-changelog` to fold pending notes and fragments into the new version section.
 7. Stamp the source module manifest with the exact release version and release notes from the same changelog section.
 8. Commit the release metadata changes directly to `master`.
-9. Run the normal build/test gate and `SetVersion` metadata preflight against the exact release tag.
-10. Create an annotated tag on the release metadata commit and push the commit and tag together.
-11. Build release notes from the committed `CHANGELOG.md` section.
-12. Publish to PSGallery.
-13. Create the GitHub release with the same release notes body.
-14. Notify the website to update its module submodule.
+9. Let CI build and test the release metadata commit.
+10. Download the CI `Release` artifact from that exact commit.
+11. Create an annotated tag on the tested release metadata commit.
+12. Build release notes from the committed `CHANGELOG.md` section.
+13. Publish the tested module artifact to PSGallery without rebuilding or restamping the package.
+14. Create the GitHub release with the same release notes body.
+15. Notify the website to update its module submodule.
 
 `release:none` merges should stop after planning and must not publish.
 The workflow should be serialized with concurrency so multiple release-labelled merges do not race the next-version calculation.
-Use a dedicated release automation token, for example `ATLASSIANPS_RELEASE_BOT_TOKEN`, when branch protection does not allow the default `GITHUB_TOKEN` to push the release metadata commit and annotated tag to `master`.
+Use a dedicated release automation token, for example `ATLASSIANPS_RELEASE_BOT_TOKEN`, when committing release metadata to `master` so the follow-up CI run is triggered reliably.
 
 When unreleased changes already exist on `master` without an associated merged release-labelled PR, use the manual `workflow_dispatch` input on `continuous_release.yml` and choose the release impact for the whole bucket.
 Manual dispatch must still check out `master`, not the arbitrary ref selected in the GitHub UI.
@@ -293,8 +294,9 @@ Add `.github/workflows/continuous_release.yml`:
 name: Continuous Release
 
 on:
-  push:
-    branches: [master]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
   workflow_dispatch:
     inputs:
       release_impact:
@@ -316,27 +318,27 @@ permissions:
   pull-requests: read
 
 jobs:
-  release:
-    name: Release merged PR
+  prepare:
+    name: Prepare release metadata
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      !startsWith(github.event.workflow_run.head_commit.message, 'Prepare v'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.event.workflow_run.head_sha }}
           token: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN || github.token }}
 
       - name: Plan release
         id: plan
         uses: AtlassianPS/AtlassianPS.Standards/.github/actions/plan-merged-release@<standards-sha> # vX.Y.Z
         with:
+          commit-sha: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
           release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release_impact || '' }}
-
-      - name: Report no release required
-        if: steps.plan.outputs.should_release != 'true'
-        run: |
-          echo "Skipping release: ${{ steps.plan.outputs.skip_reason }}"
-        shell: bash
 
       - name: Create generated changelog fragment
         if: steps.plan.outputs.should_release == 'true' && steps.plan.outputs.fragment_path != ''
@@ -387,43 +389,72 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md .changelog <ModuleName>/<ModuleName>.psd1
           git commit -m "Prepare ${{ steps.plan.outputs.release_tag }} release"
+          git push "https://x-access-token:${RELEASE_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
 
-      - name: Validate, build, and test release commit
-        if: steps.plan.outputs.should_release == 'true'
+  publish:
+    name: Publish tested release artifact
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      startsWith(github.event.workflow_run.head_commit.message, 'Prepare v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Resolve prepared release
+        id: prepared_release
         shell: pwsh
         run: |
-          Invoke-Build -Task Lint, Build, Test
-          Invoke-Build -Task Build, SetVersion -VersionToPublish ${{ steps.plan.outputs.release_tag }}
+          $message = '${{ github.event.workflow_run.head_commit.message }}'
+          if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+) release$') {
+              throw "Commit message '$message' is not a release metadata commit."
+          }
 
-      - name: Push release commit and annotated tag
-        if: steps.plan.outputs.should_release == 'true'
+          "release_tag=$($Matches.tag)" >> $env:GITHUB_OUTPUT
+
+      - name: Download tested release artifact
+        uses: dawidd6/action-download-artifact@v21
+        with:
+          run_id: ${{ github.event.workflow_run.id }}
+          name: Release
+          path: ./Release/
+          if_no_artifact_found: fail
+
+      - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@<standards-sha> # vX.Y.Z
+
+      - name: Create annotated release tag
         shell: bash
         run: |
           set -euo pipefail
-          git tag -a "${{ steps.plan.outputs.release_tag }}" -m "${{ steps.plan.outputs.release_tag }}"
-          git push origin HEAD:master "refs/tags/${{ steps.plan.outputs.release_tag }}"
+          git tag -a "${{ steps.prepared_release.outputs.release_tag }}" -m "${{ steps.prepared_release.outputs.release_tag }}"
+          git push origin "refs/tags/${{ steps.prepared_release.outputs.release_tag }}"
 
       - name: Resolve release ref
-        if: steps.plan.outputs.should_release == 'true'
         id: release_ref
         uses: AtlassianPS/AtlassianPS.Standards/.github/actions/resolve-release-tag@<standards-sha> # vX.Y.Z
         with:
-          tag: ${{ steps.plan.outputs.release_tag }}
+          tag: ${{ steps.prepared_release.outputs.release_tag }}
 
       - name: Build release notes
-        if: steps.plan.outputs.should_release == 'true'
         id: release_notes
         uses: AtlassianPS/AtlassianPS.Standards/.github/actions/build-release-notes@<standards-sha> # vX.Y.Z
         with:
           release-version: ${{ steps.release_ref.outputs.release_tag }}
 
-      - name: Publish module
-        if: steps.plan.outputs.should_release == 'true'
-        run: Invoke-Build -Task Publish -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -PSGalleryAPIKey ${{ secrets.PSGALLERY_API_KEY }}
+      - name: Create GitHub release asset
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ./Release/<ModuleName> -DestinationPath ./Release/<ModuleName>.zip -Force
+
+      - name: Publish tested module artifact
+        run: Publish-Module -Path ./Release/<ModuleName> -NuGetApiKey ${{ secrets.PSGALLERY_API_KEY }} -ErrorAction Stop
         shell: pwsh
 
       - name: Create GitHub release and upload asset
-        if: steps.plan.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.release_ref.outputs.release_tag }}
@@ -437,7 +468,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify homepage to update submodule
-        if: steps.plan.outputs.should_release == 'true' && !contains(steps.release_ref.outputs.release_tag, 'alpha') && !contains(steps.release_ref.outputs.release_tag, 'beta') && !contains(steps.release_ref.outputs.release_tag, 'rc')
+        if: ${{ !contains(steps.release_ref.outputs.release_tag, 'alpha') && !contains(steps.release_ref.outputs.release_tag, 'beta') && !contains(steps.release_ref.outputs.release_tag, 'rc') }}
         uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.HOMEPAGE_PAT }}

@@ -233,33 +233,39 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         }
     }
 
-    It 'continuous release workflow commits release metadata before publishing' {
+    It 'continuous release workflow publishes the CI-tested release artifact' {
         $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/continuous_release.yml'
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
         $workflow | Should -Match 'ATLASSIANPS_RELEASE_BOT_TOKEN'
+        $workflow | Should -Match 'workflow_run:'
         $workflow | Should -Match 'workflow_dispatch:'
         $workflow | Should -Match 'release_impact:'
-        $workflow | Should -Match "ref: \$\{\{ github\.event_name == 'workflow_dispatch' && 'master' \|\| github\.sha \}\}"
+        $workflow | Should -Match "ref: \$\{\{ github\.event_name == 'workflow_dispatch' && 'master' \|\| github\.event\.workflow_run\.head_sha \}\}"
         $workflow | Should -Match 'Commit release metadata'
-        $workflow | Should -Match 'Validate, build, and test release commit'
-        $workflow | Should -Match 'Push release commit and annotated tag'
+        $workflow | Should -Match 'Publish tested release artifact'
+        $workflow | Should -Match 'Download tested release artifact'
+        $workflow | Should -Match 'Publish tested module artifact'
+        $workflow | Should -Match 'Publish-Module -Path ./Release/AtlassianPS\.Standards'
+        $workflow | Should -Not -Match 'Invoke-Build -Task Build, SetVersion'
         $workflow | Should -Match 'Create GitHub release and upload asset'
         $workflow | Should -Match 'Notify homepage to update submodule'
-        $workflow | Should -Match 'git push origin HEAD:master "refs/tags/\$\{\{ steps\.plan\.outputs\.release_tag \}\}"'
+        $workflow | Should -Match 'git push "https://x-access-token:\$\{RELEASE_BOT_TOKEN\}@github\.com/\$\{GITHUB_REPOSITORY\}\.git" HEAD:master'
         $workflow | Should -Match 'repository: AtlassianPS/AtlassianPS\.github\.io'
         $workflow | Should -Match 'event-type: module-release'
 
         $commitIndex = $workflow.IndexOf('Commit release metadata')
-        $validateIndex = $workflow.IndexOf('Validate, build, and test release commit')
-        $tagIndex = $workflow.IndexOf('Push release commit and annotated tag')
-        $publishModuleIndex = $workflow.IndexOf('Publish module')
+        $publishJobIndex = $workflow.IndexOf('Publish tested release artifact')
+        $downloadIndex = $workflow.IndexOf('Download tested release artifact')
+        $tagIndex = $workflow.IndexOf('Create annotated release tag')
+        $publishModuleIndex = $workflow.IndexOf('Publish tested module artifact')
         $releaseIndex = $workflow.IndexOf('Create GitHub release and upload asset')
         $homepageIndex = $workflow.IndexOf('Notify homepage to update submodule')
 
         $commitIndex | Should -BeGreaterThan -1
-        $validateIndex | Should -BeGreaterThan $commitIndex
-        $tagIndex | Should -BeGreaterThan $validateIndex
+        $publishJobIndex | Should -BeGreaterThan $commitIndex
+        $downloadIndex | Should -BeGreaterThan $publishJobIndex
+        $tagIndex | Should -BeGreaterThan $downloadIndex
         $publishModuleIndex | Should -BeGreaterThan $tagIndex
         $releaseIndex | Should -BeGreaterThan $publishModuleIndex
         $homepageIndex | Should -BeGreaterThan $releaseIndex
