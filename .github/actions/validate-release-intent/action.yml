@@ -76,8 +76,8 @@ runs:
         ) | Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
         $marker = '<!-- atlassianps-release-intent -->'
-        $commentAuthor = gh api user --jq '.login'
-        $existingCommentId = gh api $issueCommentsRoute --paginate --jq ".[] | select(.user.login == \"$commentAuthor\" and (.body | startswith(\"$marker\"))) | .id" |
+        $commentQuery = '.[] | select(.user.login == "github-actions[bot]") | select(.body | startswith("{0}")) | .id' -f $marker
+        $existingCommentId = gh api $issueCommentsRoute --paginate --jq $commentQuery |
             Select-Object -First 1
 
         if ($result.IsValid) {
