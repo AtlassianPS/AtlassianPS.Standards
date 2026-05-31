@@ -4,6 +4,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
     BeforeAll {
         . "$PSScriptRoot/Helpers/TestTools.ps1"
         $script:projectRoot = Resolve-ProjectRoot
+        $script:validateReleaseIntentScriptPath = Join-Path -Path $script:projectRoot -ChildPath '.github/actions/validate-release-intent/validate-release-intent.ps1'
     }
 
     It 'action script parses for <ActionName>' -TestCases @(
@@ -22,7 +23,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
     }
 
     It 'validate-release-intent accepts deleted historical fragments during release preparation' {
-        $scriptPath = Join-Path -Path $projectRoot -ChildPath '.github/actions/validate-release-intent/validate-release-intent.ps1'
+        $scriptPath = $script:validateReleaseIntentScriptPath
         function gh {
             $arguments = [String[]]$args
             $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
@@ -81,6 +82,87 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output | Should -Match 'is_valid=true'
         $output | Should -Match 'release_impact=patch'
         $output | Should -Match 'changelog_type=fixed'
+    }
+
+    It 'validate-release-intent rejects <CaseName>' -TestCases @(
+        @{
+            CaseName        = 'missing release label'
+            Labels          = @('changelog:fixed')
+            Files           = @(@{ filename = 'Public/Get-Thing.ps1'; status = 'modified' })
+            ExpectedPattern = 'Add exactly one release label'
+        }
+        @{
+            CaseName        = 'invalid changelog fragment name'
+            Labels          = @('release:patch')
+            Files           = @(@{ filename = '.changelog/41.patch.fixed.md'; status = 'added' })
+            ExpectedPattern = "Changelog fragment '.changelog/41.patch.fixed.md' must be named"
+        }
+        @{
+            CaseName        = 'changelog label and fragment together'
+            Labels          = @('release:patch', 'changelog:fixed')
+            Files           = @(@{ filename = '.changelog/42.patch.fixed.md'; status = 'added' })
+            ExpectedPattern = 'Use either one changelog label'
+        }
+        @{
+            CaseName        = 'breaking changelog without major release'
+            Labels          = @('release:minor', 'changelog:breaking')
+            Files           = @(@{ filename = 'Public/Get-Thing.ps1'; status = 'modified' })
+            ExpectedPattern = 'changelog:breaking and breaking changelog fragments require'
+        }
+    ) {
+        param($Labels, $Files, $ExpectedPattern)
+
+        function gh {
+            $arguments = [String[]]$args
+            $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
+            $jqIndex = [Array]::IndexOf($arguments, '--jq')
+            $query = if ($jqIndex -ge 0) { $arguments[$jqIndex + 1] } else { '' }
+
+            if ($route -like 'repos/*/issues/*/labels') {
+                $Labels
+                return
+            }
+
+            if ($route -like 'repos/*/pulls/*/files') {
+                if ($query -eq '.[].filename') {
+                    $Files | ForEach-Object { $_.filename }
+                }
+                elseif ($query -like '*status == "removed"*') {
+                    $Files | Where-Object { $_.status -eq 'removed' } | ForEach-Object { $_.filename }
+                }
+                return
+            }
+
+            if ($route -like 'repos/*/issues/*/comments') {
+                return
+            }
+
+            throw "Unexpected gh invocation: $($arguments -join ' ')"
+        }
+
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'github-output.txt'
+        $previousPrNumber = $env:PR_NUMBER
+        $previousRepository = $env:GITHUB_REPOSITORY
+        $previousChangelogDirectory = $env:CHANGELOG_DIRECTORY
+        $previousOutput = $env:GITHUB_OUTPUT
+        try {
+            $env:PR_NUMBER = '42'
+            $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
+            $env:CHANGELOG_DIRECTORY = '.changelog'
+            $env:GITHUB_OUTPUT = $outputPath
+
+            $scriptOutput = & $script:validateReleaseIntentScriptPath 2>&1
+        }
+        finally {
+            $env:PR_NUMBER = $previousPrNumber
+            $env:GITHUB_REPOSITORY = $previousRepository
+            $env:CHANGELOG_DIRECTORY = $previousChangelogDirectory
+            $env:GITHUB_OUTPUT = $previousOutput
+        }
+
+        $output = Get-Content -LiteralPath $outputPath -Raw
+        $output | Should -Match 'is_valid=false'
+        ($scriptOutput | Out-String) | Should -Match ([Regex]::Escape($ExpectedPattern))
     }
 
     It 'prepare-release-changelog folds fragments and writes notes outside the working tree by default' {
