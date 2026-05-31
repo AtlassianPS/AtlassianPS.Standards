@@ -52,6 +52,7 @@ The workflow should be serialized with concurrency so multiple release-labelled 
 Use a dedicated release automation token, for example `ATLASSIANPS_RELEASE_BOT_TOKEN`, when branch protection does not allow the default `GITHUB_TOKEN` to push the release metadata commit and annotated tag to `master`.
 
 When unreleased changes already exist on `master` without an associated merged release-labelled PR, use the manual `workflow_dispatch` input on `continuous_release.yml` and choose the release impact for the whole bucket.
+Manual dispatch must still check out `master`, not the arbitrary ref selected in the GitHub UI.
 The manual path does not generate a PR-title changelog fragment; it releases the existing `## Unreleased` body and any existing `.changelog/*.md` fragments.
 
 ## Release Recovery
@@ -322,6 +323,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.sha }}
           token: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN || github.token }}
 
       - name: Plan release
@@ -454,7 +456,7 @@ Use the manual dispatch path of `continuous_release.yml` instead:
 
 1. Inspect `CHANGELOG.md` and `.changelog/*.md` to understand the pending release notes.
 2. Choose the highest required impact: `major` beats `minor`, `minor` beats `patch`.
-3. Run `continuous_release.yml` with `release_impact` set to that impact.
+3. Run `continuous_release.yml` with `release_impact` set to that impact; the workflow must force checkout of `master` for manual runs.
 4. Monitor the run until the release metadata commit, annotated tag, PSGallery publish, GitHub release, and website dispatch complete.
 
 The manual path computes the next version from existing stable `vX.Y.Z` tags and folds the current `## Unreleased` body plus all valid changelog fragments into that version section.

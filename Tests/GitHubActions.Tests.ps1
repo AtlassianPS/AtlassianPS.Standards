@@ -240,6 +240,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'ATLASSIANPS_RELEASE_BOT_TOKEN'
         $workflow | Should -Match 'workflow_dispatch:'
         $workflow | Should -Match 'release_impact:'
+        $workflow | Should -Match "ref: \$\{\{ github\.event_name == 'workflow_dispatch' && 'master' \|\| github\.sha \}\}"
         $workflow | Should -Match 'Commit release metadata'
         $workflow | Should -Match 'Validate, build, and test release commit'
         $workflow | Should -Match 'Push release commit and annotated tag'

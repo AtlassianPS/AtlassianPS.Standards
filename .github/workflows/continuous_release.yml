@@ -19,18 +19,18 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: read
   contents: write
   pull-requests: read
 
 jobs:
   release:
-    name: Release merged PR
+    name: Release changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.sha }}
           token: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN || github.token }}
 
       - name: Plan release
