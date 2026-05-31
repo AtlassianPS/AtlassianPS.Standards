@@ -100,9 +100,10 @@ Task SetVersion {
 
 ## Release Changelog Preparation
 
-Release-preparation PRs should fold pending changelog entries and custom fragments into the next version section, then delete the consumed fragments.
+Release automation should fold pending changelog entries and custom fragments into the next version section, then delete the consumed fragments.
 Use the `prepare-release-changelog` composite action instead of exporting another module helper for GitHub-only release mechanics.
-Commit the resulting `CHANGELOG.md` update and `.changelog` deletions in the release-preparation PR.
+In the continuous release workflow, commit the resulting `CHANGELOG.md` update and `.changelog` deletions directly to the trusted release-preparation commit after a release-labelled PR merges.
+For manual release-preparation PRs, commit the same files in the PR.
 
 ```yaml
 - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/prepare-release-changelog@<standards-sha>
@@ -112,6 +113,9 @@ Commit the resulting `CHANGELOG.md` update and `.changelog` deletions in the rel
 
 The action creates `## v1.2.3 - YYYY-MM-DD` immediately after `## Unreleased`, moves any existing Unreleased body plus valid `.changelog/*.md` fragment contents into that section, and deletes only the consumed fragments.
 By default, the generated release-notes output file is written under the runner temp directory so release-preparation PRs only need to commit `CHANGELOG.md` and `.changelog` deletions.
+
+Use the `plan-merged-release` composite action from trusted `push` workflows to resolve a merged PR's release labels, compute the next stable semver tag, and generate a standard fragment when the PR used a `changelog:*` label.
+It does not publish by itself; the workflow remains responsible for committing the prepared changelog, validating the release, creating the annotated tag, publishing to PSGallery, and creating the GitHub release.
 
 ## External Help
 

@@ -27,7 +27,30 @@ The module manifest keeps the numeric version in `ModuleVersion` and uses `Priva
 The release notes parser preserves the full markdown body under the matching `##` heading until the next `##` heading.
 Introductory paragraphs before `###` sections are supported and are included in both PSGallery and GitHub release notes.
 
-## Required Release Flow
+## Required Continuous Release Flow
+
+The default path is label-based continuous delivery from merged pull requests.
+After a pull request with `release:patch`, `release:minor`, or `release:major` merges to `master`, the trusted `push` workflow should:
+
+1. Check out the repository with full history and tags.
+2. Resolve the merged pull request associated with the pushed commit.
+3. Read the pull request release and changelog labels.
+4. Compute the next `vX.Y.Z` tag from the latest stable semver tag and the release impact.
+5. Create a generated `.changelog/<pr>.<impact>.<type>.md` fragment when the PR used a `changelog:*` label.
+6. Run `prepare-release-changelog` to fold pending notes and fragments into the new version section.
+7. Commit only the release-preparation changes back to `master`.
+8. Run the normal build/test gate and `SetVersion` metadata preflight against the exact computed tag.
+9. Create an annotated tag on the release-preparation commit and push the commit and tag together.
+10. Build release notes from the committed `CHANGELOG.md` section.
+11. Publish to PSGallery.
+12. Create the GitHub release with the same release notes body.
+
+`release:none` merges should stop after planning and must not publish.
+The workflow should be serialized with concurrency so multiple release-labelled merges do not race the next-version calculation.
+
+## Required Tag Release Flow
+
+Keep a tag/manual release workflow as the recovery path for reruns and explicit operator-driven releases.
 
 Release workflows should do these steps in order:
 
@@ -209,7 +232,8 @@ Before creating a release tag, prepare the changelog section, run the module's n
 
 This moves pending `## Unreleased` content and valid `.changelog/*.md` fragments into `## vX.Y.Z - YYYY-MM-DD`, then deletes the consumed fragments.
 The generated release-notes file is written outside the repository by default; commit only `CHANGELOG.md` and consumed fragment deletions.
-Review the generated changelog before opening the release-preparation PR.
+In the continuous release flow, the trusted workflow creates and commits these changes automatically after the labelled PR merges.
+For manual/tag releases, review the generated changelog before opening the release-preparation PR.
 
 ```powershell
 Invoke-Build -Task Build, Test

@@ -5,11 +5,13 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         . "$PSScriptRoot/Helpers/TestTools.ps1"
         $script:projectRoot = Resolve-ProjectRoot
         $script:validateReleaseIntentScriptPath = Join-Path -Path $script:projectRoot -ChildPath '.github/actions/validate-release-intent/validate-release-intent.ps1'
+        $script:planMergedReleaseScriptPath = Join-Path -Path $script:projectRoot -ChildPath '.github/actions/plan-merged-release/plan-merged-release.ps1'
     }
 
     It 'action script parses for <ActionName>' -TestCases @(
         @{ ActionName = 'validate-release-intent' }
         @{ ActionName = 'prepare-release-changelog' }
+        @{ ActionName = 'plan-merged-release' }
     ) {
         param($ActionName)
 
@@ -20,6 +22,113 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $null = [System.Management.Automation.Language.Parser]::ParseInput($scriptText, [ref]$null, [ref]$errors)
 
         $errors | Should -BeNullOrEmpty
+    }
+
+    It 'plan-merged-release computes the next tag and generated fragment for a merged PR' {
+        function gh {
+            $arguments = [String[]]$args
+            $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
+
+            if ($route -like 'repos/*/commits/*/pulls') {
+                '{"number":42,"title":"Fix release notes","user":"tester"}'
+                return
+            }
+
+            if ($route -like 'repos/*/issues/*/labels') {
+                'release:minor'
+                'changelog:fixed'
+                return
+            }
+
+            throw "Unexpected gh invocation: $($arguments -join ' ')"
+        }
+
+        function git {
+            $arguments = [String[]]$args
+            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--list') {
+                'v1.2.3'
+                'v1.3.0-beta'
+                return
+            }
+
+            if ($arguments[0] -eq 'show-ref') {
+                return
+            }
+
+            throw "Unexpected git invocation: $($arguments -join ' ')"
+        }
+
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'github-output.txt'
+        $previousRepository = $env:GITHUB_REPOSITORY
+        $previousCommitSha = $env:COMMIT_SHA
+        $previousChangelogDirectory = $env:CHANGELOG_DIRECTORY
+        $previousOutput = $env:GITHUB_OUTPUT
+        try {
+            $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
+            $env:COMMIT_SHA = 'abc123'
+            $env:CHANGELOG_DIRECTORY = '.changelog'
+            $env:GITHUB_OUTPUT = $outputPath
+
+            & $script:planMergedReleaseScriptPath
+        }
+        finally {
+            $env:GITHUB_REPOSITORY = $previousRepository
+            $env:COMMIT_SHA = $previousCommitSha
+            $env:CHANGELOG_DIRECTORY = $previousChangelogDirectory
+            $env:GITHUB_OUTPUT = $previousOutput
+        }
+
+        $output = Get-Content -LiteralPath $outputPath -Raw
+        $output | Should -Match 'should_release=true'
+        $output | Should -Match 'release_impact=minor'
+        $output | Should -Match 'changelog_type=fixed'
+        $output | Should -Match 'release_version=1.3.0'
+        $output | Should -Match 'release_tag=v1.3.0'
+        $output | Should -Match 'fragment_path=.changelog/42.minor.fixed.md'
+        $output | Should -Match ([Regex]::Escape('fragment_content=* Fix release notes (#42, @tester)'))
+    }
+
+    It 'plan-merged-release skips release:none merged PRs' {
+        function gh {
+            $arguments = [String[]]$args
+            $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
+
+            if ($route -like 'repos/*/commits/*/pulls') {
+                '{"number":43,"title":"Update docs","user":"tester"}'
+                return
+            }
+
+            if ($route -like 'repos/*/issues/*/labels') {
+                'release:none'
+                return
+            }
+
+            throw "Unexpected gh invocation: $($arguments -join ' ')"
+        }
+
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'github-output.txt'
+        $previousRepository = $env:GITHUB_REPOSITORY
+        $previousCommitSha = $env:COMMIT_SHA
+        $previousChangelogDirectory = $env:CHANGELOG_DIRECTORY
+        $previousOutput = $env:GITHUB_OUTPUT
+        try {
+            $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
+            $env:COMMIT_SHA = 'def456'
+            $env:CHANGELOG_DIRECTORY = '.changelog'
+            $env:GITHUB_OUTPUT = $outputPath
+
+            & $script:planMergedReleaseScriptPath
+        }
+        finally {
+            $env:GITHUB_REPOSITORY = $previousRepository
+            $env:COMMIT_SHA = $previousCommitSha
+            $env:CHANGELOG_DIRECTORY = $previousChangelogDirectory
+            $env:GITHUB_OUTPUT = $previousOutput
+        }
+
+        $output = Get-Content -LiteralPath $outputPath -Raw
+        $output | Should -Match 'should_release=false'
+        $output | Should -Match 'skip_reason=release:none'
     }
 
     It 'validate-release-intent accepts deleted historical fragments during release preparation' {

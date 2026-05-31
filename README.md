@@ -60,11 +60,15 @@ Invoke-Build -Task Lint, Build, Test
 
 ## Release
 
-Tag-based CD runs on `v*` tags and will:
+Label-based CD runs after release-labelled pull requests merge to `master`.
+It computes the next semantic version from the merged PR's `release:*` label, prepares `CHANGELOG.md`, validates the release metadata, creates an annotated tag, publishes to PowerShell Gallery, and creates the GitHub release from the same changelog section.
+
+Tag-based release remains available on `v*` tags and manual dispatch for recovery or explicit operator-driven reruns.
+Both release paths will:
 
 1. Build the module.
 2. Publish to PowerShell Gallery (when `PSGALLERY_API_KEY` is configured).
 3. Create a GitHub release with a zipped module artifact.
 
 The source manifest intentionally uses a major/minor `ModuleVersion` (`x.y`) as a maintenance baseline. Release tags (`vX.Y.Z`) provide the full semantic version, and the publish pipeline stamps that exact tag version into the built manifest.
-Update `CHANGELOG.md` before cutting a release tag so both GitHub and PSGallery release metadata reflect the shipped changes. Publish now derives PSGallery release notes from the matching changelog version section and fails if that section is missing or empty.
+Publish derives PSGallery release notes from the matching changelog version section and fails if that section is missing or empty.
