@@ -6,26 +6,14 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $script:projectRoot = Resolve-ProjectRoot
     }
 
-    It 'embedded PowerShell parses for <ActionName>' -TestCases @(
+    It 'action script parses for <ActionName>' -TestCases @(
         @{ ActionName = 'validate-release-intent' }
         @{ ActionName = 'prepare-release-changelog' }
     ) {
         param($ActionName)
 
-        $actionPath = Join-Path -Path $projectRoot -ChildPath ".github/actions/$ActionName/action.yml"
-        $lines = [System.IO.File]::ReadAllLines($actionPath)
-        $runLineIndex = [Array]::FindIndex($lines, [Predicate[String]] { param($line) $line -eq '      run: |' })
-
-        $runLineIndex | Should -BeGreaterOrEqual 0
-
-        $scriptLines = @(
-            for ($i = $runLineIndex + 1; $i -lt $lines.Count; $i++) {
-                if ($lines[$i] -match '^        (.*)$') {
-                    $Matches[1]
-                }
-            }
-        )
-        $scriptText = $scriptLines -join [Environment]::NewLine
+        $scriptPath = Join-Path -Path $projectRoot -ChildPath ".github/actions/$ActionName/$ActionName.ps1"
+        $scriptText = [System.IO.File]::ReadAllText($scriptPath)
         $errors = $null
 
         $null = [System.Management.Automation.Language.Parser]::ParseInput($scriptText, [ref]$null, [ref]$errors)
