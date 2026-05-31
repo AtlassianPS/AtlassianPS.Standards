@@ -1,0 +1,56 @@
+name: Prepare Release Changelog
+description: Move Unreleased entries and changelog fragments into a versioned changelog section.
+inputs:
+  changelog-path:
+    description: Path to CHANGELOG.md.
+    required: false
+    default: ./CHANGELOG.md
+  release-version:
+    description: Release tag or version to prepare, for example v1.2.3.
+    required: true
+  changelog-directory:
+    description: Directory containing changelog fragments.
+    required: false
+    default: .changelog
+  module-path:
+    description: Optional path to AtlassianPS.Standards.psd1. Use this when running from the Standards repository itself.
+    required: false
+outputs:
+  release_version:
+    description: Normalized v-prefixed release version.
+    value: ${{ steps.prepare.outputs.release_version }}
+  release_notes_path:
+    description: Path to a generated file containing the prepared release notes.
+    value: ${{ steps.prepare.outputs.release_notes_path }}
+runs:
+  using: composite
+  steps:
+    - name: Prepare changelog
+      id: prepare
+      shell: pwsh
+      env:
+        CHANGELOG_PATH: ${{ inputs.changelog-path }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+        CHANGELOG_DIRECTORY: ${{ inputs.changelog-directory }}
+        MODULE_PATH: ${{ inputs.module-path }}
+      run: |
+        if ($env:MODULE_PATH) {
+            Import-Module $env:MODULE_PATH -Force
+        }
+        else {
+            Import-Module AtlassianPS.Standards -Force
+        }
+
+        $result = Update-AtlassianPSReleaseChangelog `
+            -ChangelogPath $env:CHANGELOG_PATH `
+            -ReleaseVersion $env:RELEASE_VERSION `
+            -ChangelogDirectory $env:CHANGELOG_DIRECTORY
+
+        $outputPath = Join-Path -Path 'Release' -ChildPath 'release-notes.md'
+        New-Item -Path (Split-Path -Path $outputPath -Parent) -ItemType Directory -Force | Out-Null
+        $result.ReleaseNotes | Set-Content -LiteralPath $outputPath -Encoding utf8
+
+        @(
+            "release_version=$($result.ReleaseVersion)"
+            "release_notes_path=$outputPath"
+        ) | Add-Content -LiteralPath $env:GITHUB_OUTPUT

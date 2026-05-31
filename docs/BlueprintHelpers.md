@@ -12,7 +12,7 @@ Consumers call commands with the prefixed names, for example `Test-AtlassianPSMo
 | Area | Helpers | Contract |
 |------|---------|----------|
 | Build output | `Copy-ModuleArtifacts`, `Join-ModuleSource` | Copy release artifacts and merge module source folders into the release `.psm1`. |
-| Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set publish-time version and release notes, create the release zip, and validate the package contains the expected manifest. |
+| Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `Update-ReleaseChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set publish-time version and release notes, prepare changelog release sections, create the release zip, and validate the package contains the expected manifest. |
 | Release intent | `Test-ReleaseIntent` | Validate PR release labels and changelog labels/fragments before merge. |
 | External help | `Update-ExternalHelp`, `Remove-OrphanedExternalHelp` | Generate PlatyPS external help and remove generated help files that no longer have markdown sources. |
 | Test bootstrap | `Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment` | Resolve repository/module paths and import the module under test for Pester. |
@@ -98,6 +98,28 @@ Task SetVersion {
 ```
 
 `Get-AtlassianPSReleaseNotesFromChangelog` also accepts historical headings without the `v` prefix and dated headings like `## 1.2.3 - 2026-05-10`, so repositories can migrate existing changelogs without local parser code.
+
+## Release Changelog Preparation
+
+Release-preparation PRs should fold pending changelog entries and custom fragments into the next version section, then delete the consumed fragments.
+Use `Update-AtlassianPSReleaseChangelog` instead of manually editing fragment files.
+
+```powershell
+Update-AtlassianPSReleaseChangelog `
+    -ChangelogPath ./CHANGELOG.md `
+    -ReleaseVersion v1.2.3
+```
+
+The helper creates `## v1.2.3 - YYYY-MM-DD` immediately after `## Unreleased`, moves any existing Unreleased body plus valid `.changelog/*.md` fragment contents into that section, and deletes only the consumed fragments.
+
+Workflow-based preparation can use the matching composite action after checkout and dependency setup.
+Commit the resulting `CHANGELOG.md` update and `.changelog` deletions in the release-preparation PR.
+
+```yaml
+- uses: AtlassianPS/AtlassianPS.Standards/.github/actions/prepare-release-changelog@<standards-sha>
+  with:
+    release-version: v1.2.3
+```
 
 ## External Help
 

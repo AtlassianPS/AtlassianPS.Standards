@@ -32,6 +32,7 @@ Describe 'Project validation' {
             'Update-AtlassianPSDependencyReference'
             'Update-AtlassianPSExternalHelp'
             'Update-AtlassianPSModuleManifestExports'
+            'Update-AtlassianPSReleaseChangelog'
             'Write-AtlassianPSBuildInfo'
         )
         $actualCommands = @(
