@@ -201,12 +201,13 @@ For each existing module repository:
 
 Before creating a release tag, prepare the changelog section, run the module's normal build/test gate, and verify release metadata for the exact tag.
 
-```powershell
-Update-AtlassianPSReleaseChangelog -ChangelogPath ./CHANGELOG.md -ReleaseVersion vX.Y.Z
+```yaml
+- uses: AtlassianPS/AtlassianPS.Standards/.github/actions/prepare-release-changelog@<standards-sha>
+  with:
+    release-version: vX.Y.Z
 ```
 
 This moves pending `## Unreleased` content and valid `.changelog/*.md` fragments into `## vX.Y.Z - YYYY-MM-DD`, then deletes the consumed fragments.
-Use `.github/actions/prepare-release-changelog` when a workflow should perform the same preparation step.
 Review the generated changelog before opening the release-preparation PR.
 
 ```powershell

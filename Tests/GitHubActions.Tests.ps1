@@ -6,8 +6,13 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $script:projectRoot = Resolve-ProjectRoot
     }
 
-    It 'validate-release-intent embedded PowerShell parses' {
-        $actionPath = Join-Path -Path $projectRoot -ChildPath '.github/actions/validate-release-intent/action.yml'
+    It 'embedded PowerShell parses for <ActionName>' -TestCases @(
+        @{ ActionName = 'validate-release-intent' }
+        @{ ActionName = 'prepare-release-changelog' }
+    ) {
+        param($ActionName)
+
+        $actionPath = Join-Path -Path $projectRoot -ChildPath ".github/actions/$ActionName/action.yml"
         $lines = [System.IO.File]::ReadAllLines($actionPath)
         $runLineIndex = [Array]::FindIndex($lines, [Predicate[String]] { param($line) $line -eq '      run: |' })
 

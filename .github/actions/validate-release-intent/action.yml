@@ -8,7 +8,7 @@ inputs:
     description: Pull request number. Defaults to github.event.pull_request.number.
     required: false
   module-path:
-    description: Optional path to AtlassianPS.Standards.psd1. Use this when running from the Standards repository itself.
+    description: Deprecated compatibility input. The action is self-contained and does not import the module.
     required: false
   changelog-directory:
     description: Directory containing changelog fragments.
@@ -34,26 +34,10 @@ runs:
         GH_TOKEN: ${{ inputs.github-token || github.token }}
         PR_NUMBER: ${{ inputs.pr-number || github.event.pull_request.number }}
         GITHUB_REPOSITORY: ${{ github.repository }}
-        MODULE_PATH: ${{ inputs.module-path }}
         CHANGELOG_DIRECTORY: ${{ inputs.changelog-directory }}
-        ACTION_PATH: ${{ github.action_path }}
       run: |
         if (-not $env:PR_NUMBER) {
             throw 'validate-release-intent requires a pull request number. Run it from pull_request_target or pass pr-number.'
-        }
-
-        if ($env:MODULE_PATH) {
-            Import-Module $env:MODULE_PATH -Force
-        }
-        else {
-            $actionRepositoryRoot = Resolve-Path -LiteralPath (Join-Path -Path $env:ACTION_PATH -ChildPath '../../..')
-            $actionModulePath = Join-Path -Path $actionRepositoryRoot.ProviderPath -ChildPath 'AtlassianPS.Standards/AtlassianPS.Standards.psd1'
-            if (Test-Path -LiteralPath $actionModulePath -PathType Leaf) {
-                Import-Module $actionModulePath -Force
-            }
-            else {
-                Import-Module AtlassianPS.Standards -Force
-            }
         }
 
         $issueLabelsRoute = 'repos/{0}/issues/{1}/labels' -f $env:GITHUB_REPOSITORY, $env:PR_NUMBER
@@ -64,17 +48,90 @@ runs:
         $changedFiles = @(gh api $pullFilesRoute --paginate --jq '.[].filename')
         $removedFiles = @(gh api $pullFilesRoute --paginate --jq '.[] | select(.status == "removed") | .filename')
 
-        $result = Test-AtlassianPSReleaseIntent `
-            -LabelName $labels `
-            -ChangedFilePath $changedFiles `
-            -RemovedFilePath $removedFiles `
-            -PullRequestNumber ([int]$env:PR_NUMBER) `
-            -ChangelogDirectory $env:CHANGELOG_DIRECTORY
+        $releaseLabels = @($labels | Where-Object { $_ -like 'release:*' } | Sort-Object -Unique)
+        $changelogLabels = @($labels | Where-Object { $_ -like 'changelog:*' } | Sort-Object -Unique)
+        $validReleaseImpacts = @('none', 'patch', 'minor', 'major')
+        $validChangelogTypes = @('added', 'changed', 'fixed', 'removed', 'deprecated', 'security', 'breaking')
+        $messages = [System.Collections.Generic.List[String]]::new()
+
+        foreach ($label in @($releaseLabels | Where-Object { ($_ -replace '^release:', '') -notin $validReleaseImpacts })) {
+            $messages.Add("Unknown release label '$label'. Use one of: release:none, release:patch, release:minor, release:major.")
+        }
+        foreach ($label in @($changelogLabels | Where-Object { ($_ -replace '^changelog:', '') -notin $validChangelogTypes })) {
+            $messages.Add("Unknown changelog label '$label'. Use one of: changelog:added, changelog:changed, changelog:fixed, changelog:removed, changelog:deprecated, changelog:security, changelog:breaking.")
+        }
+
+        $validReleaseLabels = @($releaseLabels | Where-Object { ($_ -replace '^release:', '') -in $validReleaseImpacts })
+        if ($validReleaseLabels.Count -ne 1) {
+            $messages.Add('Add exactly one release label: release:none, release:patch, release:minor, or release:major.')
+        }
+        $releaseImpact = if ($validReleaseLabels.Count -eq 1) { $validReleaseLabels[0] -replace '^release:', '' } else { $null }
+
+        $validChangelogLabels = @($changelogLabels | Where-Object { ($_ -replace '^changelog:', '') -in $validChangelogTypes })
+        $changelogTypeFromLabel = if ($validChangelogLabels.Count -eq 1) { $validChangelogLabels[0] -replace '^changelog:', '' } else { $null }
+
+        $activeChangedFiles = @($changedFiles | Where-Object { $_ -notin $removedFiles })
+        $escapedDirectory = [Regex]::Escape($env:CHANGELOG_DIRECTORY.TrimEnd('/'))
+        $fragmentPattern = "^$escapedDirectory/$env:PR_NUMBER\.(?<impact>patch|minor|major)\.(?<type>added|changed|fixed|removed|deprecated|security|breaking)\.md$"
+        $changelogFiles = @(
+            $activeChangedFiles |
+                Where-Object { $_ -eq $env:CHANGELOG_DIRECTORY -or $_ -like "$($env:CHANGELOG_DIRECTORY.TrimEnd('/'))/*" } |
+                Sort-Object -Unique
+        )
+        $matchingFragments = @(
+            foreach ($path in $changelogFiles) {
+                $match = [Regex]::Match($path, $fragmentPattern)
+                if ($match.Success) {
+                    [PSCustomObject]@{
+                        Path = $path
+                        Impact = $match.Groups['impact'].Value
+                        Type = $match.Groups['type'].Value
+                    }
+                }
+            }
+        )
+        foreach ($path in @($changelogFiles | Where-Object { -not [Regex]::IsMatch($_, $fragmentPattern) })) {
+            $messages.Add("Changelog fragment '$path' must be named '$($env:CHANGELOG_DIRECTORY.TrimEnd('/'))/$env:PR_NUMBER.<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md'.")
+        }
+        if ($matchingFragments.Count -gt 1) {
+            $messages.Add("Use at most one changelog fragment for PR #$env:PR_NUMBER.")
+        }
+
+        $fragment = if ($matchingFragments.Count -eq 1) { $matchingFragments[0] } else { $null }
+        $resolvedChangelogType = if ($fragment) { $fragment.Type } else { $changelogTypeFromLabel }
+
+        if ($releaseImpact -eq 'none') {
+            if ($validChangelogLabels.Count -gt 0) {
+                $messages.Add('release:none must not be combined with changelog labels.')
+            }
+            if ($changelogFiles.Count -gt 0) {
+                $messages.Add('release:none must not include changelog fragments.')
+            }
+        }
+        elseif ($releaseImpact) {
+            if ($validChangelogLabels.Count -gt 1) {
+                $messages.Add('Add exactly one changelog label for user-facing changes.')
+            }
+            if (-not $fragment -and $validChangelogLabels.Count -ne 1) {
+                $messages.Add('For release:patch, release:minor, or release:major, add exactly one changelog label or one valid changelog fragment.')
+            }
+            if ($fragment -and $validChangelogLabels.Count -gt 0) {
+                $messages.Add('Use either one changelog label or one custom changelog fragment, not both.')
+            }
+            if ($fragment -and $fragment.Impact -ne $releaseImpact) {
+                $messages.Add("Changelog fragment impact '$($fragment.Impact)' must match release label 'release:$releaseImpact'.")
+            }
+            if ($resolvedChangelogType -eq 'breaking' -and $releaseImpact -ne 'major') {
+                $messages.Add('changelog:breaking and breaking changelog fragments require release:major.')
+            }
+        }
+
+        $isValid = $messages.Count -eq 0
 
         @(
-            "is_valid=$($result.IsValid.ToString().ToLowerInvariant())"
-            "release_impact=$($result.ReleaseImpact)"
-            "changelog_type=$($result.ChangelogType)"
+            "is_valid=$($isValid.ToString().ToLowerInvariant())"
+            "release_impact=$releaseImpact"
+            "changelog_type=$resolvedChangelogType"
         ) | Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
         $marker = '<!-- atlassianps-release-intent -->'
@@ -82,13 +139,13 @@ runs:
         $existingCommentId = gh api $issueCommentsRoute --paginate --jq $commentQuery |
             Select-Object -First 1
 
-        if ($result.IsValid) {
+        if ($isValid) {
             if ($existingCommentId) {
                 $commentRoute = 'repos/{0}/issues/comments/{1}' -f $env:GITHUB_REPOSITORY, $existingCommentId
                 gh api --method DELETE $commentRoute | Out-Null
             }
 
-            Write-Host "Release intent is valid: release:$($result.ReleaseImpact) changelog:$($result.ChangelogType)"
+            Write-Host "Release intent is valid: release:$releaseImpact changelog:$resolvedChangelogType"
             return
         }
 
@@ -108,7 +165,7 @@ runs:
             'Problems found:'
             ''
         )
-        foreach ($message in $result.Messages) {
+        foreach ($message in $messages) {
             $messageLines += "- $message"
         }
         $fragmentTemplate = '{0}/{1}.<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md' -f $env:CHANGELOG_DIRECTORY, $env:PR_NUMBER
@@ -130,7 +187,7 @@ runs:
             $bodyJson | gh api --method POST $issueCommentsRoute --input - | Out-Null
         }
 
-        foreach ($message in $result.Messages) {
+        foreach ($message in $messages) {
             Write-Error $message -ErrorAction Continue
         }
 
