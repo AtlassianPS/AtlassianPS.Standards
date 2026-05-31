@@ -21,5 +21,3 @@ jobs:
 
       - name: Validate release intent
         uses: ./.github/actions/validate-release-intent
-        with:
-          module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1

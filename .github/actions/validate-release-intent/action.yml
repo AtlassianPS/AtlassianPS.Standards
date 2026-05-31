@@ -7,9 +7,6 @@ inputs:
   pr-number:
     description: Pull request number. Defaults to github.event.pull_request.number.
     required: false
-  module-path:
-    description: Deprecated compatibility input. The action is self-contained and does not import the module.
-    required: false
   changelog-directory:
     description: Directory containing changelog fragments.
     required: false
