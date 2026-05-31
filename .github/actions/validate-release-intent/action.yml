@@ -62,10 +62,12 @@ runs:
 
         $labels = @(gh api $issueLabelsRoute --paginate --jq '.[].name')
         $changedFiles = @(gh api $pullFilesRoute --paginate --jq '.[].filename')
+        $removedFiles = @(gh api $pullFilesRoute --paginate --jq '.[] | select(.status == "removed") | .filename')
 
         $result = Test-AtlassianPSReleaseIntent `
             -LabelName $labels `
             -ChangedFilePath $changedFiles `
+            -RemovedFilePath $removedFiles `
             -PullRequestNumber ([int]$env:PR_NUMBER) `
             -ChangelogDirectory $env:CHANGELOG_DIRECTORY
 

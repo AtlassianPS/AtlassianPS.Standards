@@ -39,6 +39,21 @@ Describe 'Test-ReleaseIntent' {
         $result.ChangelogFragment | Should -Be '.changelog/42.minor.added.md'
     }
 
+    It 'ignores deleted changelog fragments during release preparation' {
+        $result = InModuleScope AtlassianPS.Standards {
+            Test-ReleaseIntent `
+                -LabelName @('release:patch', 'changelog:fixed') `
+                -ChangedFilePath @('CHANGELOG.md', '.changelog/41.patch.fixed.md') `
+                -RemovedFilePath @('.changelog/41.patch.fixed.md') `
+                -PullRequestNumber 42
+        }
+
+        $result.IsValid | Should -BeTrue
+        $result.ReleaseImpact | Should -Be 'patch'
+        $result.ChangelogType | Should -Be 'fixed'
+        $result.HasChangelogFragment | Should -BeFalse
+    }
+
     It 'requires exactly one release label' {
         $missing = InModuleScope AtlassianPS.Standards {
             Test-ReleaseIntent -LabelName @('changelog:fixed') -ChangedFilePath @('Public/Get-Thing.ps1') -PullRequestNumber 42

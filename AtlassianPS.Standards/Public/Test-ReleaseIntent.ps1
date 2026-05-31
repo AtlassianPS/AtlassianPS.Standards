@@ -12,6 +12,11 @@
         [AllowEmptyCollection()]
         [String[]]$ChangedFilePath,
 
+        [Parameter()]
+        [ValidateNotNull()]
+        [AllowEmptyCollection()]
+        [String[]]$RemovedFilePath,
+
         [Parameter(Mandatory)]
         [ValidateRange(1, [Int32]::MaxValue)]
         [Int]$PullRequestNumber,
@@ -26,6 +31,7 @@
     $validReleaseImpacts = @('none', 'patch', 'minor', 'major')
     $validChangelogTypes = @('added', 'changed', 'fixed', 'removed', 'deprecated', 'security', 'breaking')
     $messages = [System.Collections.Generic.List[String]]::new()
+    $activeChangedFilePath = @($ChangedFilePath | Where-Object { $_ -notin $RemovedFilePath })
 
     $unknownReleaseLabels = @(
         $releaseLabels |
@@ -66,7 +72,7 @@
     $escapedDirectory = [Regex]::Escape($ChangelogDirectory.TrimEnd('/'))
     $fragmentPattern = "^$escapedDirectory/$PullRequestNumber\.(?<impact>patch|minor|major)\.(?<type>added|changed|fixed|removed|deprecated|security|breaking)\.md$"
     $changelogFiles = @(
-        $ChangedFilePath |
+        $activeChangedFilePath |
             Where-Object { $_ -eq $ChangelogDirectory -or $_ -like "$($ChangelogDirectory.TrimEnd('/'))/*" } |
             Sort-Object -Unique
     )
