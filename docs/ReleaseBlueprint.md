@@ -197,9 +197,19 @@ For each existing module repository:
 10. Update the local release runbook to link back to this blueprint.
 11. Run local workflow syntax, guard tests, lint, build/test, and release metadata preflight before pushing.
 
-## Local Release Preflight
+## Release Preparation
 
-Before creating a release tag, run the module's normal build/test gate and verify release metadata for the exact tag.
+Before creating a release tag, prepare the changelog section, run the module's normal build/test gate, and verify release metadata for the exact tag.
+
+```yaml
+- uses: AtlassianPS/AtlassianPS.Standards/.github/actions/prepare-release-changelog@<standards-sha>
+  with:
+    release-version: vX.Y.Z
+```
+
+This moves pending `## Unreleased` content and valid `.changelog/*.md` fragments into `## vX.Y.Z - YYYY-MM-DD`, then deletes the consumed fragments.
+The generated release-notes file is written outside the repository by default; commit only `CHANGELOG.md` and consumed fragment deletions.
+Review the generated changelog before opening the release-preparation PR.
 
 ```powershell
 Invoke-Build -Task Build, Test

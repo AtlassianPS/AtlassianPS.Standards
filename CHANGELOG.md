@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Added `Test-AtlassianPSReleaseIntent` to validate PR release and changelog labels before module repositories adopt changelog-fragment based releases.
+- Added the `validate-release-intent` GitHub Action to validate PR release and changelog labels before module repositories adopt changelog-fragment based releases without expanding the module export surface.
+- Added the `prepare-release-changelog` GitHub Action to prepare release changelog sections from Unreleased entries and changelog fragments, then delete consumed fragments without expanding the module export surface.
 - Fixed release-intent validation so release-preparation PRs can delete consumed changelog fragments without treating them as active PR fragments.
 
 ## v0.1.11

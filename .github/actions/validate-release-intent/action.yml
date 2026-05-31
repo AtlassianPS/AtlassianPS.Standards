@@ -7,9 +7,6 @@ inputs:
   pr-number:
     description: Pull request number. Defaults to github.event.pull_request.number.
     required: false
-  module-path:
-    description: Optional path to AtlassianPS.Standards.psd1. Use this when running from the Standards repository itself.
-    required: false
   changelog-directory:
     description: Directory containing changelog fragments.
     required: false
@@ -34,104 +31,5 @@ runs:
         GH_TOKEN: ${{ inputs.github-token || github.token }}
         PR_NUMBER: ${{ inputs.pr-number || github.event.pull_request.number }}
         GITHUB_REPOSITORY: ${{ github.repository }}
-        MODULE_PATH: ${{ inputs.module-path }}
         CHANGELOG_DIRECTORY: ${{ inputs.changelog-directory }}
-        ACTION_PATH: ${{ github.action_path }}
-      run: |
-        if (-not $env:PR_NUMBER) {
-            throw 'validate-release-intent requires a pull request number. Run it from pull_request_target or pass pr-number.'
-        }
-
-        if ($env:MODULE_PATH) {
-            Import-Module $env:MODULE_PATH -Force
-        }
-        else {
-            $actionRepositoryRoot = Resolve-Path -LiteralPath (Join-Path -Path $env:ACTION_PATH -ChildPath '../../..')
-            $actionModulePath = Join-Path -Path $actionRepositoryRoot.ProviderPath -ChildPath 'AtlassianPS.Standards/AtlassianPS.Standards.psd1'
-            if (Test-Path -LiteralPath $actionModulePath -PathType Leaf) {
-                Import-Module $actionModulePath -Force
-            }
-            else {
-                Import-Module AtlassianPS.Standards -Force
-            }
-        }
-
-        $issueLabelsRoute = 'repos/{0}/issues/{1}/labels' -f $env:GITHUB_REPOSITORY, $env:PR_NUMBER
-        $pullFilesRoute = 'repos/{0}/pulls/{1}/files' -f $env:GITHUB_REPOSITORY, $env:PR_NUMBER
-        $issueCommentsRoute = 'repos/{0}/issues/{1}/comments' -f $env:GITHUB_REPOSITORY, $env:PR_NUMBER
-
-        $labels = @(gh api $issueLabelsRoute --paginate --jq '.[].name')
-        $changedFiles = @(gh api $pullFilesRoute --paginate --jq '.[].filename')
-        $removedFiles = @(gh api $pullFilesRoute --paginate --jq '.[] | select(.status == "removed") | .filename')
-
-        $result = Test-AtlassianPSReleaseIntent `
-            -LabelName $labels `
-            -ChangedFilePath $changedFiles `
-            -RemovedFilePath $removedFiles `
-            -PullRequestNumber ([int]$env:PR_NUMBER) `
-            -ChangelogDirectory $env:CHANGELOG_DIRECTORY
-
-        @(
-            "is_valid=$($result.IsValid.ToString().ToLowerInvariant())"
-            "release_impact=$($result.ReleaseImpact)"
-            "changelog_type=$($result.ChangelogType)"
-        ) | Add-Content -LiteralPath $env:GITHUB_OUTPUT
-
-        $marker = '<!-- atlassianps-release-intent -->'
-        $commentQuery = '.[] | select(.user.login == "github-actions[bot]") | select(.body | startswith("{0}")) | .id' -f $marker
-        $existingCommentId = gh api $issueCommentsRoute --paginate --jq $commentQuery |
-            Select-Object -First 1
-
-        if ($result.IsValid) {
-            if ($existingCommentId) {
-                $commentRoute = 'repos/{0}/issues/comments/{1}' -f $env:GITHUB_REPOSITORY, $existingCommentId
-                gh api --method DELETE $commentRoute | Out-Null
-            }
-
-            Write-Host "Release intent is valid: release:$($result.ReleaseImpact) changelog:$($result.ChangelogType)"
-            return
-        }
-
-        $messageLines = @(
-            $marker
-            '## Release Intent Needs Attention'
-            ''
-            '_This comment is managed by the release-intent workflow._'
-            ''
-            'This PR must declare how it affects releases before it can be merged.'
-            ''
-            'Required labels:'
-            ''
-            '- exactly one of `release:none`, `release:patch`, `release:minor`, or `release:major`'
-            '- for user-facing changes, either exactly one `changelog:*` label or one valid custom changelog fragment, not both'
-            ''
-            'Problems found:'
-            ''
-        )
-        foreach ($message in $result.Messages) {
-            $messageLines += "- $message"
-        }
-        $fragmentTemplate = '{0}/{1}.<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md' -f $env:CHANGELOG_DIRECTORY, $env:PR_NUMBER
-        $messageLines += @(
-            ''
-            'Custom changelog fragments must be named:'
-            ''
-            $fragmentTemplate
-        )
-
-        $body = $messageLines -join [Environment]::NewLine
-        $bodyJson = @{ body = $body } | ConvertTo-Json -Compress
-
-        if ($existingCommentId) {
-            $commentRoute = 'repos/{0}/issues/comments/{1}' -f $env:GITHUB_REPOSITORY, $existingCommentId
-            $bodyJson | gh api --method PATCH $commentRoute --input - | Out-Null
-        }
-        else {
-            $bodyJson | gh api --method POST $issueCommentsRoute --input - | Out-Null
-        }
-
-        foreach ($message in $result.Messages) {
-            Write-Error $message -ErrorAction Continue
-        }
-
-        exit 1
+      run: ${{ github.action_path }}/validate-release-intent.ps1

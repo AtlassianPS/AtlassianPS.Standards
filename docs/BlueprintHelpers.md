@@ -13,7 +13,6 @@ Consumers call commands with the prefixed names, for example `Test-AtlassianPSMo
 |------|---------|----------|
 | Build output | `Copy-ModuleArtifacts`, `Join-ModuleSource` | Copy release artifacts and merge module source folders into the release `.psm1`. |
 | Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set publish-time version and release notes, create the release zip, and validate the package contains the expected manifest. |
-| Release intent | `Test-ReleaseIntent` | Validate PR release labels and changelog labels/fragments before merge. |
 | External help | `Update-ExternalHelp`, `Remove-OrphanedExternalHelp` | Generate PlatyPS external help and remove generated help files that no longer have markdown sources. |
 | Test bootstrap | `Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment` | Resolve repository/module paths and import the module under test for Pester. |
 | Environment loading | `Import-DotEnvFile` | Load `.env` values into process-scoped environment variables without emitting secret values. |
@@ -98,6 +97,21 @@ Task SetVersion {
 ```
 
 `Get-AtlassianPSReleaseNotesFromChangelog` also accepts historical headings without the `v` prefix and dated headings like `## 1.2.3 - 2026-05-10`, so repositories can migrate existing changelogs without local parser code.
+
+## Release Changelog Preparation
+
+Release-preparation PRs should fold pending changelog entries and custom fragments into the next version section, then delete the consumed fragments.
+Use the `prepare-release-changelog` composite action instead of exporting another module helper for GitHub-only release mechanics.
+Commit the resulting `CHANGELOG.md` update and `.changelog` deletions in the release-preparation PR.
+
+```yaml
+- uses: AtlassianPS/AtlassianPS.Standards/.github/actions/prepare-release-changelog@<standards-sha>
+  with:
+    release-version: v1.2.3
+```
+
+The action creates `## v1.2.3 - YYYY-MM-DD` immediately after `## Unreleased`, moves any existing Unreleased body plus valid `.changelog/*.md` fragment contents into that section, and deletes only the consumed fragments.
+By default, the generated release-notes output file is written under the runner temp directory so release-preparation PRs only need to commit `CHANGELOG.md` and `.changelog` deletions.
 
 ## External Help
 
