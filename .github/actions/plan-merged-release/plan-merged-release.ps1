@@ -46,6 +46,7 @@ else {
     if (-not $pullRequestJson) {
         Write-OutputValue -Name should_release -Value 'false'
         Write-OutputValue -Name skip_reason -Value 'no associated merged pull request'
+        Write-Host "Skipping release: no associated merged pull request for commit '$env:COMMIT_SHA'."
         return
     }
 
@@ -94,6 +95,7 @@ else {
     if ($releaseImpact -eq 'none') {
         Write-OutputValue -Name should_release -Value 'false'
         Write-OutputValue -Name skip_reason -Value 'release:none'
+        Write-Host "Skipping release: merged PR #$prNumber has release:none."
         return
     }
 
@@ -149,6 +151,12 @@ if ($LASTEXITCODE -eq 0) {
 Write-OutputValue -Name should_release -Value 'true'
 Write-OutputValue -Name release_version -Value $releaseVersion
 Write-OutputValue -Name release_tag -Value $releaseTag
+if ($isManualRelease) {
+    Write-Host "Planned manual release $releaseTag with release:$releaseImpact."
+}
+else {
+    Write-Host "Planned release $releaseTag from merged PR #$prNumber with release:$releaseImpact."
+}
 if (-not $isManualRelease -and -not $fragment) {
     $safeTitle = $prTitle -replace "`r`n|`r|`n", ' '
     Write-OutputValue -Name fragment_path -Value ('{0}/{1}.{2}.{3}.md' -f $changelogDirectory, $prNumber, $releaseImpact, $changelogType)

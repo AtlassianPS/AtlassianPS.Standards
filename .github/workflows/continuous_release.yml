@@ -39,12 +39,6 @@ jobs:
         with:
           release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release_impact || '' }}
 
-      - name: Report no release required
-        if: steps.plan.outputs.should_release != 'true'
-        run: |
-          echo "Skipping release: ${{ steps.plan.outputs.skip_reason }}"
-        shell: bash
-
       - name: Create generated changelog fragment
         if: steps.plan.outputs.should_release == 'true' && steps.plan.outputs.fragment_path != ''
         shell: pwsh

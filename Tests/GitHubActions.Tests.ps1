@@ -246,7 +246,6 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'Push release commit and annotated tag'
         $workflow | Should -Match 'Create GitHub release and upload asset'
         $workflow | Should -Match 'Notify homepage to update submodule'
-        $workflow | Should -Match 'Report no release required'
         $workflow | Should -Match 'git push origin HEAD:master "refs/tags/\$\{\{ steps\.plan\.outputs\.release_tag \}\}"'
         $workflow | Should -Match 'repository: AtlassianPS/AtlassianPS\.github\.io'
         $workflow | Should -Match 'event-type: module-release'
