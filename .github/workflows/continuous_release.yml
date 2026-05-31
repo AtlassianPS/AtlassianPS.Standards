@@ -3,6 +3,16 @@ name: Continuous Release
 on:
   push:
     branches: [master]
+  workflow_dispatch:
+    inputs:
+      release_impact:
+        description: Release impact for unreleased changes already on master
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 concurrency:
   group: continuous-release
@@ -26,6 +36,8 @@ jobs:
       - name: Plan release
         id: plan
         uses: ./.github/actions/plan-merged-release
+        with:
+          release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release_impact || '' }}
 
       - name: Report no release required
         if: steps.plan.outputs.should_release != 'true'

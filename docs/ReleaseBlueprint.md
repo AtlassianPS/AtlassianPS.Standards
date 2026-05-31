@@ -51,6 +51,9 @@ After a normal pull request with `release:patch`, `release:minor`, or `release:m
 The workflow should be serialized with concurrency so multiple release-labelled merges do not race the next-version calculation.
 Use a dedicated release automation token, for example `ATLASSIANPS_RELEASE_BOT_TOKEN`, when branch protection does not allow the default `GITHUB_TOKEN` to push the release metadata commit and annotated tag to `master`.
 
+When unreleased changes already exist on `master` without an associated merged release-labelled PR, use the manual `workflow_dispatch` input on `continuous_release.yml` and choose the release impact for the whole bucket.
+The manual path does not generate a PR-title changelog fragment; it releases the existing `## Unreleased` body and any existing `.changelog/*.md` fragments.
+
 ## Release Recovery
 
 Do not keep a separate tag-triggered release workflow unless it is intentionally idempotent across already-created tags, PSGallery packages, GitHub releases, uploaded assets, and website notifications.
@@ -291,6 +294,16 @@ name: Continuous Release
 on:
   push:
     branches: [master]
+  workflow_dispatch:
+    inputs:
+      release_impact:
+        description: Release impact for unreleased changes already on master
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 concurrency:
   group: continuous-release
@@ -314,6 +327,8 @@ jobs:
       - name: Plan release
         id: plan
         uses: AtlassianPS/AtlassianPS.Standards/.github/actions/plan-merged-release@<standards-sha> # vX.Y.Z
+        with:
+          release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release_impact || '' }}
 
       - name: Report no release required
         if: steps.plan.outputs.should_release != 'true'
@@ -431,6 +446,19 @@ jobs:
 
 Use the exact repository secret name for the website token.
 Existing modules use `HOMEPAGE_PAT`; if a repository uses a different name, adjust the snippet instead of creating duplicate secrets.
+
+### Releasing A Bucket Already On Master
+
+If a maintainer asks an agent to release unreleased changes that already exist on `master`, do not create an empty release PR.
+Use the manual dispatch path of `continuous_release.yml` instead:
+
+1. Inspect `CHANGELOG.md` and `.changelog/*.md` to understand the pending release notes.
+2. Choose the highest required impact: `major` beats `minor`, `minor` beats `patch`.
+3. Run `continuous_release.yml` with `release_impact` set to that impact.
+4. Monitor the run until the release metadata commit, annotated tag, PSGallery publish, GitHub release, and website dispatch complete.
+
+The manual path computes the next version from existing stable `vX.Y.Z` tags and folds the current `## Unreleased` body plus all valid changelog fragments into that version section.
+It intentionally does not generate a PR-title fragment because there is no single source PR.
 
 ### Module-Specific Substitutions
 

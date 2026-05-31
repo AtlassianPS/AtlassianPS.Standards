@@ -18,74 +18,89 @@
 
 . (Join-Path -Path $PSScriptRoot -ChildPath '../_shared/release-intent-core.ps1')
 
-if (-not $env:COMMIT_SHA) {
-    throw 'plan-merged-release requires COMMIT_SHA. Run it from a push workflow or pass commit-sha.'
-}
 if (-not $env:GITHUB_REPOSITORY) {
     throw 'plan-merged-release requires GITHUB_REPOSITORY.'
 }
 
-$commitPullsRoute = 'repos/{0}/commits/{1}/pulls' -f $env:GITHUB_REPOSITORY, $env:COMMIT_SHA
-$pullRequestJson = gh api $commitPullsRoute --jq '.[] | select(.merged_at != null) | { number, title, user: .user.login }' |
-    Select-Object -First 1
-
-if (-not $pullRequestJson) {
-    Write-OutputValue -Name should_release -Value 'false'
-    Write-OutputValue -Name skip_reason -Value 'no associated merged pull request'
-    return
-}
-
-$pullRequest = $pullRequestJson | ConvertFrom-Json
-$prNumber = [String]$pullRequest.number
-$prTitle = [String]$pullRequest.title
-$prAuthor = [String]$pullRequest.user
-
-$labelsRoute = 'repos/{0}/issues/{1}/labels' -f $env:GITHUB_REPOSITORY, $prNumber
-$labels = @(gh api $labelsRoute --paginate --jq '.[].name')
-Write-OutputValue -Name pr_number -Value $prNumber
-Write-OutputValue -Name pr_title -Value $prTitle
-Write-OutputValue -Name pr_author -Value $prAuthor
-
-$changelogDirectory = if ($env:CHANGELOG_DIRECTORY) { $env:CHANGELOG_DIRECTORY.TrimEnd('/') } else { '.changelog' }
-$fragmentPattern = '^{0}/{1}\.(?<impact>patch|minor|major)\.(?<type>added|changed|fixed|removed|deprecated|security|breaking)\.md$' -f [Regex]::Escape($changelogDirectory), $prNumber
-$fragmentFiles = @(
-    if (Test-Path -LiteralPath $changelogDirectory -PathType Container) {
-        Get-ChildItem -LiteralPath $changelogDirectory -Filter "$prNumber.*.md" |
-            ForEach-Object { Join-Path -Path $changelogDirectory -ChildPath $_.Name }
+$releaseImpact = $null
+$fragment = $null
+$manualReleaseImpact = if ($env:RELEASE_IMPACT) { $env:RELEASE_IMPACT.Trim().ToLowerInvariant() } else { '' }
+$isManualRelease = -not [String]::IsNullOrWhiteSpace($manualReleaseImpact)
+if ($isManualRelease) {
+    if ($manualReleaseImpact -notin @('patch', 'minor', 'major')) {
+        throw "Manual release impact '$env:RELEASE_IMPACT' must be patch, minor, or major."
     }
-)
-$matchingFragments = @(
-    foreach ($path in $fragmentFiles) {
-        $normalizedPath = $path -replace '\\', '/'
-        $match = [Regex]::Match($normalizedPath, $fragmentPattern)
-        if ($match.Success) {
-            [PSCustomObject]@{
-                Path   = $normalizedPath
-                Impact = $match.Groups['impact'].Value
-                Type   = $match.Groups['type'].Value
+
+    $releaseImpact = $manualReleaseImpact
+    Write-OutputValue -Name release_impact -Value $releaseImpact
+}
+else {
+    if (-not $env:COMMIT_SHA) {
+        throw 'plan-merged-release requires COMMIT_SHA. Run it from a push workflow or pass commit-sha.'
+    }
+
+    $commitPullsRoute = 'repos/{0}/commits/{1}/pulls' -f $env:GITHUB_REPOSITORY, $env:COMMIT_SHA
+    $pullRequestJson = gh api $commitPullsRoute --jq '.[] | select(.merged_at != null) | { number, title, user: .user.login }' |
+        Select-Object -First 1
+
+    if (-not $pullRequestJson) {
+        Write-OutputValue -Name should_release -Value 'false'
+        Write-OutputValue -Name skip_reason -Value 'no associated merged pull request'
+        return
+    }
+
+    $pullRequest = $pullRequestJson | ConvertFrom-Json
+    $prNumber = [String]$pullRequest.number
+    $prTitle = [String]$pullRequest.title
+    $prAuthor = [String]$pullRequest.user
+
+    $labelsRoute = 'repos/{0}/issues/{1}/labels' -f $env:GITHUB_REPOSITORY, $prNumber
+    $labels = @(gh api $labelsRoute --paginate --jq '.[].name')
+    Write-OutputValue -Name pr_number -Value $prNumber
+    Write-OutputValue -Name pr_title -Value $prTitle
+    Write-OutputValue -Name pr_author -Value $prAuthor
+
+    $changelogDirectory = if ($env:CHANGELOG_DIRECTORY) { $env:CHANGELOG_DIRECTORY.TrimEnd('/') } else { '.changelog' }
+    $fragmentPattern = '^{0}/{1}\.(?<impact>patch|minor|major)\.(?<type>added|changed|fixed|removed|deprecated|security|breaking)\.md$' -f [Regex]::Escape($changelogDirectory), $prNumber
+    $fragmentFiles = @(
+        if (Test-Path -LiteralPath $changelogDirectory -PathType Container) {
+            Get-ChildItem -LiteralPath $changelogDirectory -Filter "$prNumber.*.md" |
+                ForEach-Object { Join-Path -Path $changelogDirectory -ChildPath $_.Name }
+        }
+    )
+    $matchingFragments = @(
+        foreach ($path in $fragmentFiles) {
+            $normalizedPath = $path -replace '\\', '/'
+            $match = [Regex]::Match($normalizedPath, $fragmentPattern)
+            if ($match.Success) {
+                [PSCustomObject]@{
+                    Path   = $normalizedPath
+                    Impact = $match.Groups['impact'].Value
+                    Type   = $match.Groups['type'].Value
+                }
             }
         }
+    )
+    foreach ($path in @($fragmentFiles | Where-Object { -not [Regex]::IsMatch(($_ -replace '\\', '/'), $fragmentPattern) })) {
+        throw "Changelog fragment '$path' must be named '$changelogDirectory/$prNumber.<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md'."
     }
-)
-foreach ($path in @($fragmentFiles | Where-Object { -not [Regex]::IsMatch(($_ -replace '\\', '/'), $fragmentPattern) })) {
-    throw "Changelog fragment '$path' must be named '$changelogDirectory/$prNumber.<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md'."
-}
-$intentState = Resolve-ReleaseIntentState -Labels $labels -Fragments $matchingFragments -HasChangelogFilesForNone ($fragmentFiles.Count -gt 0) -Context "merged PR #$prNumber"
-if (-not $intentState.IsValid) {
-    throw ($intentState.Messages -join [Environment]::NewLine)
-}
+    $intentState = Resolve-ReleaseIntentState -Labels $labels -Fragments $matchingFragments -HasChangelogFilesForNone ($fragmentFiles.Count -gt 0) -Context "merged PR #$prNumber"
+    if (-not $intentState.IsValid) {
+        throw ($intentState.Messages -join [Environment]::NewLine)
+    }
 
-$releaseImpact = $intentState.ReleaseImpact
-Write-OutputValue -Name release_impact -Value $releaseImpact
-if ($releaseImpact -eq 'none') {
-    Write-OutputValue -Name should_release -Value 'false'
-    Write-OutputValue -Name skip_reason -Value 'release:none'
-    return
-}
+    $releaseImpact = $intentState.ReleaseImpact
+    Write-OutputValue -Name release_impact -Value $releaseImpact
+    if ($releaseImpact -eq 'none') {
+        Write-OutputValue -Name should_release -Value 'false'
+        Write-OutputValue -Name skip_reason -Value 'release:none'
+        return
+    }
 
-$fragment = $intentState.Fragment
-$changelogType = $intentState.ChangelogType
-Write-OutputValue -Name changelog_type -Value $changelogType
+    $fragment = $intentState.Fragment
+    $changelogType = $intentState.ChangelogType
+    Write-OutputValue -Name changelog_type -Value $changelogType
+}
 
 $versions = @(
     git tag --list 'v[0-9]*' |
@@ -134,7 +149,7 @@ if ($LASTEXITCODE -eq 0) {
 Write-OutputValue -Name should_release -Value 'true'
 Write-OutputValue -Name release_version -Value $releaseVersion
 Write-OutputValue -Name release_tag -Value $releaseTag
-if (-not $fragment) {
+if (-not $isManualRelease -and -not $fragment) {
     $safeTitle = $prTitle -replace "`r`n|`r|`n", ' '
     Write-OutputValue -Name fragment_path -Value ('{0}/{1}.{2}.{3}.md' -f $changelogDirectory, $prNumber, $releaseImpact, $changelogType)
     Write-OutputValue -Name fragment_content -Value ('* {0} (#{1}, @{2})' -f $safeTitle, $prNumber, $prAuthor)

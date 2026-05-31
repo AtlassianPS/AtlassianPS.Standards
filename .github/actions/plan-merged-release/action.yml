@@ -11,6 +11,9 @@ inputs:
     description: Directory containing changelog fragments.
     required: false
     default: .changelog
+  release-impact:
+    description: Optional manual release impact for releasing unreleased changes already on the checked-out branch.
+    required: false
 outputs:
   should_release:
     description: Whether the merged pull request should publish a release.
@@ -56,4 +59,5 @@ runs:
         GITHUB_REPOSITORY: ${{ github.repository }}
         COMMIT_SHA: ${{ inputs.commit-sha || github.sha }}
         CHANGELOG_DIRECTORY: ${{ inputs.changelog-directory }}
+        RELEASE_IMPACT: ${{ inputs.release-impact }}
       run: ${{ github.action_path }}/plan-merged-release.ps1

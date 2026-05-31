@@ -65,7 +65,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             throw "Unexpected git invocation: $($arguments -join ' ')"
         }
 
-        $outputPath = Join-Path -Path $TestDrive -ChildPath 'github-output.txt'
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'manual-github-output.txt'
         $previousRepository = $env:GITHUB_REPOSITORY
         $previousCommitSha = $env:COMMIT_SHA
         $previousChangelogDirectory = $env:CHANGELOG_DIRECTORY
@@ -138,6 +138,51 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output | Should -Match 'skip_reason=release:none'
     }
 
+    It 'plan-merged-release computes a manual release without generating a PR fragment' {
+        function git {
+            $arguments = [String[]]$args
+            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--list') {
+                'v2.3.4'
+                return
+            }
+
+            if ($arguments[0] -eq 'show-ref') {
+                return
+            }
+
+            throw "Unexpected git invocation: $($arguments -join ' ')"
+        }
+
+        function gh {
+            throw "Unexpected gh invocation: $($args -join ' ')"
+        }
+
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'github-output.txt'
+        $previousRepository = $env:GITHUB_REPOSITORY
+        $previousReleaseImpact = $env:RELEASE_IMPACT
+        $previousOutput = $env:GITHUB_OUTPUT
+        try {
+            $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
+            $env:RELEASE_IMPACT = 'patch'
+            $env:GITHUB_OUTPUT = $outputPath
+
+            & $script:planMergedReleaseScriptPath
+        }
+        finally {
+            $env:GITHUB_REPOSITORY = $previousRepository
+            $env:RELEASE_IMPACT = $previousReleaseImpact
+            $env:GITHUB_OUTPUT = $previousOutput
+        }
+
+        $output = Get-Content -LiteralPath $outputPath -Raw
+        $output | Should -Match 'should_release=true'
+        $output | Should -Match 'release_impact=patch'
+        $output | Should -Match 'release_version=2.3.5'
+        $output | Should -Match 'release_tag=v2.3.5'
+        $output | Should -Not -Match 'fragment_path='
+        $output | Should -Not -Match 'fragment_content='
+    }
+
     It 'plan-merged-release rejects breaking changes without a major release label' {
         function gh {
             $arguments = [String[]]$args
@@ -193,6 +238,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
         $workflow | Should -Match 'ATLASSIANPS_RELEASE_BOT_TOKEN'
+        $workflow | Should -Match 'workflow_dispatch:'
+        $workflow | Should -Match 'release_impact:'
         $workflow | Should -Match 'Commit release metadata'
         $workflow | Should -Match 'Validate, build, and test release commit'
         $workflow | Should -Match 'Push release commit and annotated tag'
