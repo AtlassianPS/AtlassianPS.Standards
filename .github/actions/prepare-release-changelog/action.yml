@@ -12,6 +12,9 @@ inputs:
     description: Directory containing changelog fragments.
     required: false
     default: .changelog
+  release-notes-path:
+    description: Optional path for generated release notes. Defaults to a runner temp file.
+    required: false
 outputs:
   release_version:
     description: Normalized v-prefixed release version.
@@ -29,4 +32,5 @@ runs:
         CHANGELOG_PATH: ${{ inputs.changelog-path }}
         RELEASE_VERSION: ${{ inputs.release-version }}
         CHANGELOG_DIRECTORY: ${{ inputs.changelog-directory }}
+        RELEASE_NOTES_PATH: ${{ inputs.release-notes-path }}
       run: ${{ github.action_path }}/prepare-release-changelog.ps1

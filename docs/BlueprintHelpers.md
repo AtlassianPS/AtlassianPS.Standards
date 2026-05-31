@@ -111,6 +111,7 @@ Commit the resulting `CHANGELOG.md` update and `.changelog` deletions in the rel
 ```
 
 The action creates `## v1.2.3 - YYYY-MM-DD` immediately after `## Unreleased`, moves any existing Unreleased body plus valid `.changelog/*.md` fragment contents into that section, and deletes only the consumed fragments.
+By default, the generated release-notes output file is written under the runner temp directory so release-preparation PRs only need to commit `CHANGELOG.md` and `.changelog` deletions.
 
 ## External Help
 

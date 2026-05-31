@@ -88,7 +88,15 @@ foreach ($fragment in $fragments) {
     Remove-Item -LiteralPath $fragment.Path
 }
 
-$outputPath = Join-Path -Path 'Release' -ChildPath 'release-notes.md'
+$outputPath = if ($env:RELEASE_NOTES_PATH) {
+    $env:RELEASE_NOTES_PATH
+}
+elseif ($env:RUNNER_TEMP) {
+    Join-Path -Path $env:RUNNER_TEMP -ChildPath 'release-notes.md'
+}
+else {
+    Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath 'release-notes.md'
+}
 New-Item -Path (Split-Path -Path $outputPath -Parent) -ItemType Directory -Force | Out-Null
 $releaseBody | Set-Content -LiteralPath $outputPath -Encoding utf8
 

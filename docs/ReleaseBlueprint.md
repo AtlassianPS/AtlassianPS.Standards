@@ -208,6 +208,7 @@ Before creating a release tag, prepare the changelog section, run the module's n
 ```
 
 This moves pending `## Unreleased` content and valid `.changelog/*.md` fragments into `## vX.Y.Z - YYYY-MM-DD`, then deletes the consumed fragments.
+The generated release-notes file is written outside the repository by default; commit only `CHANGELOG.md` and consumed fragment deletions.
 Review the generated changelog before opening the release-preparation PR.
 
 ```powershell
