@@ -49,24 +49,39 @@ jobs:
         with:
           release-version: ${{ steps.plan.outputs.release_tag }}
 
+      - uses: ./.github/actions/setup-powershell
+        if: steps.plan.outputs.should_release == 'true'
+
+      - name: Update source manifest release metadata
+        if: steps.plan.outputs.should_release == 'true'
+        shell: pwsh
+        run: |
+          Import-Module ./AtlassianPS.Standards/AtlassianPS.Standards.psd1 -Force
+          $releaseNotes = Get-AtlassianPSReleaseNotesFromChangelog `
+              -ChangelogPath ./CHANGELOG.md `
+              -ReleaseVersion ${{ steps.plan.outputs.release_tag }}
+
+          Set-AtlassianPSModuleManifestVersion `
+              -BuiltManifestPath ./AtlassianPS.Standards/AtlassianPS.Standards.psd1 `
+              -ModuleName AtlassianPS.Standards `
+              -VersionToPublish ${{ steps.plan.outputs.release_tag }} `
+              -ReleaseNotes $releaseNotes
+
       - name: Commit release preparation
         if: steps.plan.outputs.should_release == 'true'
         shell: bash
         run: |
           set -euo pipefail
 
-          if git diff --quiet -- CHANGELOG.md .changelog; then
-            echo "::error::Release planning produced no changelog changes."
+          if git diff --quiet -- CHANGELOG.md .changelog AtlassianPS.Standards/AtlassianPS.Standards.psd1; then
+            echo "::error::Release planning produced no changelog or manifest changes."
             exit 1
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md .changelog
+          git add CHANGELOG.md .changelog AtlassianPS.Standards/AtlassianPS.Standards.psd1
           git commit -m "Prepare ${{ steps.plan.outputs.release_tag }} release"
-
-      - uses: ./.github/actions/setup-powershell
-        if: steps.plan.outputs.should_release == 'true'
 
       - name: Validate, build, and test release commit
         if: steps.plan.outputs.should_release == 'true'
