@@ -60,11 +60,17 @@ Invoke-Build -Task Lint, Build, Test
 
 ## Release
 
-Tag-based CD runs on `v*` tags and will:
+Label-based CD runs after release-labelled pull requests merge to `master`.
+It computes the next semantic version from the merged PR's `release:*` label, prepares `CHANGELOG.md`, stamps the source manifest, commits that release metadata to `master`, validates the release metadata, creates an annotated tag, publishes to PowerShell Gallery, creates the GitHub release from the same changelog section, and notifies the website to update its module submodule.
+The release-preparation commit also stamps the source module manifest with the exact released version and release notes so the tagged repository state matches the published package metadata.
+The workflow should use `ATLASSIANPS_RELEASE_BOT_TOKEN` when pushing the release metadata commit and tag if branch protection does not allow the default `GITHUB_TOKEN` to push to `master`.
+
+The continuous release workflow will:
 
 1. Build the module.
 2. Publish to PowerShell Gallery (when `PSGALLERY_API_KEY` is configured).
 3. Create a GitHub release with a zipped module artifact.
 
-The source manifest intentionally uses a major/minor `ModuleVersion` (`x.y`) as a maintenance baseline. Release tags (`vX.Y.Z`) provide the full semantic version, and the publish pipeline stamps that exact tag version into the built manifest.
-Update `CHANGELOG.md` before cutting a release tag so both GitHub and PSGallery release metadata reflect the shipped changes. Publish now derives PSGallery release notes from the matching changelog version section and fails if that section is missing or empty.
+The source manifest may start a development cycle on a major/minor maintenance baseline, but release-preparation commits stamp the exact `vX.Y.Z` release version before tagging.
+Publish derives PSGallery release notes from the matching changelog version section and fails if that section is missing or empty.
+Do not keep a separate tag-triggered release workflow unless it is intentionally idempotent across already-created tags, PSGallery packages, GitHub releases, and assets.

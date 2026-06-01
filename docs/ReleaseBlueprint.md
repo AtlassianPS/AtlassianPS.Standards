@@ -27,20 +27,42 @@ The module manifest keeps the numeric version in `ModuleVersion` and uses `Priva
 The release notes parser preserves the full markdown body under the matching `##` heading until the next `##` heading.
 Introductory paragraphs before `###` sections are supported and are included in both PSGallery and GitHub release notes.
 
-## Required Release Flow
+## Required Continuous Release Flow
 
-Release workflows should do these steps in order:
+The default path is label-based continuous delivery from merged pull requests.
+After CI succeeds on a normal merged pull request with `release:patch`, `release:minor`, or `release:major`, the trusted `workflow_run` workflow should:
 
-1. Check out the repository with full history.
-2. Resolve and validate the annotated release tag with `resolve-release-tag`.
-3. Download the CI `Release` artifact built from the tagged commit.
-4. Set up PowerShell dependencies with `setup-powershell`.
-5. Build `Release/release-notes.md` from `CHANGELOG.md` with `build-release-notes`.
-6. Publish the module, with manifest release notes generated from the same changelog section.
-7. Create the GitHub release with `body_path` pointing at `Release/release-notes.md`.
+1. Check out the repository with full history and tags.
+2. Resolve the merged pull request associated with the pushed commit.
+3. Read the pull request release and changelog labels.
+4. Compute the next `vX.Y.Z` tag from the latest stable semver tag and the release impact.
+5. Create a generated `.changelog/<pr>.<impact>.<type>.md` fragment when the PR used a `changelog:*` label.
+6. Run `prepare-release-changelog` to fold pending notes and fragments into the new version section.
+7. Stamp the source module manifest with the exact release version and release notes from the same changelog section.
+8. Commit the release metadata changes directly to `master`.
+9. Let CI build and test the release metadata commit.
+10. Download the CI `Release` artifact from that exact commit.
+11. Create an annotated tag on the tested release metadata commit.
+12. Build release notes from the committed `CHANGELOG.md` section.
+13. Publish the tested module artifact to PSGallery without rebuilding or restamping the package.
+14. Create the GitHub release with the same release notes body.
+15. Notify the website to update its module submodule.
 
-Release notes must be built before publishing.
-If the changelog section is missing or empty, the workflow must fail before PSGallery receives the package.
+`release:none` merges should stop after planning and must not publish.
+The workflow should be serialized with concurrency so multiple release-labelled merges do not race the next-version calculation.
+Use a dedicated release automation token, for example `ATLASSIANPS_RELEASE_BOT_TOKEN`, when committing release metadata to `master` so the follow-up CI run is triggered reliably.
+
+When unreleased changes already exist on `master` without an associated merged release-labelled PR, use the manual `workflow_dispatch` input on `continuous_release.yml` and choose the release impact for the whole bucket.
+Manual dispatch must still check out `master`, not the arbitrary ref selected in the GitHub UI.
+The manual path does not generate a PR-title changelog fragment; it releases the existing `## Unreleased` body and any existing `.changelog/*.md` fragments.
+For prereleases, choose `alpha`, `beta`, or `rc` in the manual `prerelease` input.
+The generated tag and changelog section use `vX.Y.Z-alpha`, `vX.Y.Z-beta`, or `vX.Y.Z-rc`; `Set-AtlassianPSModuleManifestVersion` writes the manifest `PrivateData.PSData.Prerelease` label, and the GitHub release is marked as a prerelease.
+
+## Release Recovery
+
+Do not keep a separate tag-triggered release workflow unless it is intentionally idempotent across already-created tags, PSGallery packages, GitHub releases, uploaded assets, and website notifications.
+The default AtlassianPS release path has one publishing workflow: `continuous_release.yml`.
+If a release fails after publishing an immutable PSGallery package, repair the failed downstream artifact directly, for example by creating the missing GitHub release or rerunning the website dispatch, instead of rerunning a workflow that calls `Publish-Module` again.
 
 ## Required Shared Actions
 
@@ -105,6 +127,7 @@ At minimum, test that:
 - The release workflow uses `build-release-notes`.
 - The release workflow uses `body_path: ${{ steps.release_notes.outputs.release_notes_path }}`.
 - The release workflow builds release notes before publishing.
+- The repository does not keep a non-idempotent `.github/workflows/release.yml` beside `continuous_release.yml`.
 - The build script uses `Get-AtlassianPSReleaseNotesFromChangelog` for manifest release notes.
 - The repository does not contain `changelog-to-release`, `.github/changelog.configuration.json`, or copied inline parser/write-file plumbing.
 
@@ -187,15 +210,332 @@ For each existing module repository:
 
 1. Bump `Tools/build.requirements.psd1` to the current `AtlassianPS.Standards` version.
 2. Pin all Standards workflow actions to the same release commit SHA.
-3. Replace local release-tag scripts with `resolve-release-tag`.
-4. Replace third-party or inline GitHub release-note generation with `build-release-notes`.
-5. Remove `.github/changelog.configuration.json` when it only served the old changelog action.
-6. Update `softprops/action-gh-release` to use `body_path` from the shared action output.
-7. Replace local changelog parsers in build scripts with `Get-AtlassianPSReleaseNotesFromChangelog`.
-8. Add or update drift guard tests.
-9. Add the `Release Intent` workflow and make it a required check.
-10. Update the local release runbook to link back to this blueprint.
-11. Run local workflow syntax, guard tests, lint, build/test, and release metadata preflight before pushing.
+3. Remove non-idempotent tag-triggered release workflows such as `.github/workflows/release.yml`.
+4. Replace local changelog parsers in build scripts with `Get-AtlassianPSReleaseNotesFromChangelog`.
+5. Add or update drift guard tests.
+6. Add the `Release Intent` workflow and make it a required check.
+7. Add the label-based `Continuous Release` workflow.
+8. Configure required labels and secrets.
+9. Update the local release runbook to link back to this blueprint.
+10. Run local workflow syntax, guard tests, lint, build/test, and release metadata preflight before pushing.
+
+## Implementing Label-Based CD In A Module Repository
+
+Use this section as the implementation order when migrating another AtlassianPS module.
+Replace every `<ModuleName>`, `<standards-sha>`, and version comment with the target repository values.
+
+### Required Labels
+
+Create these labels in the repository before making `Release Intent` required:
+
+```text
+release:none
+release:patch
+release:minor
+release:major
+changelog:added
+changelog:changed
+changelog:fixed
+changelog:removed
+changelog:deprecated
+changelog:security
+changelog:breaking
+```
+
+### Required Secrets And Variables
+
+Required secrets:
+
+```text
+PSGALLERY_API_KEY
+HOMEPAGE_PAT
+```
+
+Optional secret:
+
+```text
+ATLASSIANPS_RELEASE_BOT_TOKEN
+```
+
+Use `ATLASSIANPS_RELEASE_BOT_TOKEN` when branch protection or repository rules prevent `GITHUB_TOKEN` from pushing the release metadata commit and annotated tag to `master`.
+If the repository has no branch protection, `GITHUB_TOKEN` is enough.
+
+### Release Intent Workflow
+
+Add `.github/workflows/release_intent.yml`:
+
+```yaml
+name: Release Intent
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  validate:
+    name: Release Intent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate release intent
+        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/validate-release-intent@<standards-sha> # vX.Y.Z
+```
+
+Do not check out pull request code in this workflow.
+Make `Release Intent` a required branch-protection check when the repository uses branch protection.
+
+### Continuous Release Workflow
+
+Add `.github/workflows/continuous_release.yml`:
+
+```yaml
+name: Continuous Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      release_impact:
+        description: Release impact for unreleased changes already on master
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      prerelease:
+        description: Optional prerelease label for unreleased changes already on master
+        required: true
+        type: choice
+        default: stable
+        options:
+          - stable
+          - alpha
+          - beta
+          - rc
+
+concurrency:
+  group: continuous-release
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: read
+
+jobs:
+  prepare:
+    name: Prepare release metadata
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      !startsWith(github.event.workflow_run.head_commit.message, 'Prepare v'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.event.workflow_run.head_sha }}
+          token: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN || github.token }}
+
+      - name: Plan release
+        id: plan
+        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/plan-merged-release@<standards-sha> # vX.Y.Z
+        with:
+          commit-sha: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
+          release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release_impact || '' }}
+          prerelease-label: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease != 'stable' && inputs.prerelease || '' }}
+
+      - name: Create generated changelog fragment
+        if: steps.plan.outputs.should_release == 'true' && steps.plan.outputs.fragment_path != ''
+        shell: pwsh
+        env:
+          FRAGMENT_PATH: ${{ steps.plan.outputs.fragment_path }}
+          FRAGMENT_CONTENT: ${{ steps.plan.outputs.fragment_content }}
+        run: |
+          New-Item -Path (Split-Path -Path $env:FRAGMENT_PATH -Parent) -ItemType Directory -Force | Out-Null
+          $env:FRAGMENT_CONTENT | Set-Content -LiteralPath $env:FRAGMENT_PATH -Encoding utf8
+
+      - name: Prepare release changelog
+        if: steps.plan.outputs.should_release == 'true'
+        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/prepare-release-changelog@<standards-sha> # vX.Y.Z
+        with:
+          release-version: ${{ steps.plan.outputs.release_tag }}
+
+      - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@<standards-sha> # vX.Y.Z
+        if: steps.plan.outputs.should_release == 'true'
+
+      - name: Update source manifest release metadata
+        if: steps.plan.outputs.should_release == 'true'
+        shell: pwsh
+        run: |
+          Import-Module ./<ModuleName>/<ModuleName>.psd1 -Force
+          $releaseNotes = Get-AtlassianPSReleaseNotesFromChangelog `
+              -ChangelogPath ./CHANGELOG.md `
+              -ReleaseVersion ${{ steps.plan.outputs.release_tag }}
+
+          Set-AtlassianPSModuleManifestVersion `
+              -BuiltManifestPath ./<ModuleName>/<ModuleName>.psd1 `
+              -ModuleName <ModuleName> `
+              -VersionToPublish ${{ steps.plan.outputs.release_tag }} `
+              -ReleaseNotes $releaseNotes
+
+      - name: Commit release metadata
+        if: steps.plan.outputs.should_release == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- CHANGELOG.md .changelog <ModuleName>/<ModuleName>.psd1; then
+            echo "::error::Release planning produced no changelog or manifest changes."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md .changelog <ModuleName>/<ModuleName>.psd1
+          git commit -m "Prepare ${{ steps.plan.outputs.release_tag }} release"
+          git push "https://x-access-token:${RELEASE_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
+
+  publish:
+    name: Publish tested release artifact
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      startsWith(github.event.workflow_run.head_commit.message, 'Prepare v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Resolve prepared release
+        id: prepared_release
+        shell: pwsh
+        run: |
+          $message = '${{ github.event.workflow_run.head_commit.message }}'
+          if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+) release$') {
+              throw "Commit message '$message' is not a release metadata commit."
+          }
+
+          "release_tag=$($Matches.tag)" >> $env:GITHUB_OUTPUT
+
+      - name: Download tested release artifact
+        uses: dawidd6/action-download-artifact@v21
+        with:
+          run_id: ${{ github.event.workflow_run.id }}
+          name: Release
+          path: ./Release/
+          if_no_artifact_found: fail
+
+      - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@<standards-sha> # vX.Y.Z
+
+      - name: Create annotated release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag -a "${{ steps.prepared_release.outputs.release_tag }}" -m "${{ steps.prepared_release.outputs.release_tag }}"
+          git push origin "refs/tags/${{ steps.prepared_release.outputs.release_tag }}"
+
+      - name: Resolve release ref
+        id: release_ref
+        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/resolve-release-tag@<standards-sha> # vX.Y.Z
+        with:
+          tag: ${{ steps.prepared_release.outputs.release_tag }}
+
+      - name: Build release notes
+        id: release_notes
+        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/build-release-notes@<standards-sha> # vX.Y.Z
+        with:
+          release-version: ${{ steps.release_ref.outputs.release_tag }}
+
+      - name: Create GitHub release asset
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ./Release/<ModuleName> -DestinationPath ./Release/<ModuleName>.zip -Force
+
+      - name: Publish tested module artifact
+        run: Publish-Module -Path ./Release/<ModuleName> -NuGetApiKey ${{ secrets.PSGALLERY_API_KEY }} -ErrorAction Stop
+        shell: pwsh
+
+      - name: Create GitHub release and upload asset
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.release_ref.outputs.release_tag }}
+          name: ${{ steps.release_ref.outputs.release_tag }}
+          body_path: ${{ steps.release_notes.outputs.release_notes_path }}
+          files: ./Release/<ModuleName>.zip
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: ${{ contains(steps.release_ref.outputs.release_tag, 'alpha') || contains(steps.release_ref.outputs.release_tag, 'beta') || contains(steps.release_ref.outputs.release_tag, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify homepage to update submodule
+        if: ${{ !contains(steps.release_ref.outputs.release_tag, 'alpha') && !contains(steps.release_ref.outputs.release_tag, 'beta') && !contains(steps.release_ref.outputs.release_tag, 'rc') }}
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.HOMEPAGE_PAT }}
+          repository: AtlassianPS/AtlassianPS.github.io
+          event-type: module-release
+          client-payload: '{"module": "<ModuleName>", "version": "${{ steps.release_ref.outputs.release_tag }}"}'
+```
+
+Use the exact repository secret name for the website token.
+Existing modules use `HOMEPAGE_PAT`; if a repository uses a different name, adjust the snippet instead of creating duplicate secrets.
+
+### Releasing A Bucket Already On Master
+
+If a maintainer asks an agent to release unreleased changes that already exist on `master`, do not create an empty release PR.
+Use the manual dispatch path of `continuous_release.yml` instead:
+
+1. Inspect `CHANGELOG.md` and `.changelog/*.md` to understand the pending release notes.
+2. Choose the highest required impact: `major` beats `minor`, `minor` beats `patch`.
+3. Run `continuous_release.yml` with `release_impact` set to that impact; use `prerelease: stable` for a stable release or `alpha`, `beta`, or `rc` for a prerelease.
+4. Monitor the run until the release metadata commit, annotated tag, PSGallery publish, GitHub release, and website dispatch for stable releases complete.
+
+The manual path computes the next version from existing stable `vX.Y.Z` tags and folds the current `## Unreleased` body plus all valid changelog fragments into that version section.
+It intentionally does not generate a PR-title fragment because there is no single source PR.
+
+### Module-Specific Substitutions
+
+When copying templates, replace:
+
+| Placeholder | Replace with |
+|-------------|--------------|
+| `<ModuleName>` | Repository module name, for example `JiraPS` |
+| `<standards-sha>` | 40-character `AtlassianPS.Standards` release commit SHA |
+| `# vX.Y.Z` | Matching Standards package version comment |
+| `./Release/<ModuleName>.zip` | Actual release artifact zip path |
+| Website token secret | Existing repository secret, usually `HOMEPAGE_PAT` |
+
+Do not copy the Standards repository's self-import path unless the target repository is `AtlassianPS.Standards` itself.
+
+### Validation Before Opening The Migration PR
+
+Run these checks from the target repository root:
+
+```bash
+actionlint .github/workflows/ci.yml .github/workflows/release_intent.yml .github/workflows/continuous_release.yml
+git diff --check
+```
+
+```powershell
+Invoke-Build -Task Lint, Build, Test
+Invoke-Build -Task Build, SetVersion -VersionToPublish vX.Y.Z
+```
+
+Use a local throwaway version for the `SetVersion` preflight only after `CHANGELOG.md` has a matching section.
+If no release section exists yet, test the parser by preparing a temporary changelog section and revert that temporary change before opening the PR.
 
 ## Release Preparation
 
@@ -209,7 +549,9 @@ Before creating a release tag, prepare the changelog section, run the module's n
 
 This moves pending `## Unreleased` content and valid `.changelog/*.md` fragments into `## vX.Y.Z - YYYY-MM-DD`, then deletes the consumed fragments.
 The generated release-notes file is written outside the repository by default; commit only `CHANGELOG.md` and consumed fragment deletions.
-Review the generated changelog before opening the release-preparation PR.
+In the continuous release flow, the trusted workflow creates and commits these changes automatically after the labelled PR merges.
+The same release metadata commit should update the source module manifest so `CHANGELOG.md`, the tag, the repository manifest, the GitHub release body, and PSGallery metadata all describe the same version.
+For manual/tag releases, review the generated changelog before tagging the release.
 
 ```powershell
 Invoke-Build -Task Build, Test
