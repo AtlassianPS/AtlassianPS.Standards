@@ -183,6 +183,52 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output | Should -Not -Match 'fragment_content='
     }
 
+    It 'plan-merged-release computes a manual prerelease tag' {
+        function git {
+            $arguments = [String[]]$args
+            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--list') {
+                'v2.3.4'
+                return
+            }
+
+            if ($arguments[0] -eq 'show-ref') {
+                return
+            }
+
+            throw "Unexpected git invocation: $($arguments -join ' ')"
+        }
+
+        function gh {
+            throw "Unexpected gh invocation: $($args -join ' ')"
+        }
+
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'manual-prerelease-github-output.txt'
+        $previousRepository = $env:GITHUB_REPOSITORY
+        $previousReleaseImpact = $env:RELEASE_IMPACT
+        $previousPrereleaseLabel = $env:PRERELEASE_LABEL
+        $previousOutput = $env:GITHUB_OUTPUT
+        try {
+            $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
+            $env:RELEASE_IMPACT = 'minor'
+            $env:PRERELEASE_LABEL = 'rc'
+            $env:GITHUB_OUTPUT = $outputPath
+
+            & $script:planMergedReleaseScriptPath
+        }
+        finally {
+            $env:GITHUB_REPOSITORY = $previousRepository
+            $env:RELEASE_IMPACT = $previousReleaseImpact
+            $env:PRERELEASE_LABEL = $previousPrereleaseLabel
+            $env:GITHUB_OUTPUT = $previousOutput
+        }
+
+        $output = Get-Content -LiteralPath $outputPath -Raw
+        $output | Should -Match 'should_release=true'
+        $output | Should -Match 'release_impact=minor'
+        $output | Should -Match 'release_version=2.4.0-rc'
+        $output | Should -Match 'release_tag=v2.4.0-rc'
+    }
+
     It 'plan-merged-release rejects breaking changes without a major release label' {
         function gh {
             $arguments = [String[]]$args
@@ -241,6 +287,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'workflow_run:'
         $workflow | Should -Match 'workflow_dispatch:'
         $workflow | Should -Match 'release_impact:'
+        $workflow | Should -Match 'prerelease:'
+        $workflow | Should -Match 'prerelease-label:'
         $workflow | Should -Match "ref: \$\{\{ github\.event_name == 'workflow_dispatch' && 'master' \|\| github\.event\.workflow_run\.head_sha \}\}"
         $workflow | Should -Match 'Commit release metadata'
         $workflow | Should -Match 'Publish tested release artifact'

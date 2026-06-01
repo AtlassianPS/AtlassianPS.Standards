@@ -14,6 +14,9 @@ inputs:
   release-impact:
     description: Optional manual release impact for releasing unreleased changes already on the checked-out branch.
     required: false
+  prerelease-label:
+    description: Optional prerelease label for manual releases. Valid values are alpha, beta, and rc.
+    required: false
 outputs:
   should_release:
     description: Whether the merged pull request should publish a release.
@@ -60,4 +63,5 @@ runs:
         COMMIT_SHA: ${{ inputs.commit-sha || github.sha }}
         CHANGELOG_DIRECTORY: ${{ inputs.changelog-directory }}
         RELEASE_IMPACT: ${{ inputs.release-impact }}
+        PRERELEASE_LABEL: ${{ inputs.prerelease-label }}
       run: ${{ github.action_path }}/plan-merged-release.ps1

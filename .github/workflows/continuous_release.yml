@@ -14,6 +14,16 @@ on:
           - patch
           - minor
           - major
+      prerelease:
+        description: Optional prerelease label for unreleased changes already on master
+        required: true
+        type: choice
+        default: stable
+        options:
+          - stable
+          - alpha
+          - beta
+          - rc
 
 concurrency:
   group: continuous-release
@@ -45,6 +55,7 @@ jobs:
         with:
           commit-sha: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
           release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release_impact || '' }}
+          prerelease-label: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease != 'stable' && inputs.prerelease || '' }}
 
       - name: Create generated changelog fragment
         if: steps.plan.outputs.should_release == 'true' && steps.plan.outputs.fragment_path != ''

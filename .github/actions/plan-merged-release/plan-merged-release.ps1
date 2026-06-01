@@ -25,7 +25,16 @@ if (-not $env:GITHUB_REPOSITORY) {
 $releaseImpact = $null
 $fragment = $null
 $manualReleaseImpact = if ($env:RELEASE_IMPACT) { $env:RELEASE_IMPACT.Trim().ToLowerInvariant() } else { '' }
+$prereleaseLabel = if ($env:PRERELEASE_LABEL) { $env:PRERELEASE_LABEL.Trim().ToLowerInvariant() } else { '' }
+if ($prereleaseLabel -and $prereleaseLabel -notin @('alpha', 'beta', 'rc')) {
+    throw "Prerelease label '$env:PRERELEASE_LABEL' must be alpha, beta, or rc."
+}
+
 $isManualRelease = -not [String]::IsNullOrWhiteSpace($manualReleaseImpact)
+if ($prereleaseLabel -and -not $isManualRelease) {
+    throw 'Prerelease labels are only supported for manual releases.'
+}
+
 if ($isManualRelease) {
     if ($manualReleaseImpact -notin @('patch', 'minor', 'major')) {
         throw "Manual release impact '$env:RELEASE_IMPACT' must be patch, minor, or major."
@@ -142,6 +151,9 @@ switch ($releaseImpact) {
 }
 
 $releaseVersion = '{0}.{1}.{2}' -f $nextMajor, $nextMinor, $nextPatch
+if ($prereleaseLabel) {
+    $releaseVersion = '{0}-{1}' -f $releaseVersion, $prereleaseLabel
+}
 $releaseTag = 'v{0}' -f $releaseVersion
 git show-ref --verify --quiet "refs/tags/$releaseTag"
 if ($LASTEXITCODE -eq 0) {
@@ -152,7 +164,12 @@ Write-OutputValue -Name should_release -Value 'true'
 Write-OutputValue -Name release_version -Value $releaseVersion
 Write-OutputValue -Name release_tag -Value $releaseTag
 if ($isManualRelease) {
-    Write-Host "Planned manual release $releaseTag with release:$releaseImpact."
+    if ($prereleaseLabel) {
+        Write-Host "Planned manual prerelease $releaseTag with release:$releaseImpact."
+    }
+    else {
+        Write-Host "Planned manual release $releaseTag with release:$releaseImpact."
+    }
 }
 else {
     Write-Host "Planned release $releaseTag from merged PR #$prNumber with release:$releaseImpact."
