@@ -156,9 +156,14 @@ if ($prereleaseLabel) {
 }
 $releaseTag = 'v{0}' -f $releaseVersion
 git show-ref --verify --quiet "refs/tags/$releaseTag"
-if ($LASTEXITCODE -eq 0) {
+$tagExistsExitCode = $LASTEXITCODE
+if ($tagExistsExitCode -eq 0) {
     throw "Computed release tag '$releaseTag' already exists."
 }
+if ($tagExistsExitCode -ne 1) {
+    throw "Unable to verify whether release tag '$releaseTag' exists. git show-ref exited with $tagExistsExitCode."
+}
+$global:LASTEXITCODE = 0
 
 Write-OutputValue -Name should_release -Value 'true'
 Write-OutputValue -Name release_version -Value $releaseVersion
