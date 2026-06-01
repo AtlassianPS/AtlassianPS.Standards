@@ -417,7 +417,7 @@ jobs:
         shell: pwsh
         run: |
           $message = '${{ github.event.workflow_run.head_commit.message }}'
-          if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+) release$') {
+          if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:-\d+)?)?) release$') {
               throw "Commit message '$message' is not a release metadata commit."
           }
 
@@ -470,12 +470,12 @@ jobs:
           files: ./Release/<ModuleName>.zip
           fail_on_unmatched_files: true
           draft: false
-          prerelease: ${{ contains(steps.release_ref.outputs.release_tag, 'alpha') || contains(steps.release_ref.outputs.release_tag, 'beta') || contains(steps.release_ref.outputs.release_tag, 'rc') }}
+          prerelease: ${{ contains(steps.release_ref.outputs.release_tag, '-alpha') || contains(steps.release_ref.outputs.release_tag, '-beta') || contains(steps.release_ref.outputs.release_tag, '-rc') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify homepage to update submodule
-        if: ${{ !contains(steps.release_ref.outputs.release_tag, 'alpha') && !contains(steps.release_ref.outputs.release_tag, 'beta') && !contains(steps.release_ref.outputs.release_tag, 'rc') }}
+        if: ${{ !contains(steps.release_ref.outputs.release_tag, '-alpha') && !contains(steps.release_ref.outputs.release_tag, '-beta') && !contains(steps.release_ref.outputs.release_tag, '-rc') }}
         uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.HOMEPAGE_PAT }}
