@@ -15,15 +15,9 @@ on:
           - minor
           - major
       prerelease:
-        description: Optional prerelease label for unreleased changes already on master
-        required: true
-        type: choice
-        default: stable
-        options:
-          - stable
-          - alpha
-          - beta
-          - rc
+        description: Optional prerelease label for unreleased changes already on master, for example alpha, beta, rc, or rc-2
+        required: false
+        type: string
 
 concurrency:
   group: continuous-release
@@ -55,7 +49,7 @@ jobs:
         with:
           commit-sha: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
           release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release_impact || '' }}
-          prerelease-label: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease != 'stable' && inputs.prerelease || '' }}
+          prerelease-label: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || '' }}
 
       - name: Create generated changelog fragment
         if: steps.plan.outputs.should_release == 'true' && steps.plan.outputs.fragment_path != ''
@@ -134,7 +128,7 @@ jobs:
         shell: pwsh
         run: |
           $message = '${{ github.event.workflow_run.head_commit.message }}'
-          if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+) release$') {
+          if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:-\d+)?)?) release$') {
               throw "Commit message '$message' is not a release metadata commit."
           }
 
@@ -192,12 +186,12 @@ jobs:
           files: ./Release/AtlassianPS.Standards.zip
           fail_on_unmatched_files: true
           draft: false
-          prerelease: ${{ contains(steps.release_ref.outputs.release_tag, 'alpha') || contains(steps.release_ref.outputs.release_tag, 'beta') || contains(steps.release_ref.outputs.release_tag, 'rc') }}
+          prerelease: ${{ contains(steps.release_ref.outputs.release_tag, '-alpha') || contains(steps.release_ref.outputs.release_tag, '-beta') || contains(steps.release_ref.outputs.release_tag, '-rc') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify homepage to update submodule
-        if: ${{ !contains(steps.release_ref.outputs.release_tag, 'alpha') && !contains(steps.release_ref.outputs.release_tag, 'beta') && !contains(steps.release_ref.outputs.release_tag, 'rc') }}
+        if: ${{ !contains(steps.release_ref.outputs.release_tag, '-alpha') && !contains(steps.release_ref.outputs.release_tag, '-beta') && !contains(steps.release_ref.outputs.release_tag, '-rc') }}
         uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.HOMEPAGE_PAT }}
