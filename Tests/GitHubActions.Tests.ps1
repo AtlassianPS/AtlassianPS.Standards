@@ -210,7 +210,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         try {
             $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
             $env:RELEASE_IMPACT = 'minor'
-            $env:PRERELEASE_LABEL = 'rc'
+            $env:PRERELEASE_LABEL = 'rc-2'
             $env:GITHUB_OUTPUT = $outputPath
 
             & $script:planMergedReleaseScriptPath
@@ -225,8 +225,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output = Get-Content -LiteralPath $outputPath -Raw
         $output | Should -Match 'should_release=true'
         $output | Should -Match 'release_impact=minor'
-        $output | Should -Match 'release_version=2.4.0-rc'
-        $output | Should -Match 'release_tag=v2.4.0-rc'
+        $output | Should -Match 'release_version=2.4.0-rc-2'
+        $output | Should -Match 'release_tag=v2.4.0-rc-2'
     }
 
     It 'plan-merged-release rejects breaking changes without a major release label' {
@@ -296,6 +296,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'Publish tested module artifact'
         $workflow | Should -Match 'Publish-Module -Path ./Release/AtlassianPS\.Standards'
         $workflow | Should -Not -Match 'Invoke-Build -Task Build, SetVersion'
+        $workflow | Should -Match 'v\\d\+\\\.\\d\+\\\.\\d\+\(\?:-\(\?:alpha\|beta\|rc\)\(\?:-\\d\+\)\?\)\?'
+        $workflow | Should -Match "contains\(steps\.release_ref\.outputs\.release_tag, '-alpha'\)"
         $workflow | Should -Match 'Create GitHub release and upload asset'
         $workflow | Should -Match 'Notify homepage to update submodule'
         $workflow | Should -Match 'git push "https://x-access-token:\$\{RELEASE_BOT_TOKEN\}@github\.com/\$\{GITHUB_REPOSITORY\}\.git" HEAD:master'
@@ -318,6 +320,17 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $releaseIndex | Should -BeGreaterThan $publishModuleIndex
         $homepageIndex | Should -BeGreaterThan $releaseIndex
         $workflow | Should -Match 'git add CHANGELOG\.md \.changelog AtlassianPS\.Standards/AtlassianPS\.Standards\.psd1'
+    }
+
+    It 'does not keep publish tasks in the build script' {
+        $buildScriptPath = Join-Path -Path $projectRoot -ChildPath 'AtlassianPS.Standards.build.ps1'
+        $buildScript = Get-Content -LiteralPath $buildScriptPath -Raw
+
+        $buildScript | Should -Not -Match '(?m)^Task Publish\b'
+        $buildScript | Should -Not -Match '(?m)^Task Package\b'
+        $buildScript | Should -Not -Match 'PSGalleryAPIKey'
+        $buildScript | Should -Match '(?m)^Task SetVersion\b'
+        $buildScript | Should -Match '(?m)^Task TestPublish\b'
     }
 
     It 'does not keep a non-idempotent tag release workflow beside continuous release' {

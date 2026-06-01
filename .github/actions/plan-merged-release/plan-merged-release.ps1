@@ -26,8 +26,8 @@ $releaseImpact = $null
 $fragment = $null
 $manualReleaseImpact = if ($env:RELEASE_IMPACT) { $env:RELEASE_IMPACT.Trim().ToLowerInvariant() } else { '' }
 $prereleaseLabel = if ($env:PRERELEASE_LABEL) { $env:PRERELEASE_LABEL.Trim().ToLowerInvariant() } else { '' }
-if ($prereleaseLabel -and $prereleaseLabel -notin @('alpha', 'beta', 'rc')) {
-    throw "Prerelease label '$env:PRERELEASE_LABEL' must be alpha, beta, or rc."
+if ($prereleaseLabel -and $prereleaseLabel -notmatch '^(?:alpha|beta|rc)(?:-\d+)?$') {
+    throw "Prerelease label '$env:PRERELEASE_LABEL' must be alpha, beta, rc, or a numbered form like rc-2."
 }
 
 $isManualRelease = -not [String]::IsNullOrWhiteSpace($manualReleaseImpact)

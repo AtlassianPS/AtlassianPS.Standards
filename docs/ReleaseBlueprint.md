@@ -55,8 +55,8 @@ Use a dedicated release automation token, for example `ATLASSIANPS_RELEASE_BOT_T
 When unreleased changes already exist on `master` without an associated merged release-labelled PR, use the manual `workflow_dispatch` input on `continuous_release.yml` and choose the release impact for the whole bucket.
 Manual dispatch must still check out `master`, not the arbitrary ref selected in the GitHub UI.
 The manual path does not generate a PR-title changelog fragment; it releases the existing `## Unreleased` body and any existing `.changelog/*.md` fragments.
-For prereleases, choose `alpha`, `beta`, or `rc` in the manual `prerelease` input.
-The generated tag and changelog section use `vX.Y.Z-alpha`, `vX.Y.Z-beta`, or `vX.Y.Z-rc`; `Set-AtlassianPSModuleManifestVersion` writes the manifest `PrivateData.PSData.Prerelease` label, and the GitHub release is marked as a prerelease.
+For prereleases, enter `alpha`, `beta`, `rc`, or a numbered form like `rc-2` in the manual `prerelease` input.
+The generated tag and changelog section use forms like `vX.Y.Z-alpha`, `vX.Y.Z-beta`, `vX.Y.Z-rc`, or `vX.Y.Z-rc-2`; `Set-AtlassianPSModuleManifestVersion` writes the manifest `PrivateData.PSData.Prerelease` label, and the GitHub release is marked as a prerelease.
 
 ## Release Recovery
 
@@ -310,15 +310,9 @@ on:
           - minor
           - major
       prerelease:
-        description: Optional prerelease label for unreleased changes already on master
-        required: true
-        type: choice
-        default: stable
-        options:
-          - stable
-          - alpha
-          - beta
-          - rc
+        description: Optional prerelease label for unreleased changes already on master, for example alpha, beta, rc, or rc-2
+        required: false
+        type: string
 
 concurrency:
   group: continuous-release
@@ -351,7 +345,7 @@ jobs:
         with:
           commit-sha: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
           release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release_impact || '' }}
-          prerelease-label: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease != 'stable' && inputs.prerelease || '' }}
+          prerelease-label: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || '' }}
 
       - name: Create generated changelog fragment
         if: steps.plan.outputs.should_release == 'true' && steps.plan.outputs.fragment_path != ''
@@ -500,7 +494,7 @@ Use the manual dispatch path of `continuous_release.yml` instead:
 
 1. Inspect `CHANGELOG.md` and `.changelog/*.md` to understand the pending release notes.
 2. Choose the highest required impact: `major` beats `minor`, `minor` beats `patch`.
-3. Run `continuous_release.yml` with `release_impact` set to that impact; use `prerelease: stable` for a stable release or `alpha`, `beta`, or `rc` for a prerelease.
+3. Run `continuous_release.yml` with `release_impact` set to that impact; leave `prerelease` empty for a stable release or enter `alpha`, `beta`, `rc`, or a numbered form like `rc-2` for a prerelease.
 4. Monitor the run until the release metadata commit, annotated tag, PSGallery publish, GitHub release, and website dispatch for stable releases complete.
 
 The manual path computes the next version from existing stable `vX.Y.Z` tags and folds the current `## Unreleased` body plus all valid changelog fragments into that version section.
@@ -531,10 +525,9 @@ git diff --check
 
 ```powershell
 Invoke-Build -Task Lint, Build, Test
-Invoke-Build -Task Build, SetVersion -VersionToPublish vX.Y.Z
 ```
 
-Use a local throwaway version for the `SetVersion` preflight only after `CHANGELOG.md` has a matching section.
+Optionally use a local throwaway version for a `SetVersion` preflight only after `CHANGELOG.md` has a matching section.
 If no release section exists yet, test the parser by preparing a temporary changelog section and revert that temporary change before opening the PR.
 
 ## Release Preparation
@@ -551,14 +544,14 @@ This moves pending `## Unreleased` content and valid `.changelog/*.md` fragments
 The generated release-notes file is written outside the repository by default; commit only `CHANGELOG.md` and consumed fragment deletions.
 In the continuous release flow, the trusted workflow creates and commits these changes automatically after the labelled PR merges.
 The same release metadata commit should update the source module manifest so `CHANGELOG.md`, the tag, the repository manifest, the GitHub release body, and PSGallery metadata all describe the same version.
-For manual/tag releases, review the generated changelog before tagging the release.
+For manual release preparation outside the continuous release workflow, review the generated changelog before tagging the release.
 
 ```powershell
 Invoke-Build -Task Build, Test
-Invoke-Build -Task Build, SetVersion -VersionToPublish vX.Y.Z
 ```
 
-If the second command cannot find a matching changelog section, do not tag the release.
+Optionally run `Invoke-Build -Task Build, SetVersion -VersionToPublish vX.Y.Z` as a local metadata preflight.
+If the preflight cannot find a matching changelog section, do not tag the release.
 
 ## Common Mistakes
 
