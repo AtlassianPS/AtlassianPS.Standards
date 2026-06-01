@@ -59,6 +59,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             }
 
             if ($arguments[0] -eq 'show-ref') {
+                Set-Variable -Name LASTEXITCODE -Value 1 -Scope 1
                 return
             }
 
@@ -139,29 +140,27 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
     }
 
     It 'plan-merged-release computes a manual release without generating a PR fragment' {
-        function git {
-            $arguments = [String[]]$args
-            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--list') {
-                'v2.3.4'
-                return
-            }
-
-            if ($arguments[0] -eq 'show-ref') {
-                return
-            }
-
-            throw "Unexpected git invocation: $($arguments -join ' ')"
-        }
-
         function gh {
             throw "Unexpected gh invocation: $($args -join ' ')"
         }
 
+        $repositoryPath = Join-Path -Path $TestDrive -ChildPath 'manual-release-repo'
         $outputPath = Join-Path -Path $TestDrive -ChildPath 'github-output.txt'
         $previousRepository = $env:GITHUB_REPOSITORY
         $previousReleaseImpact = $env:RELEASE_IMPACT
         $previousOutput = $env:GITHUB_OUTPUT
+        $pushedLocation = $false
         try {
+            $null = New-Item -Path $repositoryPath -ItemType Directory
+            Push-Location -Path $repositoryPath
+            $pushedLocation = $true
+            git init | Out-Null
+            Set-Content -LiteralPath (Join-Path -Path $repositoryPath -ChildPath 'README.md') -Value 'test'
+            git add README.md
+            git -c user.name='Test User' -c user.email='test@example.invalid' commit -m 'Initial commit' | Out-Null
+            git tag -a v2.3.4 -m v2.3.4
+            Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
+
             $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
             $env:RELEASE_IMPACT = 'patch'
             $env:GITHUB_OUTPUT = $outputPath
@@ -172,6 +171,9 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             $env:GITHUB_REPOSITORY = $previousRepository
             $env:RELEASE_IMPACT = $previousReleaseImpact
             $env:GITHUB_OUTPUT = $previousOutput
+            if ($pushedLocation) {
+                Pop-Location
+            }
         }
 
         $output = Get-Content -LiteralPath $outputPath -Raw
@@ -181,6 +183,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output | Should -Match 'release_tag=v2.3.5'
         $output | Should -Not -Match 'fragment_path='
         $output | Should -Not -Match 'fragment_content='
+        $LASTEXITCODE | Should -Be 0
     }
 
     It 'plan-merged-release computes a manual prerelease tag' {
@@ -192,6 +195,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             }
 
             if ($arguments[0] -eq 'show-ref') {
+                Set-Variable -Name LASTEXITCODE -Value 1 -Scope 1
                 return
             }
 
