@@ -29,6 +29,7 @@ $prereleaseLabel = if ($env:PRERELEASE_LABEL) { $env:PRERELEASE_LABEL.Trim().ToL
 if ($prereleaseLabel -and $prereleaseLabel -notmatch '^(?:alpha|beta|rc)(?:-\d+)?$') {
     throw "Prerelease label '$env:PRERELEASE_LABEL' must be alpha, beta, rc, or a numbered form like rc-2."
 }
+}
 
 $isManualRelease = -not [String]::IsNullOrWhiteSpace($manualReleaseImpact)
 if ($prereleaseLabel -and -not $isManualRelease) {
@@ -156,6 +157,11 @@ if ($prereleaseLabel) {
 }
 $releaseTag = 'v{0}' -f $releaseVersion
 git show-ref --verify --quiet "refs/tags/$releaseTag"
+<<<<<<< HEAD
+if ($LASTEXITCODE -eq 0) {
+    throw "Computed release tag '$releaseTag' already exists."
+}
+=======
 $tagExistsExitCode = $LASTEXITCODE
 if ($tagExistsExitCode -eq 0) {
     throw "Computed release tag '$releaseTag' already exists."
@@ -164,6 +170,7 @@ if ($tagExistsExitCode -ne 1) {
     throw "Unable to verify whether release tag '$releaseTag' exists. git show-ref exited with $tagExistsExitCode."
 }
 $global:LASTEXITCODE = 0
+>>>>>>> origin/master
 
 Write-OutputValue -Name should_release -Value 'true'
 Write-OutputValue -Name release_version -Value $releaseVersion
