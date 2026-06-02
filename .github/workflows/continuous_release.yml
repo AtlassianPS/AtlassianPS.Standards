@@ -90,12 +90,18 @@ jobs:
         shell: bash
         env:
           RELEASE_BOT_TOKEN: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
-          if [ -z "${RELEASE_BOT_TOKEN:-}" ]; then
-            echo "::error::ATLASSIANPS_RELEASE_BOT_TOKEN is required so the release metadata commit triggers CI."
+          push_token="${RELEASE_BOT_TOKEN:-${GITHUB_TOKEN:-}}"
+          if [ -z "${push_token}" ]; then
+            echo "::error::No token available for pushing release metadata."
             exit 1
+          fi
+
+          if [ -z "${RELEASE_BOT_TOKEN:-}" ]; then
+            echo "::notice::ATLASSIANPS_RELEASE_BOT_TOKEN is not configured. Falling back to GITHUB_TOKEN."
           fi
 
           if git diff --quiet -- CHANGELOG.md .changelog AtlassianPS.Standards/AtlassianPS.Standards.psd1; then
@@ -107,7 +113,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md .changelog AtlassianPS.Standards/AtlassianPS.Standards.psd1
           git commit -m "Prepare ${{ steps.plan.outputs.release_tag }} release"
-          git push "https://x-access-token:${RELEASE_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
+
+          if ! git push "https://x-access-token:${push_token}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master; then
+            if [ -z "${RELEASE_BOT_TOKEN:-}" ]; then
+              echo "::error::Push with GITHUB_TOKEN failed. Configure ATLASSIANPS_RELEASE_BOT_TOKEN when branch protection prevents direct pushes."
+            fi
+            exit 1
+          fi
 
   publish:
     name: Publish tested release artifact

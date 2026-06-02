@@ -288,6 +288,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
         $workflow | Should -Match 'ATLASSIANPS_RELEASE_BOT_TOKEN'
+        $workflow | Should -Match 'GITHUB_TOKEN: \$\{\{ github\.token \}\}'
         $workflow | Should -Match 'workflow_run:'
         $workflow | Should -Match 'workflow_dispatch:'
         $workflow | Should -Match 'release_impact:'
@@ -304,7 +305,10 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match "contains\(steps\.release_ref\.outputs\.release_tag, '-alpha'\)"
         $workflow | Should -Match 'Create GitHub release and upload asset'
         $workflow | Should -Match 'Notify homepage to update submodule'
-        $workflow | Should -Match 'git push "https://x-access-token:\$\{RELEASE_BOT_TOKEN\}@github\.com/\$\{GITHUB_REPOSITORY\}\.git" HEAD:master'
+        $workflow | Should -Match 'push_token="\$\{RELEASE_BOT_TOKEN:-\$\{GITHUB_TOKEN:-\}\}"'
+        $workflow | Should -Match 'Falling back to GITHUB_TOKEN'
+        $workflow | Should -Match 'git push "https://x-access-token:\$\{push_token\}@github\.com/\$\{GITHUB_REPOSITORY\}\.git" HEAD:master'
+        $workflow | Should -Match 'Configure ATLASSIANPS_RELEASE_BOT_TOKEN when branch protection prevents direct pushes'
         $workflow | Should -Match 'repository: AtlassianPS/AtlassianPS\.github\.io'
         $workflow | Should -Match 'event-type: module-release'
 
