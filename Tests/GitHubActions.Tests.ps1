@@ -59,6 +59,10 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             }
 
             if ($arguments[0] -eq 'show-ref') {
+<<<<<<< HEAD
+=======
+                Set-Variable -Name LASTEXITCODE -Value 1 -Scope 1
+>>>>>>> origin/master
                 return
             }
 
@@ -139,6 +143,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
     }
 
     It 'plan-merged-release computes a manual release without generating a PR fragment' {
+<<<<<<< HEAD
         function git {
             $arguments = [String[]]$args
             if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--list') {
@@ -153,15 +158,36 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             throw "Unexpected git invocation: $($arguments -join ' ')"
         }
 
+=======
+>>>>>>> origin/master
         function gh {
             throw "Unexpected gh invocation: $($args -join ' ')"
         }
 
+<<<<<<< HEAD
+=======
+        $repositoryPath = Join-Path -Path $TestDrive -ChildPath 'manual-release-repo'
+>>>>>>> origin/master
         $outputPath = Join-Path -Path $TestDrive -ChildPath 'github-output.txt'
         $previousRepository = $env:GITHUB_REPOSITORY
         $previousReleaseImpact = $env:RELEASE_IMPACT
         $previousOutput = $env:GITHUB_OUTPUT
+<<<<<<< HEAD
         try {
+=======
+        $pushedLocation = $false
+        try {
+            $null = New-Item -Path $repositoryPath -ItemType Directory
+            Push-Location -Path $repositoryPath
+            $pushedLocation = $true
+            git init | Out-Null
+            Set-Content -LiteralPath (Join-Path -Path $repositoryPath -ChildPath 'README.md') -Value 'test'
+            git add README.md
+            git -c user.name='Test User' -c user.email='test@example.invalid' commit -m 'Initial commit' | Out-Null
+            git tag -a v2.3.4 -m v2.3.4
+            Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
+
+>>>>>>> origin/master
             $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
             $env:RELEASE_IMPACT = 'patch'
             $env:GITHUB_OUTPUT = $outputPath
@@ -172,6 +198,12 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             $env:GITHUB_REPOSITORY = $previousRepository
             $env:RELEASE_IMPACT = $previousReleaseImpact
             $env:GITHUB_OUTPUT = $previousOutput
+<<<<<<< HEAD
+=======
+            if ($pushedLocation) {
+                Pop-Location
+            }
+>>>>>>> origin/master
         }
 
         $output = Get-Content -LiteralPath $outputPath -Raw
@@ -181,6 +213,10 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output | Should -Match 'release_tag=v2.3.5'
         $output | Should -Not -Match 'fragment_path='
         $output | Should -Not -Match 'fragment_content='
+<<<<<<< HEAD
+=======
+        $LASTEXITCODE | Should -Be 0
+>>>>>>> origin/master
     }
 
     It 'plan-merged-release computes a manual prerelease tag' {
@@ -192,6 +228,10 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             }
 
             if ($arguments[0] -eq 'show-ref') {
+<<<<<<< HEAD
+=======
+                Set-Variable -Name LASTEXITCODE -Value 1 -Scope 1
+>>>>>>> origin/master
                 return
             }
 
@@ -210,7 +250,11 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         try {
             $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
             $env:RELEASE_IMPACT = 'minor'
+<<<<<<< HEAD
             $env:PRERELEASE_LABEL = 'rc'
+=======
+            $env:PRERELEASE_LABEL = 'rc-2'
+>>>>>>> origin/master
             $env:GITHUB_OUTPUT = $outputPath
 
             & $script:planMergedReleaseScriptPath
@@ -225,8 +269,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output = Get-Content -LiteralPath $outputPath -Raw
         $output | Should -Match 'should_release=true'
         $output | Should -Match 'release_impact=minor'
-        $output | Should -Match 'release_version=2.4.0-rc'
-        $output | Should -Match 'release_tag=v2.4.0-rc'
+<<        $output | Should -Match 'release_version=2.4.0-rc-2'
+        $output | Should -Match 'release_tag=v2.4.0-rc-2'
     }
 
     It 'plan-merged-release rejects breaking changes without a major release label' {
@@ -284,6 +328,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
         $workflow | Should -Match 'ATLASSIANPS_RELEASE_BOT_TOKEN'
+        $workflow | Should -Match 'GITHUB_TOKEN: \${{ github\.token }}'
         $workflow | Should -Match 'workflow_run:'
         $workflow | Should -Match 'workflow_dispatch:'
         $workflow | Should -Match 'release_impact:'
@@ -296,9 +341,14 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'Publish tested module artifact'
         $workflow | Should -Match 'Publish-Module -Path ./Release/AtlassianPS\.Standards'
         $workflow | Should -Not -Match 'Invoke-Build -Task Build, SetVersion'
+        $workflow | Should -Match 'v\\d+\\.\\d+\\.\\d+(?:-(?:alpha|beta|rc)(?:-\\d+)?)?'
+        $workflow | Should -Match "contains(steps.release_ref.outputs.release_tag, '-alpha')"
         $workflow | Should -Match 'Create GitHub release and upload asset'
         $workflow | Should -Match 'Notify homepage to update submodule'
-        $workflow | Should -Match 'git push "https://x-access-token:\$\{RELEASE_BOT_TOKEN\}@github\.com/\$\{GITHUB_REPOSITORY\}\.git" HEAD:master'
+        $workflow | Should -Match 'push_token="\${{RELEASE_BOT_TOKEN:-\${{GITHUB_TOKEN:-}}}}"'
+        $workflow | Should -Match 'Falling back to GITHUB_TOKEN'
+        $workflow | Should -Match 'git push "https://x-access-token:\${push_token}@github\.com/\${GITHUB_REPOSITORY}\.git" HEAD:master'
+        $workflow | Should -Match 'Configure ATLASSIANPS_RELEASE_BOT_TOKEN when branch protection prevents direct pushes'
         $workflow | Should -Match 'repository: AtlassianPS/AtlassianPS\.github\.io'
         $workflow | Should -Match 'event-type: module-release'
 
@@ -320,6 +370,16 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'git add CHANGELOG\.md \.changelog AtlassianPS\.Standards/AtlassianPS\.Standards\.psd1'
     }
 
+    It 'does not keep publish tasks in the build script' {
+        $buildScriptPath = Join-Path -Path $projectRoot -ChildPath 'AtlassianPS.Standards.build.ps1'
+        $buildScript = Get-Content -LiteralPath $buildScriptPath -Raw
+
+        $buildScript | Should -Not -Match '(?m)^Task Publish\b'
+        $buildScript | Should -Not -Match '(?m)^Task Package\b'
+        $buildScript | Should -Not -Match 'PSGalleryAPIKey'
+        $buildScript | Should -Match '(?m)^Task SetVersion\b'
+        $buildScript | Should -Match '(?m)^Task TestPublish\b'
+    }
     It 'does not keep a non-idempotent tag release workflow beside continuous release' {
         $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/release.yml'
 

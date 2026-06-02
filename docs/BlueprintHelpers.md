@@ -12,7 +12,7 @@ Consumers call commands with the prefixed names, for example `Test-AtlassianPSMo
 | Area | Helpers | Contract |
 |------|---------|----------|
 | Build output | `Copy-ModuleArtifacts`, `Join-ModuleSource` | Copy release artifacts and merge module source folders into the release `.psm1`. |
-| Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set publish-time version and release notes, create the release zip, and validate the package contains the expected manifest. |
+| Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set release metadata, create a local package zip, and validate the package contains the expected manifest. |
 | External help | `Update-ExternalHelp`, `Remove-OrphanedExternalHelp` | Generate PlatyPS external help and remove generated help files that no longer have markdown sources. |
 | Test bootstrap | `Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment` | Resolve repository/module paths and import the module under test for Pester. |
 | Environment loading | `Import-DotEnvFile` | Load `.env` values into process-scoped environment variables without emitting secret values. |
@@ -49,6 +49,7 @@ Task UpdateManifest {
 ## Publish Dry Run
 
 Package validation is intentionally two visible steps: create the package, then validate it.
+Continuous release publishes the CI-tested `Release` artifact directly; repository build scripts should not keep separate `Publish` or `Package` tasks for the release path.
 
 ```powershell
 Task TestPublish Build, {

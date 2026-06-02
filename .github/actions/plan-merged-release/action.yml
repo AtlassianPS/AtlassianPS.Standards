@@ -15,7 +15,7 @@ inputs:
     description: Optional manual release impact for releasing unreleased changes already on the checked-out branch.
     required: false
   prerelease-label:
-    description: Optional prerelease label for manual releases. Valid values are alpha, beta, and rc.
+    description: Optional prerelease label for manual releases. Valid values are alpha, beta, rc, or numbered forms like rc-2.
     required: false
 outputs:
   should_release:
