@@ -103,6 +103,16 @@
         }
 
         Update-ModuleManifest @parameters
+
+        $content = [System.IO.File]::ReadAllText($BuiltManifestPath)
+        $normalizedContent = $content -replace "`r`n", "`n" -replace "`r", "`n"
+        if ($normalizedContent.Length -gt 0 -and -not $normalizedContent.EndsWith("`n")) {
+            $normalizedContent += "`n"
+        }
+
+        $normalizedContent = $normalizedContent -replace "`n", "`r`n"
+        $utf8Bom = [System.Text.UTF8Encoding]::new($true)
+        [System.IO.File]::WriteAllText($BuiltManifestPath, $normalizedContent, $utf8Bom)
     }
 
     return $versionString
