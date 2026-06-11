@@ -50,7 +50,8 @@ After CI succeeds on a normal merged pull request with `release:patch`, `release
 
 `release:none` merges should stop after planning and must not publish.
 The workflow should be serialized with concurrency so multiple release-labelled merges do not race the next-version calculation.
-Use a dedicated release automation token, for example `ATLASSIANPS_RELEASE_BOT_TOKEN`, when committing release metadata to `master` so the follow-up CI run is triggered reliably.
+Use `GITHUB_TOKEN` by default when committing release metadata to `master`.
+Keep an optional release automation token, for example `ATLASSIANPS_RELEASE_BOT_TOKEN`, only for repositories where branch protection or repository rules block `GITHUB_TOKEN` pushes.
 
 When unreleased changes already exist on `master` without an associated merged release-labelled PR, use the manual `workflow_dispatch` input on `continuous_release.yml` and choose the release impact for the whole bucket.
 Manual dispatch must still check out `master`, not the arbitrary ref selected in the GitHub UI.
@@ -337,7 +338,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.event.workflow_run.head_sha }}
-          token: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN || github.token }}
 
       - name: Plan release
         id: plan
@@ -384,8 +384,21 @@ jobs:
       - name: Commit release metadata
         if: steps.plan.outputs.should_release == 'true'
         shell: bash
+        env:
+          RELEASE_BOT_TOKEN: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+
+          push_token="${RELEASE_BOT_TOKEN:-${GITHUB_TOKEN:-}}"
+          if [ -z "${push_token}" ]; then
+            echo "::error::No token available for pushing release metadata."
+            exit 1
+          fi
+
+          if [ -z "${RELEASE_BOT_TOKEN:-}" ]; then
+            echo "::notice::ATLASSIANPS_RELEASE_BOT_TOKEN is not configured. Falling back to GITHUB_TOKEN."
+          fi
 
           if git diff --quiet -- CHANGELOG.md .changelog <ModuleName>/<ModuleName>.psd1; then
             echo "::error::Release planning produced no changelog or manifest changes."
@@ -396,7 +409,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md .changelog <ModuleName>/<ModuleName>.psd1
           git commit -m "Prepare ${{ steps.plan.outputs.release_tag }} release"
-          git push "https://x-access-token:${RELEASE_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
+
+          if ! git push "https://x-access-token:${push_token}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master; then
+            if [ -z "${RELEASE_BOT_TOKEN:-}" ]; then
+              echo "::error::Push with GITHUB_TOKEN failed. Configure ATLASSIANPS_RELEASE_BOT_TOKEN when branch protection prevents direct pushes."
+            fi
+            exit 1
+          fi
 
   publish:
     name: Publish tested release artifact
