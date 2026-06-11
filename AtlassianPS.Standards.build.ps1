@@ -8,9 +8,6 @@ param(
     [String]$VersionToPublish,
 
     [Parameter()]
-    [String]$PSGalleryAPIKey,
-
-    [Parameter()]
     [String[]]$Tag,
 
     [Parameter()]
@@ -97,15 +94,6 @@ Task Test {
         -ResultOutputPath $resultOutputPath
 }
 
-Task Publish SetVersion, Package, {
-    $releasePath = Join-Path -Path $env:BHBuildOutput -ChildPath $env:BHProjectName
-    if (-not (Test-Path -LiteralPath $releasePath -PathType Container)) {
-        throw "Expected release path '$releasePath' does not exist. Run the Build task before publishing."
-    }
-
-    Publish-Module -Path $releasePath -NuGetApiKey $PSGalleryAPIKey -ErrorAction Stop
-}
-
 Task SetVersion {
     if (-not $script:BuildInfo.VersionToPublish) {
         throw 'VersionToPublish is required for SetVersion. Use -VersionToPublish <semver>.'
@@ -119,12 +107,6 @@ Task SetVersion {
         -ModuleName $env:BHProjectName `
         -VersionToPublish $script:BuildInfo.VersionToPublish `
         -ReleaseNotes $releaseNotes
-}
-
-Task Package {
-    $null = New-AtlassianPSModulePackage `
-        -BuildOutputPath $env:BHBuildOutput `
-        -ModuleName $env:BHProjectName
 }
 
 Task TestPublish Build, {

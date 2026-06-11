@@ -12,7 +12,7 @@ Consumers call commands with the prefixed names, for example `Test-AtlassianPSMo
 | Area | Helpers | Contract |
 |------|---------|----------|
 | Build output | `Copy-ModuleArtifacts`, `Join-ModuleSource` | Copy release artifacts and merge module source folders into the release `.psm1`. |
-| Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set publish-time version and release notes, create the release zip, and validate the package contains the expected manifest. |
+| Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set release metadata, create a local package zip, and validate the package contains the expected manifest. |
 | External help | `Update-ExternalHelp`, `Remove-OrphanedExternalHelp` | Generate PlatyPS external help and remove generated help files that no longer have markdown sources. |
 | Test bootstrap | `Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment` | Resolve repository/module paths and import the module under test for Pester. |
 | Environment loading | `Import-DotEnvFile` | Load `.env` values into process-scoped environment variables without emitting secret values. |
@@ -49,6 +49,7 @@ Task UpdateManifest {
 ## Publish Dry Run
 
 Package validation is intentionally two visible steps: create the package, then validate it.
+Continuous release publishes the CI-tested `Release` artifact directly; repository build scripts should not keep separate `Publish` or `Package` tasks for the release path.
 
 ```powershell
 Task TestPublish Build, {
@@ -100,9 +101,11 @@ Task SetVersion {
 
 ## Release Changelog Preparation
 
-Release-preparation PRs should fold pending changelog entries and custom fragments into the next version section, then delete the consumed fragments.
+Release automation should fold pending changelog entries and custom fragments into the next version section, then delete the consumed fragments.
 Use the `prepare-release-changelog` composite action instead of exporting another module helper for GitHub-only release mechanics.
-Commit the resulting `CHANGELOG.md` update and `.changelog` deletions in the release-preparation PR.
+In the continuous release workflow, commit the resulting `CHANGELOG.md` update and `.changelog` deletions directly to `master` after a release-labelled PR merges.
+Commit the source module manifest version and release notes in that same release metadata commit so repository readers do not see drift between the tag, changelog, and manifest metadata.
+For manual release preparation, commit the same files before tagging the release.
 
 ```yaml
 - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/prepare-release-changelog@<standards-sha>
@@ -112,6 +115,9 @@ Commit the resulting `CHANGELOG.md` update and `.changelog` deletions in the rel
 
 The action creates `## v1.2.3 - YYYY-MM-DD` immediately after `## Unreleased`, moves any existing Unreleased body plus valid `.changelog/*.md` fragment contents into that section, and deletes only the consumed fragments.
 By default, the generated release-notes output file is written under the runner temp directory so release-preparation PRs only need to commit `CHANGELOG.md` and `.changelog` deletions.
+
+Use the `plan-merged-release` composite action from trusted `push` workflows to resolve a merged PR's release labels, compute the next stable semver tag, and generate a standard fragment when the PR used a `changelog:*` label.
+It does not publish by itself; the workflow remains responsible for committing the prepared changelog, validating the release, creating the annotated tag, publishing to PSGallery, and creating the GitHub release.
 
 ## External Help
 

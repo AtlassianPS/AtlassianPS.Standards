@@ -116,12 +116,12 @@ Describe 'Set-ModuleManifestVersion' {
             $version = Set-ModuleManifestVersion `
                 -BuiltManifestPath $BuiltManifestPath `
                 -ModuleName 'AtlassianPS.Standards' `
-                -VersionToPublish 'v1.2.3-alpha' `
+                -VersionToPublish 'v1.2.3-rc-2' `
                 -ReleaseNotes '- Added dependency flow'
 
             $version | Should -Be '1.2.3'
             Should -Invoke -CommandName Update-ModuleManifest -Times 1 -Exactly -Scope It -ParameterFilter {
-                $ModuleVersion -eq '1.2.3' -and $Prerelease -eq 'alpha' -and $ReleaseNotes -eq '- Added dependency flow'
+                $ModuleVersion -eq '1.2.3' -and $Prerelease -eq 'rc-2' -and $ReleaseNotes -eq '- Added dependency flow'
             }
         }
     }
