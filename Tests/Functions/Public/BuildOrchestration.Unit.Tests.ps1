@@ -167,6 +167,44 @@ Describe 'Set-ModuleManifestVersion' {
         }
     }
 
+    It 'normalizes manifest encoding and line endings after update' {
+        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-formatting.psd1'
+        [System.IO.File]::WriteAllText(
+            $manifestPath,
+            "@{`n    ModuleVersion = '0.1.0'`n}`n",
+            [System.Text.UTF8Encoding]::new($false)
+        )
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            BuiltManifestPath = $manifestPath
+        } {
+            param($BuiltManifestPath)
+
+            Mock -CommandName Find-Module -MockWith { $null }
+            Mock -CommandName Update-ModuleManifest -MockWith {
+                param([string]$Path, [string]$ModuleVersion)
+
+                [System.IO.File]::WriteAllText(
+                    $Path,
+                    "@{`nModuleVersion = '$ModuleVersion'`n}`n",
+                    [System.Text.UTF8Encoding]::new($false)
+                )
+            }
+
+            $null = Set-ModuleManifestVersion `
+                -BuiltManifestPath $BuiltManifestPath `
+                -ModuleName 'AtlassianPS.Standards' `
+                -VersionToPublish '1.2.5'
+
+            $bytes = [System.IO.File]::ReadAllBytes($BuiltManifestPath)
+            @($bytes[0], $bytes[1], $bytes[2]) | Should -Be @(239, 187, 191)
+
+            $content = [System.IO.File]::ReadAllText($BuiltManifestPath)
+            $content | Should -Match "`r`n"
+            $content.Replace("`r`n", '') | Should -Not -Match "`n"
+        }
+    }
+
     It 'throws when release notes are blank' {
         $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-empty-release-notes.psd1'
         Set-Content -LiteralPath $manifestPath -Value "@{ ModuleVersion = '0.1.0' }"
