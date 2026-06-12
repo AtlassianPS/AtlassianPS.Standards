@@ -457,6 +457,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git tag -a "${{ steps.prepared_release.outputs.release_tag }}" -m "${{ steps.prepared_release.outputs.release_tag }}"
           git push origin "refs/tags/${{ steps.prepared_release.outputs.release_tag }}"
 

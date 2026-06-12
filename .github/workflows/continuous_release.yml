@@ -161,6 +161,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           if git show-ref --verify --quiet "refs/tags/${{ steps.prepared_release.outputs.release_tag }}"; then
             echo "Release tag ${{ steps.prepared_release.outputs.release_tag }} already exists."
           else
