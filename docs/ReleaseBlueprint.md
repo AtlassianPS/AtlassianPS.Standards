@@ -40,7 +40,7 @@ After CI succeeds on a normal merged pull request with `release:patch`, `release
 6. Run `prepare-release-changelog` to fold pending notes and fragments into the new version section.
 7. Stamp the source module manifest with the exact release version and release notes from the same changelog section.
 8. Commit the release metadata changes directly to `master`.
-9. Let CI build and test the release metadata commit.
+9. Let CI build and test the bot-authored release metadata commit.
 10. Download the CI `Release` artifact from that exact commit.
 11. Create an annotated tag on the tested release metadata commit.
 12. Build release notes from the committed `CHANGELOG.md` section.
@@ -423,7 +423,8 @@ jobs:
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'master' &&
-      startsWith(github.event.workflow_run.head_commit.message, 'Prepare v')
+      startsWith(github.event.workflow_run.head_commit.message, 'Prepare v') &&
+      github.event.workflow_run.head_commit.author.name == 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

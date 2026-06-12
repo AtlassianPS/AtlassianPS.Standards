@@ -127,7 +127,8 @@ jobs:
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'master' &&
-      startsWith(github.event.workflow_run.head_commit.message, 'Prepare v')
+      startsWith(github.event.workflow_run.head_commit.message, 'Prepare v') &&
+      github.event.workflow_run.head_commit.author.name == 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
