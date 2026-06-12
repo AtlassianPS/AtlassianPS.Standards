@@ -8,9 +8,10 @@
 - Added the `prepare-release-changelog` GitHub Action to prepare release changelog sections from Unreleased entries and changelog fragments, then delete consumed fragments without expanding the module export surface.
 - Added label-based continuous release automation that plans releases from merged PR labels, prepares changelog entries, creates annotated tags, publishes to PSGallery, and creates GitHub releases without expanding the module export surface.
 - Fixed release-intent validation so release-preparation PRs can delete consumed changelog fragments without treating them as active PR fragments.
+- Fixed release-intent comment handling after dogfooding the workflow against Standards pull requests.
+- Dogfood release-intent fragment handling (#20, @lipkau)
 - Fixed manual prerelease publishing and removed obsolete publish/package tasks from the Standards build script now that continuous release promotes CI-tested artifacts directly.
-* Dogfood release-intent fragment handling (#20, @lipkau)
-* Resolve merged release workflow conflicts (#34, @lipkau)
+- Resolve merged release workflow conflicts (#34, @lipkau)
 
 ## v0.1.11
 
