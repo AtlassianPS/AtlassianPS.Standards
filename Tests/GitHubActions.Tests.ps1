@@ -294,6 +294,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'release_impact:'
         $workflow | Should -Match 'prerelease:'
         $workflow | Should -Match 'prerelease-label:'
+        $workflow | Should -Match "github\.event\.workflow_run\.head_commit\.author\.name == 'github-actions\[bot\]'"
         $workflow | Should -Match "ref: \$\{\{ github\.event_name == 'workflow_dispatch' && 'master' \|\| github\.event\.workflow_run\.head_sha \}\}"
         $workflow | Should -Match 'Commit release metadata'
         $workflow | Should -Match 'Publish tested release artifact'
