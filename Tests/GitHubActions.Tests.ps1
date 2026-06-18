@@ -301,6 +301,11 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'Download tested release artifact'
         $workflow | Should -Match 'Publish tested module artifact'
         $workflow | Should -Match 'Publish-Module -Path ./Release/AtlassianPS\.Standards'
+        # Release-artifact stamping/verification lives in the build task, not inline workflow logic.
+        $workflow | Should -Match 'Update source manifest version'
+        $workflow | Should -Match 'Stamp and verify release artifact'
+        $workflow | Should -Match '-Task SetVersion'
+        $workflow | Should -Match '-VerifyPublishedRelease'
         $workflow | Should -Not -Match 'Invoke-Build -Task Build, SetVersion'
         $workflow | Should -Match 'v\\d\+\\\.\\d\+\\\.\\d\+\(\?:-\(\?:alpha\|beta\|rc\)\(\?:-\\d\+\)\?\)\?'
         $workflow | Should -Match "contains\(steps\.release_ref\.outputs\.release_tag, '-alpha'\)"
@@ -317,6 +322,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishJobIndex = $workflow.IndexOf('Publish tested release artifact')
         $downloadIndex = $workflow.IndexOf('Download tested release artifact')
         $tagIndex = $workflow.IndexOf('Create annotated release tag')
+        $stampIndex = $workflow.IndexOf('Stamp and verify release artifact')
         $publishModuleIndex = $workflow.IndexOf('Publish tested module artifact')
         $releaseIndex = $workflow.IndexOf('Create GitHub release and upload asset')
         $homepageIndex = $workflow.IndexOf('Notify homepage to update submodule')
@@ -325,7 +331,9 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishJobIndex | Should -BeGreaterThan $commitIndex
         $downloadIndex | Should -BeGreaterThan $publishJobIndex
         $tagIndex | Should -BeGreaterThan $downloadIndex
-        $publishModuleIndex | Should -BeGreaterThan $tagIndex
+        # The artifact must be stamped and verified before it is published to immutable PSGallery.
+        $stampIndex | Should -BeGreaterThan $tagIndex
+        $publishModuleIndex | Should -BeGreaterThan $stampIndex
         $releaseIndex | Should -BeGreaterThan $publishModuleIndex
         $homepageIndex | Should -BeGreaterThan $releaseIndex
         $workflow | Should -Match 'git add CHANGELOG\.md \.changelog AtlassianPS\.Standards/AtlassianPS\.Standards\.psd1'
@@ -340,6 +348,9 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $buildScript | Should -Not -Match 'PSGalleryAPIKey'
         $buildScript | Should -Match '(?m)^Task SetVersion\b'
         $buildScript | Should -Match '(?m)^Task TestPublish\b'
+        # The publish-time stamp/verify is owned by the build task, parameterized by a switch.
+        $buildScript | Should -Match '\[Switch\]\$VerifyPublishedRelease'
+        $buildScript | Should -Match 'EnforceGreaterThanPublished'
     }
 
     It 'does not keep a non-idempotent tag release workflow beside continuous release' {

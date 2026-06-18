@@ -101,73 +101,121 @@ Describe 'Invoke-ModuleTests' {
 }
 
 Describe 'Set-ModuleManifestVersion' {
-    It 'updates module version, prerelease metadata, and release notes' {
-        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module.psd1'
-        Set-Content -LiteralPath $manifestPath -Value "@{ ModuleVersion = '0.1.0' }"
-
-        InModuleScope AtlassianPS.Standards -Parameters @{
-            BuiltManifestPath = $manifestPath
-        } {
-            param($BuiltManifestPath)
-
-            Mock -CommandName Find-Module -MockWith { $null }
-            Mock -CommandName Update-ModuleManifest -MockWith {}
-
-            $version = Set-ModuleManifestVersion `
-                -BuiltManifestPath $BuiltManifestPath `
-                -ModuleName 'AtlassianPS.Standards' `
-                -VersionToPublish 'v1.2.3-rc-2' `
-                -ReleaseNotes '- Added dependency flow'
-
-            $version | Should -Be '1.2.3'
-            Should -Invoke -CommandName Update-ModuleManifest -Times 1 -Exactly -Scope It -ParameterFilter {
-                $ModuleVersion -eq '1.2.3' -and $Prerelease -eq 'rc-2' -and $ReleaseNotes -eq '- Added dependency flow'
-            }
+    BeforeAll {
+        # Realistic multi-line manifest fixture mirroring the source manifest shape.
+        $script:manifestTemplate = @'
+@{
+    RootModule           = 'Sample.psm1'
+    ModuleVersion        = '0.1'
+    GUID                 = 'b558bd8c-dc02-4ff2-96b7-4d2c61d9d103'
+    Author               = 'AtlassianPS'
+    Description          = 'Sample module.'
+    PrivateData          = @{
+        PSData = @{
+            Prerelease   = ''
+            ReleaseNotes = ''
         }
     }
+}
+'@
+    }
 
-    It 'throws when the version is not higher than published' {
-        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-published.psd1'
-        Set-Content -LiteralPath $manifestPath -Value "@{ ModuleVersion = '0.1.0' }"
+    It 'stamps version and prerelease in place without reformatting the rest of the manifest' {
+        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-inplace.psd1'
+        Set-Content -LiteralPath $manifestPath -Value $script:manifestTemplate
 
-        InModuleScope AtlassianPS.Standards -Parameters @{
-            BuiltManifestPath = $manifestPath
-        } {
-            param($BuiltManifestPath)
+        $version = Set-AtlassianPSModuleManifestVersion `
+            -BuiltManifestPath $manifestPath `
+            -ModuleName 'Sample' `
+            -VersionToPublish 'v1.2.3-rc-2'
 
-            Mock -CommandName Find-Module -MockWith {
-                [PSCustomObject]@{
-                    Version = [Version]'1.2.3'
-                }
-            }
+        $version | Should -Be '1.2.3'
 
-            {
-                Set-ModuleManifestVersion -BuiltManifestPath $BuiltManifestPath -ModuleName 'AtlassianPS.Standards' -VersionToPublish '1.2.3'
-            } | Should -Throw -ExpectedMessage 'Version must be greater than latest published version*'
-        }
+        $data = Import-PowerShellDataFile -LiteralPath $manifestPath
+        $data.ModuleVersion | Should -Be '1.2.3'
+        $data.PrivateData.PSData.Prerelease | Should -Be 'rc-2'
+        # ReleaseNotes left empty because it was not provided.
+        $data.PrivateData.PSData.ReleaseNotes | Should -BeNullOrEmpty
+
+        # Only the version (and prerelease) lines changed; every other line is byte-identical.
+        $original = ($script:manifestTemplate -replace "`r`n", "`n").Split("`n")
+        $updated = ((Get-Content -LiteralPath $manifestPath -Raw) -replace "`r`n", "`n").TrimEnd("`n").Split("`n")
+        $changedLines = (Compare-Object -ReferenceObject $original -DifferenceObject $updated).InputObject |
+            Where-Object { $_ -match '\S' }
+        $changedText = $changedLines -join "`n"
+        $changedText | Should -Match 'ModuleVersion'
+        $changedText | Should -Not -Match 'GUID'
+        $changedText | Should -Not -Match 'Author'
+        $changedText | Should -Not -Match 'Description'
+        $changedText | Should -Not -Match 'RootModule'
     }
 
     It 'clears prerelease metadata for stable versions' {
         $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-stable.psd1'
-        Set-Content -LiteralPath $manifestPath -Value "@{ ModuleVersion = '0.1.0' }"
+        Set-Content -LiteralPath $manifestPath -Value ($script:manifestTemplate -replace "Prerelease   = ''", "Prerelease   = 'beta'")
 
-        InModuleScope AtlassianPS.Standards -Parameters @{
-            BuiltManifestPath = $manifestPath
-        } {
+        $null = Set-AtlassianPSModuleManifestVersion -BuiltManifestPath $manifestPath -ModuleName 'Sample' -VersionToPublish '1.2.4'
+
+        $data = Import-PowerShellDataFile -LiteralPath $manifestPath
+        $data.ModuleVersion | Should -Be '1.2.4'
+        $data.PrivateData.PSData.Prerelease | Should -Be ''
+    }
+
+    It 'leaves release notes untouched when -ReleaseNotes is not provided' {
+        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-notes-empty.psd1'
+        Set-Content -LiteralPath $manifestPath -Value $script:manifestTemplate
+
+        $null = Set-AtlassianPSModuleManifestVersion -BuiltManifestPath $manifestPath -ModuleName 'Sample' -VersionToPublish '1.2.3'
+
+        (Import-PowerShellDataFile -LiteralPath $manifestPath).PrivateData.PSData.ReleaseNotes | Should -BeNullOrEmpty
+    }
+
+    It 'writes multi-line release notes with quotes and dollar signs and round-trips them' {
+        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-notes.psd1'
+        Set-Content -LiteralPath $manifestPath -Value $script:manifestTemplate
+
+        $notes = "- Fixed don't break on apostrophes`n- Handle `$dollar and 'quoted' words`n- Multi-line notes"
+        $null = Set-AtlassianPSModuleManifestVersion `
+            -BuiltManifestPath $manifestPath `
+            -ModuleName 'Sample' `
+            -VersionToPublish '1.2.3' `
+            -ReleaseNotes $notes
+
+        $written = (Import-PowerShellDataFile -LiteralPath $manifestPath).PrivateData.PSData.ReleaseNotes
+        ($written -replace "`r`n", "`n") | Should -Be $notes
+    }
+
+    It 'does not check the published version unless -EnforceGreaterThanPublished is set' {
+        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-noenforce.psd1'
+        Set-Content -LiteralPath $manifestPath -Value $script:manifestTemplate
+
+        InModuleScope AtlassianPS.Standards -Parameters @{ BuiltManifestPath = $manifestPath } {
             param($BuiltManifestPath)
 
-            Mock -CommandName Find-Module -MockWith { $null }
-            Mock -CommandName Update-ModuleManifest -MockWith {}
+            Mock -CommandName Find-Module -MockWith { [PSCustomObject]@{ Version = [Version]'9.9.9' } }
 
-            $null = Set-ModuleManifestVersion -BuiltManifestPath $BuiltManifestPath -ModuleName 'AtlassianPS.Standards' -VersionToPublish '1.2.4'
+            $null = Set-ModuleManifestVersion -BuiltManifestPath $BuiltManifestPath -ModuleName 'Sample' -VersionToPublish '0.0.1'
 
-            Should -Invoke -CommandName Update-ModuleManifest -Scope It -ParameterFilter {
-                $ModuleVersion -eq '1.2.4' -and $Prerelease -eq ''
-            }
+            Should -Invoke -CommandName Find-Module -Times 0 -Exactly -Scope It
         }
     }
 
-    It 'normalizes manifest encoding and line endings after update' {
+    It 'throws when the version is not higher than published and enforcement is requested' {
+        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-enforce.psd1'
+        Set-Content -LiteralPath $manifestPath -Value $script:manifestTemplate
+
+        InModuleScope AtlassianPS.Standards -Parameters @{ BuiltManifestPath = $manifestPath } {
+            param($BuiltManifestPath)
+
+            Mock -CommandName Find-Module -MockWith { [PSCustomObject]@{ Version = [Version]'1.2.3' } }
+
+            {
+                Set-ModuleManifestVersion -BuiltManifestPath $BuiltManifestPath -ModuleName 'Sample' -VersionToPublish '1.2.3' -EnforceGreaterThanPublished
+            } | Should -Throw -ExpectedMessage 'Version must be greater than latest published version*'
+        }
+    }
+
+    It 'normalizes manifest encoding to UTF-8 BOM and CRLF line endings' {
         $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-formatting.psd1'
         [System.IO.File]::WriteAllText(
             $manifestPath,
@@ -175,55 +223,36 @@ Describe 'Set-ModuleManifestVersion' {
             [System.Text.UTF8Encoding]::new($false)
         )
 
-        InModuleScope AtlassianPS.Standards -Parameters @{
-            BuiltManifestPath = $manifestPath
-        } {
-            param($BuiltManifestPath)
+        $null = Set-AtlassianPSModuleManifestVersion -BuiltManifestPath $manifestPath -ModuleName 'Sample' -VersionToPublish '1.2.5'
 
-            Mock -CommandName Find-Module -MockWith { $null }
-            Mock -CommandName Update-ModuleManifest -MockWith {
-                param([string]$Path, [string]$ModuleVersion)
+        $bytes = [System.IO.File]::ReadAllBytes($manifestPath)
+        @($bytes[0], $bytes[1], $bytes[2]) | Should -Be @(239, 187, 191)
 
-                [System.IO.File]::WriteAllText(
-                    $Path,
-                    "@{`nModuleVersion = '$ModuleVersion'`n}`n",
-                    [System.Text.UTF8Encoding]::new($false)
-                )
-            }
-
-            $null = Set-ModuleManifestVersion `
-                -BuiltManifestPath $BuiltManifestPath `
-                -ModuleName 'AtlassianPS.Standards' `
-                -VersionToPublish '1.2.5'
-
-            $bytes = [System.IO.File]::ReadAllBytes($BuiltManifestPath)
-            @($bytes[0], $bytes[1], $bytes[2]) | Should -Be @(239, 187, 191)
-
-            $content = [System.IO.File]::ReadAllText($BuiltManifestPath)
-            $content | Should -Match "`r`n"
-            $content.Replace("`r`n", '') | Should -Not -Match "`n"
-        }
+        $content = [System.IO.File]::ReadAllText($manifestPath)
+        $content | Should -Match "`r`n"
+        $content.Replace("`r`n", '') | Should -Not -Match "`n"
     }
 
     It 'throws when release notes are blank' {
         $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-empty-release-notes.psd1'
-        Set-Content -LiteralPath $manifestPath -Value "@{ ModuleVersion = '0.1.0' }"
+        Set-Content -LiteralPath $manifestPath -Value $script:manifestTemplate
 
-        InModuleScope AtlassianPS.Standards -Parameters @{
-            BuiltManifestPath = $manifestPath
-        } {
-            param($BuiltManifestPath)
+        {
+            Set-AtlassianPSModuleManifestVersion `
+                -BuiltManifestPath $manifestPath `
+                -ModuleName 'Sample' `
+                -VersionToPublish '1.2.6' `
+                -ReleaseNotes '   '
+        } | Should -Throw -ExpectedMessage 'ReleaseNotes cannot be empty when provided.'
+    }
 
-            Mock -CommandName Find-Module -MockWith { $null }
-
-            {
-                Set-ModuleManifestVersion `
-                    -BuiltManifestPath $BuiltManifestPath `
-                    -ModuleName 'AtlassianPS.Standards' `
-                    -VersionToPublish '1.2.6' `
-                    -ReleaseNotes '   '
-            } | Should -Throw -ExpectedMessage 'ReleaseNotes cannot be empty when provided.'
-        }
+    It 'throws when the manifest does not exist' {
+        {
+            Set-AtlassianPSModuleManifestVersion `
+                -BuiltManifestPath (Join-Path -Path $TestDrive -ChildPath 'missing.psd1') `
+                -ModuleName 'Sample' `
+                -VersionToPublish '1.2.3'
+        } | Should -Throw -ExpectedMessage "Module manifest*was not found."
     }
 }
 

@@ -38,15 +38,16 @@ After CI succeeds on a normal merged pull request with `release:patch`, `release
 4. Compute the next `vX.Y.Z` tag from the latest stable semver tag and the release impact.
 5. Create a generated `.changelog/<pr>.<impact>.<type>.md` fragment when the PR used a `changelog:*` label.
 6. Run `prepare-release-changelog` to fold pending notes and fragments into the new version section.
-7. Stamp the source module manifest with the exact release version and release notes from the same changelog section.
+7. Stamp only the release version into the source module manifest; release notes stay empty in the committed source.
 8. Commit the release metadata changes directly to `master`.
-9. Let CI build and test the bot-authored release metadata commit.
+9. Let CI build and test the bot-authored release metadata commit (the built artifact inherits the stamped version).
 10. Download the CI `Release` artifact from that exact commit.
 11. Create an annotated tag on the tested release metadata commit.
 12. Build release notes from the committed `CHANGELOG.md` section.
-13. Publish the tested module artifact to PSGallery without rebuilding or restamping the package.
-14. Create the GitHub release with the same release notes body.
-15. Notify the website to update its module submodule.
+13. Run `Invoke-Build -Task SetVersion ... -VerifyPublishedRelease` to populate release notes into the tested artifact and verify its version, without rebuilding the package.
+14. Publish the verified module artifact to PSGallery.
+15. Create the GitHub release with the same release notes body.
+16. Notify the website to update its module submodule.
 
 `release:none` merges should stop after planning and must not publish.
 The workflow should be serialized with concurrency so multiple release-labelled merges do not race the next-version calculation.
@@ -98,24 +99,64 @@ GitHub release notes and PSGallery manifest release notes should be the same sou
 
 ## Required Build Script Pattern
 
-The publish path should use the Standards parser for manifest release notes.
+Release-artifact stamping and verification belong in the local `Invoke-Build` script, not inline in the
+workflow YAML. The committed source manifest keeps release notes empty; the `SetVersion` task populates
+release notes into the built artifact at publish time and verifies the package before it is published.
+
+The publish path uses the Standards parser for manifest release notes and runs `SetVersion` in
+`-VerifyPublishedRelease` mode so a malformed or unstamped artifact fails before the immutable PSGallery
+publish.
 
 ```powershell
 Task SetVersion {
+    if (-not $script:BuildInfo.VersionToPublish) {
+        throw 'VersionToPublish is required for SetVersion. Use -VersionToPublish <semver>.'
+    }
+
+    $builtManifestPath = $script:BuildInfo.BuiltManifestPath
+    $expectedCore = $script:BuildInfo.VersionToPublish -replace '-.*$', ''
+
+    # The CI-tested artifact is built from the already version-stamped source manifest, so in
+    # release mode it must already carry the planned version. A mismatch means the prepare step
+    # never stamped the source manifest.
+    if ($VerifyPublishedRelease) {
+        $built = Import-PowerShellDataFile -LiteralPath $builtManifestPath
+        if ($built.ModuleVersion -ne $expectedCore) {
+            throw "Built artifact ModuleVersion '$($built.ModuleVersion)' does not match release version '$($script:BuildInfo.VersionToPublish)'."
+        }
+    }
+
     $releaseNotes = Get-AtlassianPSReleaseNotesFromChangelog `
         -ChangelogPath (Join-Path -Path $env:BHProjectPath -ChildPath 'CHANGELOG.md') `
         -ReleaseVersion $script:BuildInfo.VersionToPublish
 
-    $null = Set-AtlassianPSModuleManifestVersion `
-        -BuiltManifestPath $builtManifestPath `
-        -ModuleName $env:BHProjectName `
-        -VersionToPublish $VersionToPublish `
-        -ReleaseNotes $releaseNotes
+    $setVersionParameters = @{
+        BuiltManifestPath = $builtManifestPath
+        ModuleName        = $env:BHProjectName
+        VersionToPublish  = $script:BuildInfo.VersionToPublish
+        ReleaseNotes      = $releaseNotes
+    }
+    if ($VerifyPublishedRelease) {
+        $setVersionParameters.EnforceGreaterThanPublished = $true
+    }
+    $null = Set-AtlassianPSModuleManifestVersion @setVersionParameters
+
+    if ($VerifyPublishedRelease) {
+        $stamped = Import-PowerShellDataFile -LiteralPath $builtManifestPath
+        if ($stamped.ModuleVersion -ne $expectedCore) {
+            throw "Artifact ModuleVersion '$($stamped.ModuleVersion)' does not match expected '$expectedCore' after stamping."
+        }
+        if ([string]::IsNullOrWhiteSpace($stamped.PrivateData.PSData.ReleaseNotes)) {
+            throw 'Artifact PrivateData.PSData.ReleaseNotes is empty after stamping.'
+        }
+    }
 }
 ```
 
 Keep repository build orchestration local.
 Use Standards for small primitives and shared actions, not for broad module-specific release wrappers.
+The continuous release workflow only invokes `Invoke-Build -Task SetVersion ... -VerifyPublishedRelease`;
+it does not embed manifest-stamping logic in the workflow YAML.
 
 ## Drift Guards
 
@@ -128,8 +169,12 @@ At minimum, test that:
 - The release workflow uses `build-release-notes`.
 - The release workflow uses `body_path: ${{ steps.release_notes.outputs.release_notes_path }}`.
 - The release workflow builds release notes before publishing.
+- The publish job stamps and verifies the artifact through `Invoke-Build -Task SetVersion ... -VerifyPublishedRelease` rather than inline manifest-stamping in the workflow YAML.
+- The publish job runs the artifact stamp/verify step before `Publish-Module`.
 - The repository does not keep a non-idempotent `.github/workflows/release.yml` beside `continuous_release.yml`.
 - The build script uses `Get-AtlassianPSReleaseNotesFromChangelog` for manifest release notes.
+- The `SetVersion` task verifies the built artifact version and non-empty release notes in `-VerifyPublishedRelease` mode.
+- The committed source manifest keeps `PrivateData.PSData.ReleaseNotes` empty; release notes are populated only into the built artifact.
 - The repository does not contain `changelog-to-release`, `.github/changelog.configuration.json`, or copied inline parser/write-file plumbing.
 
 JiraPS is the reference implementation for these guard tests.
@@ -366,20 +411,18 @@ jobs:
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@<standards-sha> # vX.Y.Z
         if: steps.plan.outputs.should_release == 'true'
 
-      - name: Update source manifest release metadata
+      - name: Update source manifest version
         if: steps.plan.outputs.should_release == 'true'
         shell: pwsh
         run: |
           Import-Module ./<ModuleName>/<ModuleName>.psd1 -Force
-          $releaseNotes = Get-AtlassianPSReleaseNotesFromChangelog `
-              -ChangelogPath ./CHANGELOG.md `
-              -ReleaseVersion ${{ steps.plan.outputs.release_tag }}
 
+          # Stamp only the version into the committed source manifest. Release notes stay empty
+          # in source and are populated into the built artifact at publish time.
           Set-AtlassianPSModuleManifestVersion `
               -BuiltManifestPath ./<ModuleName>/<ModuleName>.psd1 `
               -ModuleName <ModuleName> `
-              -VersionToPublish ${{ steps.plan.outputs.release_tag }} `
-              -ReleaseNotes $releaseNotes
+              -VersionToPublish ${{ steps.plan.outputs.release_tag }}
 
       - name: Commit release metadata
         if: steps.plan.outputs.should_release == 'true'
@@ -475,6 +518,13 @@ jobs:
         uses: AtlassianPS/AtlassianPS.Standards/.github/actions/build-release-notes@<standards-sha> # vX.Y.Z
         with:
           release-version: ${{ steps.release_ref.outputs.release_tag }}
+
+      - name: Stamp and verify release artifact
+        shell: pwsh
+        run: |
+          Invoke-Build -File ./<ModuleName>.build.ps1 -Task SetVersion `
+              -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} `
+              -VerifyPublishedRelease
 
       - name: Create GitHub release asset
         shell: pwsh
