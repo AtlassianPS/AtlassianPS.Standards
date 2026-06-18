@@ -154,15 +154,18 @@ Task SetVersion {
     }
 }
 
-Task TestPublish Build, {
-    $packagePath = New-AtlassianPSModulePackage `
+# Synopsis: Compress the built module into the publishable release artifact
+Task Package {
+    $script:PackagePath = New-AtlassianPSModulePackage `
         -BuildOutputPath $env:BHBuildOutput `
         -ModuleName $env:BHProjectName
+}
 
+Task TestPublish Build, Package, {
     $null = Test-AtlassianPSModulePackage `
         -BuildOutputPath $env:BHBuildOutput `
         -ModuleName $env:BHProjectName `
-        -PackagePath $packagePath
+        -PackagePath $script:PackagePath
 }
 
 Task . Lint, Build, Test

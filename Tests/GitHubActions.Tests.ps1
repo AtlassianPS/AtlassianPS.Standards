@@ -268,11 +268,16 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match "startsWith\(github\.event\.workflow_run\.head_commit\.message, 'Prepare v'\)"
         $workflow | Should -Match "github\.event\.workflow_run\.head_commit\.author\.name == 'github-actions\[bot\]'"
 
-        # Manifest stamping lives in Invoke-Build tasks, never inline in the workflow.
+        # Module-domain work lives in Invoke-Build tasks; deployment plumbing lives in composite
+        # actions. Neither manifest stamping nor packaging appears inline in the workflow.
         $workflow | Should -Match 'Invoke-Build -Task SetSourceVersion'
         $workflow | Should -Match 'Invoke-Build -Task SetVersion .*-VerifyPublishedRelease'
+        $workflow | Should -Match 'Invoke-Build -Task Package'
+        $workflow | Should -Match 'uses: \./\.github/actions/commit-release-metadata'
+        $workflow | Should -Match 'uses: \./\.github/actions/create-release-tag'
         $workflow | Should -Not -Match 'Set-AtlassianPSModuleManifestVersion'
         $workflow | Should -Not -Match 'Get-AtlassianPSReleaseNotesFromChangelog'
+        $workflow | Should -Not -Match 'Compress-Archive'
 
         # The artifact is stamped and verified before it is published to immutable PSGallery.
         $verifyIndex = $workflow.IndexOf('-VerifyPublishedRelease')
@@ -281,13 +286,13 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishIndex | Should -BeGreaterThan $verifyIndex
     }
 
-    It 'does not keep publish tasks in the build script' {
+    It 'keeps publishing secrets and publish tasks out of the build script' {
         $buildScriptPath = Join-Path -Path $projectRoot -ChildPath 'AtlassianPS.Standards.build.ps1'
         $buildScript = Get-Content -LiteralPath $buildScriptPath -Raw
 
         $buildScript | Should -Not -Match '(?m)^Task Publish\b'
-        $buildScript | Should -Not -Match '(?m)^Task Package\b'
         $buildScript | Should -Not -Match 'PSGalleryAPIKey'
+        $buildScript | Should -Match '(?m)^Task Package\b'
         $buildScript | Should -Match '(?m)^Task SetSourceVersion\b'
         $buildScript | Should -Match '(?m)^Task SetVersion\b'
         $buildScript | Should -Match '(?m)^Task TestPublish\b'

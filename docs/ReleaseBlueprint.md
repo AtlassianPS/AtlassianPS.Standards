@@ -68,7 +68,10 @@ If a release fails after publishing an immutable PSGallery package, repair the f
 
 ## Required Shared Actions
 
-Pin all Standards actions to the same released commit SHA and include a version comment.
+Pin all Standards actions to the same released commit SHA and include a version comment. The release
+workflow consumes these Standards actions: `setup-powershell`, `plan-merged-release`,
+`prepare-release-changelog`, `commit-release-metadata`, `create-release-tag`, `resolve-release-tag`, and
+`build-release-notes`.
 
 ```yaml
 - name: Validate release tag
@@ -163,12 +166,20 @@ Task SetVersion {
         }
     }
 }
+
+# Synopsis: Compress the built module into the publishable release artifact
+Task Package {
+    $script:PackagePath = New-AtlassianPSModulePackage `
+        -BuildOutputPath $env:BHBuildOutput `
+        -ModuleName $env:BHProjectName
+}
 ```
 
 Keep repository build orchestration local.
 Use Standards for small primitives and shared actions, not for broad module-specific release wrappers.
-The continuous release workflow only invokes `Invoke-Build -Task SetVersion ... -VerifyPublishedRelease`;
-it does not embed manifest-stamping logic in the workflow YAML.
+The continuous release workflow only invokes build tasks (`SetSourceVersion`, `SetVersion`, `Package`) for
+module-domain work and Standards composite actions for deployment plumbing; it embeds no manifest-stamping
+or packaging logic in the workflow YAML.
 
 ## Drift Guards
 
@@ -183,9 +194,11 @@ At minimum, test that:
 - The release workflow builds release notes before publishing.
 - The publish job stamps and verifies the artifact through `Invoke-Build -Task SetVersion ... -VerifyPublishedRelease` rather than inline manifest-stamping in the workflow YAML.
 - The publish job runs the artifact stamp/verify step before `Publish-Module`.
+- Module-domain work runs through build tasks (`SetSourceVersion`, `SetVersion`, `Package`) and deployment plumbing through composite actions (`commit-release-metadata`, `create-release-tag`); the workflow contains no inline manifest stamping or `Compress-Archive` packaging.
 - The repository does not keep a non-idempotent `.github/workflows/release.yml` beside `continuous_release.yml`.
 - The build script uses `Get-AtlassianPSReleaseNotesFromChangelog` for manifest release notes.
 - The `SetVersion` task verifies the built artifact version and non-empty release notes in `-VerifyPublishedRelease` mode.
+- The build script keeps publishing secrets and a `Publish` task out (publishing stays in the workflow).
 - The committed source manifest keeps `PrivateData.PSData.ReleaseNotes` empty; release notes are populated only into the built artifact.
 - The repository does not contain `changelog-to-release`, `.github/changelog.configuration.json`, or copied inline parser/write-file plumbing.
 
@@ -430,39 +443,12 @@ jobs:
 
       - name: Commit release metadata
         if: steps.plan.outputs.should_release == 'true'
-        shell: bash
-        env:
-          RELEASE_BOT_TOKEN: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          push_token="${RELEASE_BOT_TOKEN:-${GITHUB_TOKEN:-}}"
-          if [ -z "${push_token}" ]; then
-            echo "::error::No token available for pushing release metadata."
-            exit 1
-          fi
-
-          if [ -z "${RELEASE_BOT_TOKEN:-}" ]; then
-            echo "::notice::ATLASSIANPS_RELEASE_BOT_TOKEN is not configured. Falling back to GITHUB_TOKEN."
-          fi
-
-          if git diff --quiet -- CHANGELOG.md .changelog <ModuleName>/<ModuleName>.psd1; then
-            echo "::error::Release planning produced no changelog or manifest changes."
-            exit 1
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md .changelog <ModuleName>/<ModuleName>.psd1
-          git commit -m "Prepare ${{ steps.plan.outputs.release_tag }} release"
-
-          if ! git push "https://x-access-token:${push_token}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master; then
-            if [ -z "${RELEASE_BOT_TOKEN:-}" ]; then
-              echo "::error::Push with GITHUB_TOKEN failed. Configure ATLASSIANPS_RELEASE_BOT_TOKEN when branch protection prevents direct pushes."
-            fi
-            exit 1
-          fi
+        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/commit-release-metadata@<standards-sha> # vX.Y.Z
+        with:
+          release-tag: ${{ steps.plan.outputs.release_tag }}
+          manifest-path: <ModuleName>/<ModuleName>.psd1
+          github-token: ${{ github.token }}
+          release-bot-token: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN }}
 
   publish:
     name: Publish tested release artifact
@@ -501,15 +487,9 @@ jobs:
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@<standards-sha> # vX.Y.Z
 
       - name: Create annotated release tag
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git tag -a "${{ steps.prepared_release.outputs.release_tag }}" -m "${{ steps.prepared_release.outputs.release_tag }}"
-          git push origin "refs/tags/${{ steps.prepared_release.outputs.release_tag }}"
+        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/create-release-tag@<standards-sha> # vX.Y.Z
+        with:
+          tag: ${{ steps.prepared_release.outputs.release_tag }}
 
       - name: Resolve release ref
         id: release_ref
@@ -527,10 +507,9 @@ jobs:
         run: Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -VerifyPublishedRelease
         shell: pwsh
 
-      - name: Create GitHub release asset
+      - name: Package release artifact
+        run: Invoke-Build -Task Package
         shell: pwsh
-        run: |
-          Compress-Archive -Path ./Release/<ModuleName> -DestinationPath ./Release/<ModuleName>.zip -Force
 
       - name: Publish tested module artifact
         run: Publish-Module -Path ./Release/<ModuleName> -NuGetApiKey ${{ secrets.PSGALLERY_API_KEY }} -ErrorAction Stop
