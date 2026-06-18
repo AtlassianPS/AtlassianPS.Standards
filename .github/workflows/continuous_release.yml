@@ -70,18 +70,10 @@ jobs:
       - uses: ./.github/actions/setup-powershell
         if: steps.plan.outputs.should_release == 'true'
 
-      - name: Update source manifest version
+      - name: Stamp source manifest version
         if: steps.plan.outputs.should_release == 'true'
+        run: Invoke-Build -Task SetSourceVersion -VersionToPublish ${{ steps.plan.outputs.release_tag }}
         shell: pwsh
-        run: |
-          Import-Module ./AtlassianPS.Standards/AtlassianPS.Standards.psd1 -Force
-
-          # Stamp only the version into the committed source manifest. Release notes stay empty
-          # in source and are populated into the built artifact at publish time.
-          Set-AtlassianPSModuleManifestVersion `
-              -BuiltManifestPath ./AtlassianPS.Standards/AtlassianPS.Standards.psd1 `
-              -ModuleName AtlassianPS.Standards `
-              -VersionToPublish ${{ steps.plan.outputs.release_tag }}
 
       - name: Commit release metadata
         if: steps.plan.outputs.should_release == 'true'
@@ -184,11 +176,8 @@ jobs:
           module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1
 
       - name: Stamp and verify release artifact
+        run: Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -VerifyPublishedRelease
         shell: pwsh
-        run: |
-          Invoke-Build -File ./AtlassianPS.Standards.build.ps1 -Task SetVersion `
-              -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} `
-              -VerifyPublishedRelease
 
       - name: Create GitHub release asset
         shell: pwsh

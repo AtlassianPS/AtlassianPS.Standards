@@ -99,6 +99,19 @@ Task Test {
         -ResultOutputPath $resultOutputPath
 }
 
+# Synopsis: Stamp the planned version into the committed source manifest (release notes stay empty here).
+Task SetSourceVersion {
+    if (-not $script:BuildInfo.VersionToPublish) {
+        throw 'VersionToPublish is required for SetSourceVersion. Use -VersionToPublish <semver>.'
+    }
+
+    $null = Set-AtlassianPSModuleManifestVersion `
+        -BuiltManifestPath $env:BHPSModuleManifest `
+        -ModuleName $env:BHProjectName `
+        -VersionToPublish $script:BuildInfo.VersionToPublish
+}
+
+# Synopsis: Stamp release notes into the built artifact; in -VerifyPublishedRelease mode also verify it.
 Task SetVersion {
     if (-not $script:BuildInfo.VersionToPublish) {
         throw 'VersionToPublish is required for SetVersion. Use -VersionToPublish <semver>.'
@@ -107,10 +120,8 @@ Task SetVersion {
     $builtManifestPath = $script:BuildInfo.BuiltManifestPath
     $expectedCore = $script:BuildInfo.VersionToPublish -replace '-.*$', ''
 
-    # In release-publish mode the artifact is the CI-tested package built from the already
-    # version-stamped source manifest, so it must already carry the planned version. A mismatch
-    # means the prepare step never stamped the source manifest (the original release defect).
     if ($VerifyPublishedRelease) {
+        # The published artifact is rebuilt from the version-stamped source, so it must already match.
         $built = Import-PowerShellDataFile -LiteralPath $builtManifestPath
         if ($built.ModuleVersion -ne $expectedCore) {
             throw "Built artifact ModuleVersion '$($built.ModuleVersion)' does not match release version '$($script:BuildInfo.VersionToPublish)'. The prepare step did not stamp the source manifest version."
@@ -132,7 +143,6 @@ Task SetVersion {
 
     $null = Set-AtlassianPSModuleManifestVersion @setVersionParameters
 
-    # Confirm the immutable package will publish with the intended version and non-empty notes.
     if ($VerifyPublishedRelease) {
         $stamped = Import-PowerShellDataFile -LiteralPath $builtManifestPath
         if ($stamped.ModuleVersion -ne $expectedCore) {

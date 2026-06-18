@@ -103,11 +103,23 @@ Release-artifact stamping and verification belong in the local `Invoke-Build` sc
 workflow YAML. The committed source manifest keeps release notes empty; the `SetVersion` task populates
 release notes into the built artifact at publish time and verifies the package before it is published.
 
-The publish path uses the Standards parser for manifest release notes and runs `SetVersion` in
-`-VerifyPublishedRelease` mode so a malformed or unstamped artifact fails before the immutable PSGallery
-publish.
+The prepare job stamps the source manifest version through `SetSourceVersion`; the publish path runs
+`SetVersion` in `-VerifyPublishedRelease` mode so a malformed or unstamped artifact fails before the
+immutable PSGallery publish. The workflow only invokes these tasks; it never stamps manifests inline.
 
 ```powershell
+# Synopsis: Stamp the planned version into the committed source manifest (release notes stay empty here).
+Task SetSourceVersion {
+    if (-not $script:BuildInfo.VersionToPublish) {
+        throw 'VersionToPublish is required for SetSourceVersion. Use -VersionToPublish <semver>.'
+    }
+
+    $null = Set-AtlassianPSModuleManifestVersion `
+        -BuiltManifestPath $env:BHPSModuleManifest `
+        -ModuleName $env:BHProjectName `
+        -VersionToPublish $script:BuildInfo.VersionToPublish
+}
+
 Task SetVersion {
     if (-not $script:BuildInfo.VersionToPublish) {
         throw 'VersionToPublish is required for SetVersion. Use -VersionToPublish <semver>.'
@@ -411,18 +423,10 @@ jobs:
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@<standards-sha> # vX.Y.Z
         if: steps.plan.outputs.should_release == 'true'
 
-      - name: Update source manifest version
+      - name: Stamp source manifest version
         if: steps.plan.outputs.should_release == 'true'
+        run: Invoke-Build -Task SetSourceVersion -VersionToPublish ${{ steps.plan.outputs.release_tag }}
         shell: pwsh
-        run: |
-          Import-Module ./<ModuleName>/<ModuleName>.psd1 -Force
-
-          # Stamp only the version into the committed source manifest. Release notes stay empty
-          # in source and are populated into the built artifact at publish time.
-          Set-AtlassianPSModuleManifestVersion `
-              -BuiltManifestPath ./<ModuleName>/<ModuleName>.psd1 `
-              -ModuleName <ModuleName> `
-              -VersionToPublish ${{ steps.plan.outputs.release_tag }}
 
       - name: Commit release metadata
         if: steps.plan.outputs.should_release == 'true'
@@ -520,11 +524,8 @@ jobs:
           release-version: ${{ steps.release_ref.outputs.release_tag }}
 
       - name: Stamp and verify release artifact
+        run: Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -VerifyPublishedRelease
         shell: pwsh
-        run: |
-          Invoke-Build -File ./<ModuleName>.build.ps1 -Task SetVersion `
-              -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} `
-              -VerifyPublishedRelease
 
       - name: Create GitHub release asset
         shell: pwsh

@@ -78,13 +78,9 @@
         return [string]::CompareOrdinal($Left.PreReleaseLabel, $Right.PreReleaseLabel)
     }
 
-    # Replace the quoted value assigned to a manifest key in place, preserving indentation,
-    # comments, and the rest of the file. Using a targeted edit instead of Update-ModuleManifest
-    # keeps the committed source manifest free of reformatting churn. The existing value may be
-    # single- or double-quoted; the replacement is always written as a single-quoted literal.
+    # A targeted edit (vs Update-ModuleManifest) keeps the committed source manifest free of
+    # reformatting churn. Returns updated text; the parent governs the file write via ShouldProcess.
     function Set-ManifestScalar {
-        # Pure text transform that returns updated manifest content; the parent function governs
-        # the actual file write through ShouldProcess, so this helper needs no state-change support.
         [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
         [OutputType([String])]
         param(
@@ -98,8 +94,7 @@
             [AllowEmptyString()]
             [String]$Value,
 
-            # Match a single-quoted literal that may span lines and contain '' escapes
-            # (used for ReleaseNotes); otherwise match a simple one-line quoted scalar.
+            # Multiline matches a single-quoted literal spanning lines with '' escapes (ReleaseNotes).
             [Switch]$Multiline,
 
             [Switch]$AllowMissing
@@ -107,7 +102,7 @@
 
         $escapedKey = [Regex]::Escape($Key)
         $valueToken = if ($Multiline) { "'(?:[^']|'')*'" } else { "(?<q>['`"])[^'`"]*\k<q>" }
-        # Anchor on a key boundary (not line start) so single-line and multi-line manifests both match.
+        # Key boundary, not line start, so single-line and multi-line manifests both match.
         $pattern = "(?<prefix>(?<![\w-])$escapedKey[ \t]*=[ \t]*)$valueToken"
 
         if (-not [Regex]::IsMatch($Content, $pattern)) {
