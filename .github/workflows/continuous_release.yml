@@ -43,9 +43,8 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.event.workflow_run.head_sha }}
 
-      - name: Plan release
+      - uses: ./.github/actions/plan-merged-release
         id: plan
-        uses: ./.github/actions/plan-merged-release
         with:
           commit-sha: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
           release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release_impact || '' }}
@@ -61,9 +60,8 @@ jobs:
           New-Item -Path (Split-Path -Path $env:FRAGMENT_PATH -Parent) -ItemType Directory -Force | Out-Null
           $env:FRAGMENT_CONTENT | Set-Content -LiteralPath $env:FRAGMENT_PATH -Encoding utf8
 
-      - name: Prepare release changelog
+      - uses: ./.github/actions/prepare-release-changelog
         if: steps.plan.outputs.should_release == 'true'
-        uses: ./.github/actions/prepare-release-changelog
         with:
           release-version: ${{ steps.plan.outputs.release_tag }}
 
@@ -75,9 +73,8 @@ jobs:
         run: Invoke-Build -Task SetSourceVersion -VersionToPublish ${{ steps.plan.outputs.release_tag }}
         shell: pwsh
 
-      - name: Commit release metadata
+      - uses: ./.github/actions/commit-release-metadata
         if: steps.plan.outputs.should_release == 'true'
-        uses: ./.github/actions/commit-release-metadata
         with:
           release-tag: ${{ steps.plan.outputs.release_tag }}
           manifest-path: AtlassianPS.Standards/AtlassianPS.Standards.psd1
@@ -120,20 +117,17 @@ jobs:
 
       - uses: ./.github/actions/setup-powershell
 
-      - name: Create annotated release tag
-        uses: ./.github/actions/create-release-tag
+      - uses: ./.github/actions/create-release-tag
         with:
           tag: ${{ steps.prepared_release.outputs.release_tag }}
 
-      - name: Resolve release ref
+      - uses: ./.github/actions/resolve-release-tag
         id: release_ref
-        uses: ./.github/actions/resolve-release-tag
         with:
           tag: ${{ steps.prepared_release.outputs.release_tag }}
 
-      - name: Build release notes
+      - uses: ./.github/actions/build-release-notes
         id: release_notes
-        uses: ./.github/actions/build-release-notes
         with:
           release-version: ${{ steps.release_ref.outputs.release_tag }}
           module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1
