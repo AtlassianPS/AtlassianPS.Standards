@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.12 - 2026-06-18
+
 - Fixed continuous release version stamping so the source manifest version is updated in place without reformatting the manifest, release notes stay empty in source and are populated into the built artifact at publish time, and the publish step verifies the artifact version and release notes before publishing.
 - Added the `validate-release-intent` GitHub Action to validate PR release and changelog labels before module repositories adopt changelog-fragment based releases without expanding the module export surface.
 - Added the `prepare-release-changelog` GitHub Action to prepare release changelog sections from Unreleased entries and changelog fragments, then delete consumed fragments without expanding the module export surface.
@@ -11,6 +13,7 @@
 - Dogfood release-intent fragment handling (#20, @lipkau)
 - Fixed manual prerelease publishing and removed obsolete publish/package tasks from the Standards build script now that continuous release promotes CI-tested artifacts directly.
 - Resolve merged release workflow conflicts (#34, @lipkau)
+* Fix continuous release version stamping and reconcile release metadata (#38, @lipkau)
 
 ## v0.1.11
 
