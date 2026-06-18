@@ -11,7 +11,12 @@ param(
     [String[]]$Tag,
 
     [Parameter()]
-    [String[]]$ExcludeTag
+    [String[]]$ExcludeTag,
+
+    # Release-publish mode: require the built artifact to already carry the planned version,
+    # enforce it is newer than the published package, and verify release notes were written.
+    [Parameter()]
+    [Switch]$VerifyPublishedRelease
 )
 
 $projectName = 'AtlassianPS.Standards'
@@ -94,30 +99,73 @@ Task Test {
         -ResultOutputPath $resultOutputPath
 }
 
+# Synopsis: Stamp the planned version into the committed source manifest (release notes stay empty here).
+Task SetSourceVersion {
+    if (-not $script:BuildInfo.VersionToPublish) {
+        throw 'VersionToPublish is required for SetSourceVersion. Use -VersionToPublish <semver>.'
+    }
+
+    $null = Set-AtlassianPSModuleManifestVersion `
+        -BuiltManifestPath $env:BHPSModuleManifest `
+        -ModuleName $env:BHProjectName `
+        -VersionToPublish $script:BuildInfo.VersionToPublish
+}
+
+# Synopsis: Stamp release notes into the built artifact; in -VerifyPublishedRelease mode also verify it.
 Task SetVersion {
     if (-not $script:BuildInfo.VersionToPublish) {
         throw 'VersionToPublish is required for SetVersion. Use -VersionToPublish <semver>.'
     }
 
+    $builtManifestPath = $script:BuildInfo.BuiltManifestPath
+    $expectedCore = $script:BuildInfo.VersionToPublish -replace '-.*$', ''
+
+    if ($VerifyPublishedRelease) {
+        # The published artifact is rebuilt from the version-stamped source, so it must already match.
+        $built = Import-PowerShellDataFile -LiteralPath $builtManifestPath
+        if ($built.ModuleVersion -ne $expectedCore) {
+            throw "Built artifact ModuleVersion '$($built.ModuleVersion)' does not match release version '$($script:BuildInfo.VersionToPublish)'. The prepare step did not stamp the source manifest version."
+        }
+    }
+
     $changelogPath = Join-Path -Path $env:BHProjectPath -ChildPath 'CHANGELOG.md'
     $releaseNotes = Get-AtlassianPSReleaseNotesFromChangelog -ChangelogPath $changelogPath -ReleaseVersion $script:BuildInfo.VersionToPublish
 
-    $null = Set-AtlassianPSModuleManifestVersion `
-        -BuiltManifestPath $script:BuildInfo.BuiltManifestPath `
-        -ModuleName $env:BHProjectName `
-        -VersionToPublish $script:BuildInfo.VersionToPublish `
-        -ReleaseNotes $releaseNotes
+    $setVersionParameters = @{
+        BuiltManifestPath = $builtManifestPath
+        ModuleName        = $env:BHProjectName
+        VersionToPublish  = $script:BuildInfo.VersionToPublish
+        ReleaseNotes      = $releaseNotes
+    }
+    if ($VerifyPublishedRelease) {
+        $setVersionParameters.EnforceGreaterThanPublished = $true
+    }
+
+    $null = Set-AtlassianPSModuleManifestVersion @setVersionParameters
+
+    if ($VerifyPublishedRelease) {
+        $stamped = Import-PowerShellDataFile -LiteralPath $builtManifestPath
+        if ($stamped.ModuleVersion -ne $expectedCore) {
+            throw "Artifact ModuleVersion '$($stamped.ModuleVersion)' does not match expected '$expectedCore' after stamping."
+        }
+        if ([string]::IsNullOrWhiteSpace($stamped.PrivateData.PSData.ReleaseNotes)) {
+            throw 'Artifact PrivateData.PSData.ReleaseNotes is empty after stamping.'
+        }
+    }
 }
 
-Task TestPublish Build, {
-    $packagePath = New-AtlassianPSModulePackage `
+# Synopsis: Compress the built module into the publishable release artifact
+Task Package {
+    $script:PackagePath = New-AtlassianPSModulePackage `
         -BuildOutputPath $env:BHBuildOutput `
         -ModuleName $env:BHProjectName
+}
 
+Task TestPublish Build, Package, {
     $null = Test-AtlassianPSModulePackage `
         -BuildOutputPath $env:BHBuildOutput `
         -ModuleName $env:BHProjectName `
-        -PackagePath $packagePath
+        -PackagePath $script:PackagePath
 }
 
 Task . Lint, Build, Test

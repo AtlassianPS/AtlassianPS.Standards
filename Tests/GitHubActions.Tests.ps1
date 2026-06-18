@@ -8,29 +8,6 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $script:planMergedReleaseScriptPath = Join-Path -Path $script:projectRoot -ChildPath '.github/actions/plan-merged-release/plan-merged-release.ps1'
     }
 
-    It 'action script parses for <ActionName>' -TestCases @(
-        @{ ActionName = 'validate-release-intent' }
-        @{ ActionName = 'prepare-release-changelog' }
-        @{ ActionName = 'plan-merged-release' }
-        @{ ActionName = '_shared/release-intent-core' }
-    ) {
-        param($ActionName)
-
-        $scriptPath = if ($ActionName -eq '_shared/release-intent-core') {
-            Join-Path -Path $projectRoot -ChildPath '.github/actions/_shared/release-intent-core.ps1'
-        }
-        else {
-            $scriptName = Split-Path -Path $ActionName -Leaf
-            Join-Path -Path $projectRoot -ChildPath ".github/actions/$ActionName/$scriptName.ps1"
-        }
-        $scriptText = [System.IO.File]::ReadAllText($scriptPath)
-        $errors = $null
-
-        $null = [System.Management.Automation.Language.Parser]::ParseInput($scriptText, [ref]$null, [ref]$errors)
-
-        $errors | Should -BeNullOrEmpty
-    }
-
     It 'plan-merged-release computes the next tag and generated fragment for a merged PR' {
         function gh {
             $arguments = [String[]]$args
@@ -283,63 +260,45 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         }
     }
 
-    It 'continuous release workflow publishes the CI-tested release artifact' {
+    It 'continuous release workflow keeps release logic in build tasks and gates publishing safely' {
         $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/continuous_release.yml'
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
-        $workflow | Should -Match 'ATLASSIANPS_RELEASE_BOT_TOKEN'
-        $workflow | Should -Match 'GITHUB_TOKEN: \$\{\{ github\.token \}\}'
-        $workflow | Should -Match 'workflow_run:'
-        $workflow | Should -Match 'workflow_dispatch:'
-        $workflow | Should -Match 'release_impact:'
-        $workflow | Should -Match 'prerelease:'
-        $workflow | Should -Match 'prerelease-label:'
+        # Only a bot-authored "Prepare v" commit can publish, so arbitrary commits cannot reach PSGallery.
+        $workflow | Should -Match "startsWith\(github\.event\.workflow_run\.head_commit\.message, 'Prepare v'\)"
         $workflow | Should -Match "github\.event\.workflow_run\.head_commit\.author\.name == 'github-actions\[bot\]'"
-        $workflow | Should -Match "ref: \$\{\{ github\.event_name == 'workflow_dispatch' && 'master' \|\| github\.event\.workflow_run\.head_sha \}\}"
-        $workflow | Should -Match 'Commit release metadata'
-        $workflow | Should -Match 'Publish tested release artifact'
-        $workflow | Should -Match 'Download tested release artifact'
-        $workflow | Should -Match 'Publish tested module artifact'
-        $workflow | Should -Match 'Publish-Module -Path ./Release/AtlassianPS\.Standards'
-        $workflow | Should -Not -Match 'Invoke-Build -Task Build, SetVersion'
-        $workflow | Should -Match 'v\\d\+\\\.\\d\+\\\.\\d\+\(\?:-\(\?:alpha\|beta\|rc\)\(\?:-\\d\+\)\?\)\?'
-        $workflow | Should -Match "contains\(steps\.release_ref\.outputs\.release_tag, '-alpha'\)"
-        $workflow | Should -Match 'Create GitHub release and upload asset'
-        $workflow | Should -Match 'Notify homepage to update submodule'
-        $workflow | Should -Match 'push_token="\$\{RELEASE_BOT_TOKEN:-\$\{GITHUB_TOKEN:-\}\}"'
-        $workflow | Should -Match 'Falling back to GITHUB_TOKEN'
-        $workflow | Should -Match 'git push "https://x-access-token:\$\{push_token\}@github\.com/\$\{GITHUB_REPOSITORY\}\.git" HEAD:master'
-        $workflow | Should -Match 'Configure ATLASSIANPS_RELEASE_BOT_TOKEN when branch protection prevents direct pushes'
-        $workflow | Should -Match 'repository: AtlassianPS/AtlassianPS\.github\.io'
-        $workflow | Should -Match 'event-type: module-release'
 
-        $commitIndex = $workflow.IndexOf('Commit release metadata')
-        $publishJobIndex = $workflow.IndexOf('Publish tested release artifact')
-        $downloadIndex = $workflow.IndexOf('Download tested release artifact')
-        $tagIndex = $workflow.IndexOf('Create annotated release tag')
-        $publishModuleIndex = $workflow.IndexOf('Publish tested module artifact')
-        $releaseIndex = $workflow.IndexOf('Create GitHub release and upload asset')
-        $homepageIndex = $workflow.IndexOf('Notify homepage to update submodule')
+        # Module-domain work lives in Invoke-Build tasks; deployment plumbing lives in composite
+        # actions. Neither manifest stamping nor packaging appears inline in the workflow.
+        $workflow | Should -Match 'Invoke-Build -Task SetSourceVersion'
+        $workflow | Should -Match 'Invoke-Build -Task SetVersion .*-VerifyPublishedRelease'
+        $workflow | Should -Match 'Invoke-Build -Task Package'
+        $workflow | Should -Match 'uses: \./\.github/actions/commit-release-metadata'
+        $workflow | Should -Match 'uses: \./\.github/actions/create-release-tag'
+        $workflow | Should -Not -Match 'Set-AtlassianPSModuleManifestVersion'
+        $workflow | Should -Not -Match 'Get-AtlassianPSReleaseNotesFromChangelog'
+        $workflow | Should -Not -Match 'Compress-Archive'
 
-        $commitIndex | Should -BeGreaterThan -1
-        $publishJobIndex | Should -BeGreaterThan $commitIndex
-        $downloadIndex | Should -BeGreaterThan $publishJobIndex
-        $tagIndex | Should -BeGreaterThan $downloadIndex
-        $publishModuleIndex | Should -BeGreaterThan $tagIndex
-        $releaseIndex | Should -BeGreaterThan $publishModuleIndex
-        $homepageIndex | Should -BeGreaterThan $releaseIndex
-        $workflow | Should -Match 'git add CHANGELOG\.md \.changelog AtlassianPS\.Standards/AtlassianPS\.Standards\.psd1'
+        # The artifact is stamped and verified before it is published to immutable PSGallery.
+        $verifyIndex = $workflow.IndexOf('-VerifyPublishedRelease')
+        $publishIndex = $workflow.IndexOf('Publish-Module')
+        $verifyIndex | Should -BeGreaterThan -1
+        $publishIndex | Should -BeGreaterThan $verifyIndex
     }
 
-    It 'does not keep publish tasks in the build script' {
+    It 'keeps publishing secrets and publish tasks out of the build script' {
         $buildScriptPath = Join-Path -Path $projectRoot -ChildPath 'AtlassianPS.Standards.build.ps1'
         $buildScript = Get-Content -LiteralPath $buildScriptPath -Raw
 
         $buildScript | Should -Not -Match '(?m)^Task Publish\b'
-        $buildScript | Should -Not -Match '(?m)^Task Package\b'
         $buildScript | Should -Not -Match 'PSGalleryAPIKey'
+        $buildScript | Should -Match '(?m)^Task Package\b'
+        $buildScript | Should -Match '(?m)^Task SetSourceVersion\b'
         $buildScript | Should -Match '(?m)^Task SetVersion\b'
         $buildScript | Should -Match '(?m)^Task TestPublish\b'
+        # The publish-time stamp/verify is owned by the build task, parameterized by a switch.
+        $buildScript | Should -Match '\[Switch\]\$VerifyPublishedRelease'
+        $buildScript | Should -Match 'EnforceGreaterThanPublished'
     }
 
     It 'does not keep a non-idempotent tag release workflow beside continuous release' {

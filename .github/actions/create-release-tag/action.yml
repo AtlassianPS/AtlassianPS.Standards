@@ -1,0 +1,25 @@
+name: Create Release Tag
+description: Create and push an annotated release tag, skipping if it already exists.
+inputs:
+  tag:
+    description: Annotated tag to create, for example v1.2.3.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Create annotated release tag
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+      run: |
+        set -euo pipefail
+
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        if git show-ref --verify --quiet "refs/tags/${RELEASE_TAG}"; then
+          echo "Release tag ${RELEASE_TAG} already exists."
+        else
+          git tag -a "${RELEASE_TAG}" -m "${RELEASE_TAG}"
+          git push origin "refs/tags/${RELEASE_TAG}"
+        fi

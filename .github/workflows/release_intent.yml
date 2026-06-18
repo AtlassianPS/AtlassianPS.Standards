@@ -19,5 +19,4 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.ref }}
 
-      - name: Validate release intent
-        uses: ./.github/actions/validate-release-intent
+      - uses: ./.github/actions/validate-release-intent
