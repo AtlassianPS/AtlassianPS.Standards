@@ -8,6 +8,9 @@ inputs:
     description: Commit the tag must identify. Defaults to current checkout commit.
     required: false
     default: HEAD
+  github-token:
+    description: GitHub App or fine-grained token that creates the release tag.
+    required: true
 runs:
   using: composite
   steps:
@@ -16,6 +19,7 @@ runs:
       env:
         RELEASE_TAG: ${{ inputs.tag }}
         RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_BOT_TOKEN: ${{ inputs.github-token }}
       run: |
         set -euo pipefail
 
@@ -32,5 +36,5 @@ runs:
           echo "Release tag ${RELEASE_TAG} already identifies expected commit ${expected_commit}."
         else
           git tag -a "${RELEASE_TAG}" "${expected_commit}" -m "${RELEASE_TAG}"
-          git push origin "refs/tags/${RELEASE_TAG}"
+          git push "https://x-access-token:${RELEASE_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/${RELEASE_TAG}"
         fi

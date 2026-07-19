@@ -34,6 +34,8 @@ If guidance conflicts, follow this file first.
 - Pull requests should declare release intent with exactly one `release:*` label; user-facing changes also need a `changelog:*` label or a valid `.changelog/<pr-number>.<impact>.<type>.md` fragment.
 - Do not ask contributors to choose the final release version in normal PRs; release preparation batches merged intent later.
 - Keep release notes sourced from one `CHANGELOG.md` section for both GitHub releases and PSGallery manifest `PrivateData.PSData.ReleaseNotes`.
+- `ATLASSIANPS_RELEASE_BOT_TOKEN` must be a GitHub App or fine-grained token. `GITHUB_TOKEN` cannot start follow-up CI after metadata push.
+- Do not enable release publishing on an unprotected `master`; direct pushes can bypass review and imitate release metadata.
 - For a partial release with existing tag, follow `docs/ReleaseBlueprint.md` "Recovery Runbook". Do not delete/recreate tag or republish PSGallery version.
 - When changing release behavior, update `docs/ReleaseBlueprint.md`, `docs/BlueprintHelpers.md`, tests, and these agent instructions together.
 

@@ -11,14 +11,12 @@
 
     $pesterVersionToUse = Get-UsablePesterVersion -MinimumVersion $MinimumVersion -MaximumVersion $MaximumVersion
     $loadedPester = Get-Module -Name 'Pester' | Sort-Object -Property Version -Descending | Select-Object -First 1
-    if ((-not $loadedPester) -or ($loadedPester.Version -ne $pesterVersionToUse)) {
-        if ($loadedPester) {
-            Get-Module -Name 'Pester' | Remove-Module -Force -ErrorAction SilentlyContinue
-        }
-        # Pester test scripts execute outside this module scope. Load commands globally so
-        # they remain available after this helper returns on every PowerShell platform.
-        Import-Module -Name 'Pester' -RequiredVersion $pesterVersionToUse -Global -ErrorAction Stop
+    if ($loadedPester -and $loadedPester.Version -ne $pesterVersionToUse) {
+        Get-Module -Name 'Pester' | Remove-Module -Force -ErrorAction SilentlyContinue
     }
+    # Pester test scripts execute outside this module scope. Import globally even when the
+    # selected version is already module-scoped so its commands remain available on Linux.
+    Import-Module -Name 'Pester' -RequiredVersion $pesterVersionToUse -Global -ErrorAction Stop
 
     return $pesterVersionToUse
 }

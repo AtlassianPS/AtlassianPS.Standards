@@ -14,7 +14,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
 
             if ($route -like 'repos/*/commits/*/pulls') {
-                '{"number":42,"title":"Fix release notes","user":"tester","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc123"}'
+                '{"number":42,"title":"Fix release notes","user":{"login":"tester"},"merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc123"}'
                 return
             }
 
@@ -29,6 +29,16 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
 
         function git {
             $arguments = [String[]]$args
+            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--merged') {
+                'v1.2.3'
+                return
+            }
+
+            if ($arguments[0] -eq 'rev-list') {
+                'abc123'
+                return
+            }
+
             if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--list') {
                 'v1.2.3'
                 'v1.3.0-beta'
@@ -48,7 +58,11 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $previousCommitSha = $env:COMMIT_SHA
         $previousChangelogDirectory = $env:CHANGELOG_DIRECTORY
         $previousOutput = $env:GITHUB_OUTPUT
+        $pushedLocation = $false
         try {
+            Push-Location -Path $TestDrive
+            $pushedLocation = $true
+            Remove-Item -LiteralPath (Join-Path -Path $TestDrive -ChildPath '.changelog') -Recurse -Force -ErrorAction SilentlyContinue
             $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
             $env:COMMIT_SHA = 'abc123'
             $env:CHANGELOG_DIRECTORY = '.changelog'
@@ -61,16 +75,18 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             $env:COMMIT_SHA = $previousCommitSha
             $env:CHANGELOG_DIRECTORY = $previousChangelogDirectory
             $env:GITHUB_OUTPUT = $previousOutput
+            if ($pushedLocation) {
+                Pop-Location
+            }
         }
 
         $output = Get-Content -LiteralPath $outputPath -Raw
         $output | Should -Match 'should_release=true'
         $output | Should -Match 'release_impact=minor'
-        $output | Should -Match 'changelog_type=fixed'
         $output | Should -Match 'release_version=1.3.0'
         $output | Should -Match 'release_tag=v1.3.0'
-        $output | Should -Match 'fragment_path=.changelog/42.minor.fixed.md'
-        $output | Should -Match ([Regex]::Escape('fragment_content=* Fix release notes (#42, @tester)'))
+        $fragmentPath = Join-Path -Path $TestDrive -ChildPath '.changelog/42.minor.fixed.md'
+        (Get-Content -LiteralPath $fragmentPath -Raw) | Should -Match ([Regex]::Escape('* Fix release notes (#42, @tester)'))
     }
 
     It 'plan-merged-release skips release:none merged PRs' {
@@ -79,7 +95,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
 
             if ($route -like 'repos/*/commits/*/pulls') {
-                '{"number":43,"title":"Update docs","user":"tester","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"def456"}'
+                '{"number":43,"title":"Update docs","user":{"login":"tester"},"merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"def456"}'
                 return
             }
 
@@ -91,12 +107,29 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             throw "Unexpected gh invocation: $($arguments -join ' ')"
         }
 
+        function git {
+            $arguments = [String[]]$args
+            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--merged') {
+                'v1.2.3'
+                return
+            }
+            if ($arguments[0] -eq 'rev-list') {
+                'def456'
+                return
+            }
+            throw "Unexpected git invocation: $($arguments -join ' ')"
+        }
+
         $outputPath = Join-Path -Path $TestDrive -ChildPath 'github-output.txt'
         $previousRepository = $env:GITHUB_REPOSITORY
         $previousCommitSha = $env:COMMIT_SHA
         $previousChangelogDirectory = $env:CHANGELOG_DIRECTORY
         $previousOutput = $env:GITHUB_OUTPUT
+        $pushedLocation = $false
         try {
+            Push-Location -Path $TestDrive
+            $pushedLocation = $true
+            Remove-Item -LiteralPath (Join-Path -Path $TestDrive -ChildPath '.changelog') -Recurse -Force -ErrorAction SilentlyContinue
             $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
             $env:COMMIT_SHA = 'def456'
             $env:CHANGELOG_DIRECTORY = '.changelog'
@@ -109,6 +142,9 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             $env:COMMIT_SHA = $previousCommitSha
             $env:CHANGELOG_DIRECTORY = $previousChangelogDirectory
             $env:GITHUB_OUTPUT = $previousOutput
+            if ($pushedLocation) {
+                Pop-Location
+            }
         }
 
         $output = Get-Content -LiteralPath $outputPath -Raw
@@ -116,36 +152,83 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output | Should -Match 'skip_reason=release:none'
     }
 
-    It 'plan-merged-release rejects ambiguous merged pull request associations' {
+    It 'plan-merged-release batches merged pull requests and selects highest impact' {
         function gh {
             $arguments = [String[]]$args
             $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
 
-            if ($route -like 'repos/*/commits/*/pulls') {
-                '{"number":43,"title":"First","user":"tester","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc123"}'
-                '{"number":44,"title":"Second","user":"tester","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc123"}'
+            if ($route -like 'repos/*/commits/first/pulls') {
+                '{"number":43,"title":"First","user":{"login":"tester"},"merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc123"}'
+                return
+            }
+            if ($route -like 'repos/*/commits/second/pulls') {
+                '{"number":44,"title":"Second","user":{"login":"tester"},"merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc123"}'
+                return
+            }
+
+            if ($route -like 'repos/*/issues/43/labels') {
+                'release:patch'
+                'changelog:fixed'
+                return
+            }
+            if ($route -like 'repos/*/issues/44/labels') {
+                'release:minor'
+                'changelog:added'
                 return
             }
 
             throw "Unexpected gh invocation: $($arguments -join ' ')"
         }
 
-        $outputPath = Join-Path -Path $TestDrive -ChildPath 'ambiguous-github-output.txt'
+        function git {
+            $arguments = [String[]]$args
+            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--merged') {
+                'v1.2.3'
+                return
+            }
+            if ($arguments[0] -eq 'rev-list') {
+                'first'
+                'second'
+                return
+            }
+            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--list') {
+                'v1.2.3'
+                return
+            }
+            if ($arguments[0] -eq 'show-ref') {
+                Set-Variable -Name LASTEXITCODE -Value 1 -Scope 1
+                return
+            }
+            throw "Unexpected git invocation: $($arguments -join ' ')"
+        }
+
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'batched-github-output.txt'
         $previousRepository = $env:GITHUB_REPOSITORY
         $previousCommitSha = $env:COMMIT_SHA
         $previousOutput = $env:GITHUB_OUTPUT
+        $pushedLocation = $false
         try {
+            Push-Location -Path $TestDrive
+            $pushedLocation = $true
+            Remove-Item -LiteralPath (Join-Path -Path $TestDrive -ChildPath '.changelog') -Recurse -Force -ErrorAction SilentlyContinue
             $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
-            $env:COMMIT_SHA = 'abc123'
+            $env:COMMIT_SHA = 'head123'
             $env:GITHUB_OUTPUT = $outputPath
 
-            { & $script:planMergedReleaseScriptPath } | Should -Throw -ExpectedMessage 'Expected exactly one merged pull request*'
+            & $script:planMergedReleaseScriptPath
         }
         finally {
             $env:GITHUB_REPOSITORY = $previousRepository
             $env:COMMIT_SHA = $previousCommitSha
             $env:GITHUB_OUTPUT = $previousOutput
+            if ($pushedLocation) {
+                Pop-Location
+            }
         }
+
+        $output = Get-Content -LiteralPath $outputPath -Raw
+        $output | Should -Match 'should_release=true'
+        $output | Should -Match 'release_impact=minor'
     }
 
     It 'plan-merged-release computes a manual release without generating a PR fragment' {
@@ -248,7 +331,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
 
             if ($route -like 'repos/*/commits/*/pulls') {
-                '{"number":44,"title":"Change defaults","user":"tester","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"ghi789"}'
+                '{"number":44,"title":"Change defaults","user":{"login":"tester"},"merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"ghi789"}'
                 return
             }
 
@@ -263,6 +346,14 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
 
         function git {
             $arguments = [String[]]$args
+            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--merged') {
+                'v1.2.3'
+                return
+            }
+            if ($arguments[0] -eq 'rev-list') {
+                'ghi789'
+                return
+            }
             if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--list') {
                 'v1.2.3'
                 return
@@ -276,7 +367,11 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $previousCommitSha = $env:COMMIT_SHA
         $previousChangelogDirectory = $env:CHANGELOG_DIRECTORY
         $previousOutput = $env:GITHUB_OUTPUT
+        $pushedLocation = $false
         try {
+            Push-Location -Path $TestDrive
+            $pushedLocation = $true
+            Remove-Item -LiteralPath (Join-Path -Path $TestDrive -ChildPath '.changelog') -Recurse -Force -ErrorAction SilentlyContinue
             $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
             $env:COMMIT_SHA = 'ghi789'
             $env:CHANGELOG_DIRECTORY = '.changelog'
@@ -289,6 +384,9 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             $env:COMMIT_SHA = $previousCommitSha
             $env:CHANGELOG_DIRECTORY = $previousChangelogDirectory
             $env:GITHUB_OUTPUT = $previousOutput
+            if ($pushedLocation) {
+                Pop-Location
+            }
         }
     }
 
@@ -308,6 +406,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'Invoke-Build -Task VerifyReleaseArtifact'
         $workflow | Should -Match 'uses: \./\.github/actions/commit-release-metadata'
         $workflow | Should -Match 'uses: \./\.github/actions/create-release-tag'
+        $workflow | Should -Match 'uses: \./\.github/actions/resolve-release-tag'
         $workflow | Should -Not -Match 'Set-AtlassianPSModuleManifestVersion'
         $workflow | Should -Not -Match 'Get-AtlassianPSReleaseNotesFromChangelog'
         $workflow | Should -Not -Match 'Compress-Archive'
@@ -315,10 +414,12 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         # Final package validation and tag creation precede immutable PSGallery publish.
         $verifyIndex = $workflow.IndexOf('Invoke-Build -Task VerifyReleaseArtifact')
         $tagIndex = $workflow.IndexOf('uses: ./.github/actions/create-release-tag')
+        $resolveTagIndex = $workflow.IndexOf('uses: ./.github/actions/resolve-release-tag')
         $publishIndex = $workflow.IndexOf('Publish-Module')
         $verifyIndex | Should -BeGreaterThan -1
         $publishIndex | Should -BeGreaterThan $verifyIndex
         $tagIndex | Should -BeGreaterThan $verifyIndex
+        $resolveTagIndex | Should -BeGreaterThan $tagIndex
         $publishIndex | Should -BeGreaterThan $tagIndex
 
         # Recovery reuses only a tagged master commit with successful CI artifact provenance.
@@ -326,6 +427,9 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'No successful CI run was found for recovery commit'
         $workflow | Should -Match 'skipping immutable publish'
         $workflow | Should -Match 'RECOVERY_TAG'
+        $workflow | Should -Match "workflow_run\.event == 'push'"
+        $workflow | Should -Match 'PREPARED_COMMIT_MESSAGE'
+        $workflow | Should -Match 'ATLASSIANPS_RELEASE_BOT_TOKEN'
     }
 
     It 'keeps publishing secrets and publish tasks out of the build script' {
@@ -383,6 +487,19 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             }
 
             throw "Unexpected gh invocation: $($arguments -join ' ')"
+        }
+
+        function git {
+            $arguments = [String[]]$args
+            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--merged') {
+                'v1.2.3'
+                return
+            }
+            if ($arguments[0] -eq 'rev-list') {
+                'def456'
+                return
+            }
+            throw "Unexpected git invocation: $($arguments -join ' ')"
         }
 
         $outputPath = Join-Path -Path $TestDrive -ChildPath 'github-output.txt'
@@ -465,6 +582,19 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             }
 
             throw "Unexpected gh invocation: $($arguments -join ' ')"
+        }
+
+        function git {
+            $arguments = [String[]]$args
+            if ($arguments[0] -eq 'tag' -and $arguments[1] -eq '--merged') {
+                'v1.2.3'
+                return
+            }
+            if ($arguments[0] -eq 'rev-list') {
+                'def456'
+                return
+            }
+            throw "Unexpected git invocation: $($arguments -join ' ')"
         }
 
         $outputPath = Join-Path -Path $TestDrive -ChildPath 'github-output.txt'

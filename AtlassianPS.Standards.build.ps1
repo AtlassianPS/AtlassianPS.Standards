@@ -167,11 +167,13 @@ Task VerifyReleaseArtifact Package, {
     }
 
     $expectedCore = $script:BuildInfo.VersionToPublish -replace '-.*$', ''
+    $expectedPrerelease = if ($script:BuildInfo.VersionToPublish -match '-(?<label>.+)$') { $Matches.label } else { '' }
     $null = Test-AtlassianPSModulePackage `
         -BuildOutputPath $env:BHBuildOutput `
         -ModuleName $env:BHProjectName `
         -PackagePath $script:PackagePath `
         -ExpectedVersion $expectedCore `
+        -ExpectedPrerelease $expectedPrerelease `
         -RequireReleaseNotes
 }
 

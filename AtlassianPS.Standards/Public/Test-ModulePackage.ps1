@@ -24,6 +24,9 @@
     .PARAMETER RequireReleaseNotes
         Require non-empty PrivateData.PSData.ReleaseNotes in both release manifest and package.
 
+    .PARAMETER ExpectedPrerelease
+        Optional prerelease label expected in PrivateData.PSData.Prerelease.
+
     .OUTPUTS
         PSCustomObject with ModulePath, ManifestPath, PackagePath, Name, and Version.
 
@@ -50,7 +53,11 @@
         [String]$ExpectedVersion,
 
         [Parameter()]
-        [Switch]$RequireReleaseNotes
+        [Switch]$RequireReleaseNotes,
+
+        [Parameter()]
+        [AllowEmptyString()]
+        [String]$ExpectedPrerelease
     )
 
     $releaseModulePath = Join-Path -Path $BuildOutputPath -ChildPath $ModuleName
@@ -83,6 +90,9 @@
     if ($RequireReleaseNotes -and [String]::IsNullOrWhiteSpace($manifestData.PrivateData.PSData.ReleaseNotes)) {
         throw 'Release manifest release notes are empty.'
     }
+    if ($PSBoundParameters.ContainsKey('ExpectedPrerelease') -and $manifestData.PrivateData.PSData.Prerelease -ne $ExpectedPrerelease) {
+        throw "Release manifest prerelease '$($manifestData.PrivateData.PSData.Prerelease)' does not match expected '$ExpectedPrerelease'."
+    }
 
     $packageValidationRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath "AtlassianPS-PackageValidation-$([Guid]::NewGuid().ToString('N'))"
     try {
@@ -103,6 +113,9 @@
         $packagedManifestData = Import-PowerShellDataFile -LiteralPath $packagedManifestPath
         if ($RequireReleaseNotes -and [String]::IsNullOrWhiteSpace($packagedManifestData.PrivateData.PSData.ReleaseNotes)) {
             throw 'Packaged manifest release notes are empty.'
+        }
+        if ($PSBoundParameters.ContainsKey('ExpectedPrerelease') -and $packagedManifestData.PrivateData.PSData.Prerelease -ne $ExpectedPrerelease) {
+            throw "Packaged manifest prerelease '$($packagedManifestData.PrivateData.PSData.Prerelease)' does not match expected '$ExpectedPrerelease'."
         }
     }
     catch {

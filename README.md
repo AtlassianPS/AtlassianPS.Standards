@@ -63,7 +63,7 @@ Invoke-Build -Task Lint, Build, Test
 Label-based CD runs after release-labelled pull requests merge to `master`.
 It computes the next semantic version from the merged PR's `release:*` label, prepares `CHANGELOG.md`, stamps the source manifest version, commits that release metadata to `master`, validates the final package, creates an annotated tag, publishes to PowerShell Gallery, creates the GitHub release from the same changelog section, and notifies the website to update its module submodule.
 The release-preparation commit stamps the exact source version. Release notes are stamped into, then validated in, the final package before publishing.
-The workflow should use `ATLASSIANPS_RELEASE_BOT_TOKEN` when pushing the release metadata commit and tag if branch protection does not allow the default `GITHUB_TOKEN` to push to `master`.
+The workflow requires `ATLASSIANPS_RELEASE_BOT_TOKEN` to push release metadata and tags. `GITHUB_TOKEN` cannot trigger the follow-up CI required for CD.
 
 The continuous release workflow will:
 

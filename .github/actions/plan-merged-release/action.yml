@@ -1,11 +1,11 @@
 name: Plan Merged Release
-description: Resolve release intent from the pull request associated with a merged commit and compute the next release tag.
+description: Reconcile merged pull request intent since the latest release tag and compute the next release tag.
 inputs:
   github-token:
     description: Token used to read merged pull request metadata.
     required: false
   commit-sha:
-    description: Merge commit SHA to inspect. Defaults to github.sha.
+    description: Master commit SHA through which release intent is reconciled. Defaults to github.sha.
     required: false
   changelog-directory:
     description: Directory containing changelog fragments.

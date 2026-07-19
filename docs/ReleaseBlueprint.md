@@ -52,8 +52,9 @@ After CI succeeds on a normal merged pull request with `release:patch`, `release
 
 `release:none` merges should stop after planning and must not publish.
 The workflow should be serialized with concurrency so multiple release-labelled merges do not race the next-version calculation.
-Use `GITHUB_TOKEN` by default when committing release metadata to `master`.
-Keep an optional release automation token, for example `ATLASSIANPS_RELEASE_BOT_TOKEN`, only for repositories where branch protection or repository rules block `GITHUB_TOKEN` pushes.
+Use a GitHub App or fine-grained automation token, for example `ATLASSIANPS_RELEASE_BOT_TOKEN`, when committing release metadata and creating annotated tags. `GITHUB_TOKEN` pushes do not trigger the required follow-up CI workflow, so they cannot drive this CD flow.
+
+`master` must reject direct pushes before enabling release publishing. The publish workflow identifies release metadata by trusted workflow provenance and commit format; without branch protection, a direct writer can imitate that format. Protect `v*` tags from mutation and deletion.
 
 When unreleased changes already exist on `master` without an associated merged release-labelled PR, use the manual `workflow_dispatch` input on `continuous_release.yml` and choose the release impact for the whole bucket.
 Manual dispatch must still check out `master`, not the arbitrary ref selected in the GitHub UI.
@@ -338,14 +339,13 @@ PSGALLERY_API_KEY
 HOMEPAGE_PAT
 ```
 
-Optional secret:
+Required secret:
 
 ```text
 ATLASSIANPS_RELEASE_BOT_TOKEN
 ```
 
-Use `ATLASSIANPS_RELEASE_BOT_TOKEN` when branch protection or repository rules prevent `GITHUB_TOKEN` from pushing the release metadata commit and annotated tag to `master`.
-If the repository has no branch protection, `GITHUB_TOKEN` is enough.
+`ATLASSIANPS_RELEASE_BOT_TOKEN` must be a GitHub App or fine-grained token able to push release metadata and tags. `GITHUB_TOKEN` is insufficient because its pushes do not trigger follow-up CI.
 
 ### Release Intent Workflow
 
@@ -379,6 +379,8 @@ Make `Release Intent` a required branch-protection check when the repository use
 
 Add `.github/workflows/continuous_release.yml`:
 
+The full workflow contains security-sensitive recovery and publish logic. Start from the current Standards workflow and replace local action paths with pins for one Standards release; do not copy an older workflow from another module.
+
 ```yaml
 name: Continuous Release
 
@@ -390,7 +392,7 @@ on:
     inputs:
       release_impact:
         description: Release impact for unreleased changes already on master
-        required: true
+        required: false
         type: choice
         options:
           - patch
@@ -398,6 +400,10 @@ on:
           - major
       prerelease:
         description: Optional prerelease label for unreleased changes already on master, for example alpha, beta, rc, or rc-2
+        required: false
+        type: string
+      recovery_tag:
+        description: Existing release tag to recover after a partial publish, for example v1.2.3
         required: false
         type: string
 
@@ -414,8 +420,9 @@ jobs:
   prepare:
     name: Prepare release metadata
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && inputs.recovery_tag == '') ||
       (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'master' &&
       !startsWith(github.event.workflow_run.head_commit.message, 'Prepare v'))
     runs-on: ubuntu-latest
@@ -463,29 +470,32 @@ jobs:
         with:
           release-tag: ${{ steps.plan.outputs.release_tag }}
           manifest-path: <ModuleName>/<ModuleName>.psd1
-          github-token: ${{ github.token }}
           release-bot-token: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN }}
 
   publish:
     name: Publish tested release artifact
     if: >-
-      github.event_name == 'workflow_run' &&
+      (github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'master' &&
       startsWith(github.event.workflow_run.head_commit.message, 'Prepare v') &&
-      github.event.workflow_run.head_commit.author.name == 'github-actions[bot]'
+      github.event.workflow_run.head_commit.author.name == 'github-actions[bot]') ||
+      (github.event_name == 'workflow_dispatch' && inputs.recovery_tag != '')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.recovery_tag }}
 
       - name: Resolve prepared release
         id: prepared_release
         shell: pwsh
+        env:
+          PREPARED_COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
         run: |
-          $message = '${{ github.event.workflow_run.head_commit.message }}'
+          $message = $env:PREPARED_COMMIT_MESSAGE
           if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:-\d+)?)?) release$') {
               throw "Commit message '$message' is not a release metadata commit."
           }
@@ -502,10 +512,30 @@ jobs:
 
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@<standards-sha> # vX.Y.Z
 
+      - name: Build release notes
+        id: release_notes
+        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/build-release-notes@<standards-sha> # vX.Y.Z
+        with:
+          release-version: ${{ steps.prepared_release.outputs.release_tag }}
+
+      - name: Stamp and verify release artifact
+        run: Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.prepared_release.outputs.release_tag }} -VerifyPublishedRelease
+        shell: pwsh
+
+      - name: Package release artifact
+        run: Invoke-Build -Task Package
+        shell: pwsh
+
+      - name: Verify release artifact
+        run: Invoke-Build -Task VerifyReleaseArtifact -VersionToPublish ${{ steps.prepared_release.outputs.release_tag }}
+        shell: pwsh
+
       - name: Create annotated release tag
         uses: AtlassianPS/AtlassianPS.Standards/.github/actions/create-release-tag@<standards-sha> # vX.Y.Z
         with:
           tag: ${{ steps.prepared_release.outputs.release_tag }}
+          commit: ${{ steps.prepared_release.outputs.release_commit }}
+          github-token: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN }}
 
       - name: Resolve release ref
         id: release_ref
@@ -513,22 +543,17 @@ jobs:
         with:
           tag: ${{ steps.prepared_release.outputs.release_tag }}
 
-      - name: Build release notes
-        id: release_notes
-        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/build-release-notes@<standards-sha> # vX.Y.Z
-        with:
-          release-version: ${{ steps.release_ref.outputs.release_tag }}
-
-      - name: Stamp and verify release artifact
-        run: Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -VerifyPublishedRelease
-        shell: pwsh
-
-      - name: Package release artifact
-        run: Invoke-Build -Task Package
-        shell: pwsh
-
       - name: Publish tested module artifact
-        run: Publish-Module -Path ./Release/<ModuleName> -NuGetApiKey ${{ secrets.PSGALLERY_API_KEY }} -ErrorAction Stop
+        run: |
+          $manifest = Test-ModuleManifest -Path ./Release/<ModuleName>/<ModuleName>.psd1 -ErrorAction Stop
+          $prerelease = [String]$manifest.PrivateData.PSData.Prerelease
+          $expectedGalleryVersion = if ($prerelease) { "$($manifest.Version)-$prerelease" } else { [String]$manifest.Version }
+          $published = Find-Module -Name $manifest.Name -AllVersions -AllowPrerelease -ErrorAction Stop |
+              Where-Object { $_.Version.ToString() -eq $expectedGalleryVersion } |
+              Select-Object -First 1
+          if (-not $published) {
+            Publish-Module -Path ./Release/<ModuleName> -NuGetApiKey ${{ secrets.PSGALLERY_API_KEY }} -ErrorAction Stop
+          }
         shell: pwsh
 
       - name: Create GitHub release and upload asset
