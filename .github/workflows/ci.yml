@@ -7,35 +7,19 @@ concurrency:
 on:
   pull_request:
     branches: [master]
-    paths-ignore: &paths-ignore
-      - "CHANGELOG.md"
-      - "LICENSE"
-      # AI assistant instruction files
-      - "AGENTS.md"
-      - "CLAUDE.md"
-      - "GEMINI.md"
-      - ".cursor/**"
-      - ".github/copilot-instructions.md"
-      - ".github/ai-context/**"
-      - ".github/instructions/**"
-      # GitHub/editor meta files
-      - ".github/*.md"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE/**"
-      - ".vscode/**"
-      - ".editorconfig"
-      - ".spelling"
   push:
     branches: [master]
-    paths-ignore: *paths-ignore
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: ./.github/actions/setup-powershell
 
       - run: Invoke-Build -Task Lint
@@ -46,14 +30,14 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: ./.github/actions/setup-powershell
 
       - run: Invoke-Build -File ./AtlassianPS.Standards.build.ps1 -Task Build
         shell: pwsh
 
       - name: Upload release artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: Release
           path: ./Release/
@@ -63,7 +47,7 @@ jobs:
     needs: build
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: ./.github/actions/setup-powershell
         with:
           ps-version: "5"
@@ -71,7 +55,7 @@ jobs:
           # so the Windows PowerShell module path is populated.
           skip-setup: "true"
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: Release
           path: ./Release/
@@ -85,7 +69,7 @@ jobs:
       - run: Invoke-Build -Task Test
         shell: powershell
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: Windows-PS5-Unit-Tests
@@ -103,10 +87,10 @@ jobs:
           - { os: ubuntu-latest, name: "Ubuntu" }
           - { os: macos-latest, name: "macOS" }
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: ./.github/actions/setup-powershell
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: Release
           path: ./Release/
@@ -114,7 +98,7 @@ jobs:
       - run: Invoke-Build -Task Test
         shell: pwsh
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: ${{ matrix.name }}-Unit-Tests

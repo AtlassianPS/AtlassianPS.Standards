@@ -1,9 +1,13 @@
 name: Create Release Tag
-description: Create and push an annotated release tag, skipping if it already exists.
+description: Create and push an annotated release tag, or verify an existing tag identifies expected commit.
 inputs:
   tag:
     description: Annotated tag to create, for example v1.2.3.
     required: true
+  commit:
+    description: Commit the tag must identify. Defaults to current checkout commit.
+    required: false
+    default: HEAD
 runs:
   using: composite
   steps:
@@ -11,15 +15,22 @@ runs:
       shell: bash
       env:
         RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
       run: |
         set -euo pipefail
 
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+        expected_commit="$(git rev-parse "${RELEASE_COMMIT}^{commit}")"
         if git show-ref --verify --quiet "refs/tags/${RELEASE_TAG}"; then
-          echo "Release tag ${RELEASE_TAG} already exists."
+          tag_commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          if [ "${tag_commit}" != "${expected_commit}" ]; then
+            echo "::error::Release tag ${RELEASE_TAG} identifies ${tag_commit}, not expected ${expected_commit}."
+            exit 1
+          fi
+          echo "Release tag ${RELEASE_TAG} already identifies expected commit ${expected_commit}."
         else
-          git tag -a "${RELEASE_TAG}" -m "${RELEASE_TAG}"
+          git tag -a "${RELEASE_TAG}" "${expected_commit}" -m "${RELEASE_TAG}"
           git push origin "refs/tags/${RELEASE_TAG}"
         fi

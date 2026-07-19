@@ -14,7 +14,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
 
             if ($route -like 'repos/*/commits/*/pulls') {
-                '{"number":42,"title":"Fix release notes","user":"tester"}'
+                '{"number":42,"title":"Fix release notes","user":"tester","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc123"}'
                 return
             }
 
@@ -79,7 +79,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
 
             if ($route -like 'repos/*/commits/*/pulls') {
-                '{"number":43,"title":"Update docs","user":"tester"}'
+                '{"number":43,"title":"Update docs","user":"tester","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"def456"}'
                 return
             }
 
@@ -114,6 +114,38 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output = Get-Content -LiteralPath $outputPath -Raw
         $output | Should -Match 'should_release=false'
         $output | Should -Match 'skip_reason=release:none'
+    }
+
+    It 'plan-merged-release rejects ambiguous merged pull request associations' {
+        function gh {
+            $arguments = [String[]]$args
+            $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
+
+            if ($route -like 'repos/*/commits/*/pulls') {
+                '{"number":43,"title":"First","user":"tester","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc123"}'
+                '{"number":44,"title":"Second","user":"tester","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc123"}'
+                return
+            }
+
+            throw "Unexpected gh invocation: $($arguments -join ' ')"
+        }
+
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'ambiguous-github-output.txt'
+        $previousRepository = $env:GITHUB_REPOSITORY
+        $previousCommitSha = $env:COMMIT_SHA
+        $previousOutput = $env:GITHUB_OUTPUT
+        try {
+            $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
+            $env:COMMIT_SHA = 'abc123'
+            $env:GITHUB_OUTPUT = $outputPath
+
+            { & $script:planMergedReleaseScriptPath } | Should -Throw -ExpectedMessage 'Expected exactly one merged pull request*'
+        }
+        finally {
+            $env:GITHUB_REPOSITORY = $previousRepository
+            $env:COMMIT_SHA = $previousCommitSha
+            $env:GITHUB_OUTPUT = $previousOutput
+        }
     }
 
     It 'plan-merged-release computes a manual release without generating a PR fragment' {
@@ -216,7 +248,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             $route = @($arguments | Where-Object { $_ -like 'repos/*' } | Select-Object -First 1)
 
             if ($route -like 'repos/*/commits/*/pulls') {
-                '{"number":44,"title":"Change defaults","user":"tester"}'
+                '{"number":44,"title":"Change defaults","user":"tester","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"ghi789"}'
                 return
             }
 
@@ -273,17 +305,27 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'Invoke-Build -Task SetSourceVersion'
         $workflow | Should -Match 'Invoke-Build -Task SetVersion .*-VerifyPublishedRelease'
         $workflow | Should -Match 'Invoke-Build -Task Package'
+        $workflow | Should -Match 'Invoke-Build -Task VerifyReleaseArtifact'
         $workflow | Should -Match 'uses: \./\.github/actions/commit-release-metadata'
         $workflow | Should -Match 'uses: \./\.github/actions/create-release-tag'
         $workflow | Should -Not -Match 'Set-AtlassianPSModuleManifestVersion'
         $workflow | Should -Not -Match 'Get-AtlassianPSReleaseNotesFromChangelog'
         $workflow | Should -Not -Match 'Compress-Archive'
 
-        # The artifact is stamped and verified before it is published to immutable PSGallery.
-        $verifyIndex = $workflow.IndexOf('-VerifyPublishedRelease')
+        # Final package validation and tag creation precede immutable PSGallery publish.
+        $verifyIndex = $workflow.IndexOf('Invoke-Build -Task VerifyReleaseArtifact')
+        $tagIndex = $workflow.IndexOf('uses: ./.github/actions/create-release-tag')
         $publishIndex = $workflow.IndexOf('Publish-Module')
         $verifyIndex | Should -BeGreaterThan -1
         $publishIndex | Should -BeGreaterThan $verifyIndex
+        $tagIndex | Should -BeGreaterThan $verifyIndex
+        $publishIndex | Should -BeGreaterThan $tagIndex
+
+        # Recovery reuses only a tagged master commit with successful CI artifact provenance.
+        $workflow | Should -Match 'recovery_tag:'
+        $workflow | Should -Match 'No successful CI run was found for recovery commit'
+        $workflow | Should -Match 'skipping immutable publish'
+        $workflow | Should -Match 'RECOVERY_TAG'
     }
 
     It 'keeps publishing secrets and publish tasks out of the build script' {

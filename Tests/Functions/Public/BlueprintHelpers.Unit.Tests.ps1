@@ -77,6 +77,50 @@ Describe 'Test-ModulePackage' {
         $result.Version | Should -Be ([Version]'1.2.3')
     }
 
+    It 'requires matching version and release notes when requested' {
+        $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-metadata'
+        $moduleName = 'PackageMetadata'
+        $modulePath = Join-Path -Path $buildOutput -ChildPath $moduleName
+        $null = New-Item -Path $modulePath -ItemType Directory -Force
+        $manifestPath = Join-Path -Path $modulePath -ChildPath "$moduleName.psd1"
+        Set-Content -LiteralPath $manifestPath -Value @"
+@{
+    RootModule = '$moduleName.psm1'
+    ModuleVersion = '1.2.3'
+    GUID = 'b558bd8c-dc02-4ff2-96b7-4d2c61d9d103'
+    PrivateData = @{
+        PSData = @{
+            ReleaseNotes = 'Release notes'
+        }
+    }
+}
+"@
+        Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value ''
+        Compress-Archive -Path $modulePath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
+
+        $result = Test-AtlassianPSModulePackage `
+            -BuildOutputPath $buildOutput `
+            -ModuleName $moduleName `
+            -ExpectedVersion '1.2.3' `
+            -RequireReleaseNotes
+
+        $result.Version | Should -Be ([Version]'1.2.3')
+    }
+
+    It 'rejects a mismatched expected version' {
+        $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-version-mismatch'
+        $moduleName = 'VersionMismatch'
+        $modulePath = Join-Path -Path $buildOutput -ChildPath $moduleName
+        $null = New-Item -Path $modulePath -ItemType Directory -Force
+        New-ModuleManifest -Path (Join-Path -Path $modulePath -ChildPath "$moduleName.psd1") -RootModule "$moduleName.psm1" -ModuleVersion '1.2.3'
+        Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value ''
+        Compress-Archive -Path $modulePath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
+
+        {
+            Test-AtlassianPSModulePackage -BuildOutputPath $buildOutput -ModuleName $moduleName -ExpectedVersion '1.2.4'
+        } | Should -Throw -ExpectedMessage '*does not match expected*'
+    }
+
     It 'throws when the release package is missing' {
         $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-missing-package'
         $moduleName = 'MissingPackage'

@@ -18,6 +18,12 @@
     .PARAMETER PackagePath
         Optional explicit package archive path. Defaults to <BuildOutputPath>/<ModuleName>.zip.
 
+    .PARAMETER ExpectedVersion
+        Optional expected numeric module version.
+
+    .PARAMETER RequireReleaseNotes
+        Require non-empty PrivateData.PSData.ReleaseNotes in both release manifest and package.
+
     .OUTPUTS
         PSCustomObject with ModulePath, ManifestPath, PackagePath, Name, and Version.
 
@@ -38,7 +44,13 @@
         [String]$ModuleName,
 
         [Parameter()]
-        [String]$PackagePath
+        [String]$PackagePath,
+
+        [Parameter()]
+        [String]$ExpectedVersion,
+
+        [Parameter()]
+        [Switch]$RequireReleaseNotes
     )
 
     $releaseModulePath = Join-Path -Path $BuildOutputPath -ChildPath $ModuleName
@@ -64,6 +76,13 @@
     if ($null -eq $manifest.Version) {
         throw 'Release manifest version could not be resolved.'
     }
+    if ($ExpectedVersion -and $manifest.Version.ToString() -ne $ExpectedVersion) {
+        throw "Release manifest version '$($manifest.Version)' does not match expected '$ExpectedVersion'."
+    }
+    $manifestData = Import-PowerShellDataFile -LiteralPath $releaseManifestPath
+    if ($RequireReleaseNotes -and [String]::IsNullOrWhiteSpace($manifestData.PrivateData.PSData.ReleaseNotes)) {
+        throw 'Release manifest release notes are empty.'
+    }
 
     $packageValidationRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath "AtlassianPS-PackageValidation-$([Guid]::NewGuid().ToString('N'))"
     try {
@@ -80,6 +99,10 @@
         }
         if ($packagedManifest.Version -ne $manifest.Version) {
             throw "Packaged manifest version '$($packagedManifest.Version)' does not match release manifest version '$($manifest.Version)'."
+        }
+        $packagedManifestData = Import-PowerShellDataFile -LiteralPath $packagedManifestPath
+        if ($RequireReleaseNotes -and [String]::IsNullOrWhiteSpace($packagedManifestData.PrivateData.PSData.ReleaseNotes)) {
+            throw 'Packaged manifest release notes are empty.'
         }
     }
     catch {

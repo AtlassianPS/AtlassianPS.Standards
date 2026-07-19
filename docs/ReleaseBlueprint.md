@@ -42,12 +42,13 @@ After CI succeeds on a normal merged pull request with `release:patch`, `release
 8. Commit the release metadata changes directly to `master`.
 9. Let CI build and test the bot-authored release metadata commit (the built artifact inherits the stamped version).
 10. Download the CI `Release` artifact from that exact commit.
-11. Create an annotated tag on the tested release metadata commit.
-12. Build release notes from the committed `CHANGELOG.md` section.
-13. Run `Invoke-Build -Task SetVersion ... -VerifyPublishedRelease` to populate release notes into the tested artifact and verify its version, without rebuilding the package.
-14. Publish the verified module artifact to PSGallery.
-15. Create the GitHub release with the same release notes body.
-16. Notify the website to update its module submodule.
+11. Build release notes from the committed `CHANGELOG.md` section.
+12. Run `Invoke-Build -Task SetVersion ... -VerifyPublishedRelease` to populate release notes into the tested artifact and verify its version, without rebuilding the package.
+13. Package and validate the final artifact, including manifest version, release notes, and archive contents.
+14. Create an annotated tag on the tested release metadata commit.
+15. Publish the verified module artifact to PSGallery.
+16. Create the GitHub release with the same release notes body.
+17. Notify the website to update its module submodule.
 
 `release:none` merges should stop after planning and must not publish.
 The workflow should be serialized with concurrency so multiple release-labelled merges do not race the next-version calculation.
@@ -64,7 +65,8 @@ The generated tag and changelog section use forms like `vX.Y.Z-alpha`, `vX.Y.Z-b
 
 Do not keep a separate tag-triggered release workflow unless it is intentionally idempotent across already-created tags, PSGallery packages, GitHub releases, uploaded assets, and website notifications.
 The default AtlassianPS release path has one publishing workflow: `continuous_release.yml`.
-If a release fails after publishing an immutable PSGallery package, repair the failed downstream artifact directly, for example by creating the missing GitHub release or rerunning the website dispatch, instead of rerunning a workflow that calls `Publish-Module` again.
+If a release fails after the metadata commit, rerun `continuous_release.yml` with `recovery_tag` set to the existing release tag. Recovery requires that tag to identify a commit reachable from `master`, locates successful CI for that commit, rebuilds and validates its package, and skips PSGallery only when exact module version already exists. It then reconciles GitHub release asset and website notification.
+Do not use recovery for a tag that lacks successful CI or points outside `master`; investigate and repair source state first.
 
 ## Required Shared Actions
 

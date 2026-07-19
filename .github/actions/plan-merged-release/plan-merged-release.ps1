@@ -49,17 +49,17 @@ else {
     }
 
     $commitPullsRoute = 'repos/{0}/commits/{1}/pulls' -f $env:GITHUB_REPOSITORY, $env:COMMIT_SHA
-    $pullRequestJson = gh api $commitPullsRoute --jq '.[] | select(.merged_at != null) | { number, title, user: .user.login }' |
-        Select-Object -First 1
+    $pullRequests = @(
+        gh api $commitPullsRoute | ConvertFrom-Json | Where-Object {
+            $_.merged_at -and $_.merge_commit_sha -eq $env:COMMIT_SHA
+        }
+    )
 
-    if (-not $pullRequestJson) {
-        Write-OutputValue -Name should_release -Value 'false'
-        Write-OutputValue -Name skip_reason -Value 'no associated merged pull request'
-        Write-Host "Skipping release: no associated merged pull request for commit '$env:COMMIT_SHA'."
-        return
+    if ($pullRequests.Count -ne 1) {
+        throw "Expected exactly one merged pull request with merge commit '$env:COMMIT_SHA'; found $($pullRequests.Count)."
     }
 
-    $pullRequest = $pullRequestJson | ConvertFrom-Json
+    $pullRequest = $pullRequests[0]
     $prNumber = [String]$pullRequest.number
     $prTitle = [String]$pullRequest.title
     $prAuthor = [String]$pullRequest.user

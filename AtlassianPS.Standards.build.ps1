@@ -161,6 +161,20 @@ Task Package {
         -ModuleName $env:BHProjectName
 }
 
+Task VerifyReleaseArtifact Package, {
+    if (-not $script:BuildInfo.VersionToPublish) {
+        throw 'VersionToPublish is required for VerifyReleaseArtifact. Use -VersionToPublish <semver>.'
+    }
+
+    $expectedCore = $script:BuildInfo.VersionToPublish -replace '-.*$', ''
+    $null = Test-AtlassianPSModulePackage `
+        -BuildOutputPath $env:BHBuildOutput `
+        -ModuleName $env:BHProjectName `
+        -PackagePath $script:PackagePath `
+        -ExpectedVersion $expectedCore `
+        -RequireReleaseNotes
+}
+
 Task TestPublish Build, Package, {
     $null = Test-AtlassianPSModulePackage `
         -BuildOutputPath $env:BHBuildOutput `

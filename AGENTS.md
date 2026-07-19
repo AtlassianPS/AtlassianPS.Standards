@@ -74,4 +74,4 @@ Before finalizing, always run the full pipeline: `Invoke-Build -Task Lint, Build
 ## CI/CD Notes
 
 - `.github/workflows/ci.yml` is the required quality gate for runtime/code changes.
-- Instruction-only changes can be skipped by CI path filters; run local validation and report exact command outcomes.
+- CI runs for every pull request and `master` push so every merged release-labelled change reaches release planning.
