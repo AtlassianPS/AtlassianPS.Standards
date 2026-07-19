@@ -20,7 +20,9 @@ Automated, safe release after reviewed PR merge. `release:none` is only normal s
 
 ❌ Publish job modifies package after CI without validating final package.
 
-✅ Third-party workflow Actions are SHA-pinned. Repository SHA pinning is required; default workflow token permission is read-only.
+✅ Third-party workflow Actions are SHA-pinned. Default workflow token permission is read-only.
+
+⚠️ Repository SHA enforcement is temporarily disabled. Enabling it before pinned workflows reach `master` blocked base-branch `Release Intent`. Re-enable immediately after this PR merges.
 
 ## Implementation Plan
 
@@ -29,7 +31,7 @@ Automated, safe release after reviewed PR merge. `release:none` is only normal s
 3. ✅ Added `recovery_tag` dispatch. Recovery verifies tagged master commit and successful CI artifact, then safely skips only existing PSGallery version.
 4. ✅ Made merged-PR resolution deterministic: exact `merge_commit_sha`, exactly one match.
 5. ✅ Added regression tests for planner ambiguity and final package version/notes validation.
-6. ✅ Pinned third-party Actions; CI token now read-only.
+6. ✅ Pinned third-party Actions; CI token now read-only. ⏳ Re-enable repository SHA enforcement after merge.
 7. ⏳ Configure GitHub `master` ruleset and `v*` tag protection. Required checks: `CI Result`, `Release Intent`; one approval; stale-review dismissal; CODEOWNERS; no force push/deletion. Blocked only on selecting release bot bypass identity: GitHub App preferred, or existing `ATLASSIANPS_RELEASE_BOT_TOKEN` owner.
 8. ⏳ Repair stalled `v0.1.12` with `recovery_tag: v0.1.12` after merge. PSGallery publish is irreversible; inspect exact release state first.
 
