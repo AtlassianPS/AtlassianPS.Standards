@@ -84,7 +84,12 @@ jobs:
           ./Tools/setup.ps1
           Invoke-Build -Task ShowDebugInfo
 
-      - run: Invoke-Build -Task Test
+      - name: Test
+        run: |
+          $requirements = & { . ./Tools/build.requirements.psd1 }
+          $pesterVersion = ($requirements | Where-Object ModuleName -eq 'Pester').RequiredVersion
+          Import-Module Pester -RequiredVersion $pesterVersion -Force -Global
+          Invoke-Build -Task Test
         shell: powershell
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -113,7 +118,12 @@ jobs:
           name: Release
           path: ./Release/
 
-      - run: Invoke-Build -Task Test
+      - name: Test
+        run: |
+          $requirements = & { . ./Tools/build.requirements.psd1 }
+          $pesterVersion = ($requirements | Where-Object ModuleName -eq 'Pester').RequiredVersion
+          Import-Module Pester -RequiredVersion $pesterVersion -Force -Global
+          Invoke-Build -Task Test
         shell: pwsh
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
