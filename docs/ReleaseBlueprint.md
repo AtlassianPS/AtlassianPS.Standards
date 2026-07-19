@@ -68,6 +68,20 @@ The default AtlassianPS release path has one publishing workflow: `continuous_re
 If a release fails after the metadata commit, rerun `continuous_release.yml` with `recovery_tag` set to the existing release tag. Recovery requires that tag to identify a commit reachable from `master`, locates successful CI for that commit, rebuilds and validates its package, and skips PSGallery only when exact module version already exists. It then reconciles GitHub release asset and website notification.
 Do not use recovery for a tag that lacks successful CI or points outside `master`; investigate and repair source state first.
 
+### Recovery Runbook
+
+Use recovery only for a partial release: an existing release-preparation commit and tag, but one or more publish stages did not finish. It is not a replacement for the normal manual release path.
+
+1. Inspect the release tag, its commit, the matching `master` CI run, PSGallery, GitHub release, release asset, and website dispatch state.
+2. Confirm the tag is annotated and its commit is reachable from `origin/master`.
+3. Confirm successful CI produced the `Release` artifact for that exact commit.
+4. Confirm `CHANGELOG.md` has a non-empty section matching the tag and source manifest has matching numeric version.
+5. Dispatch `Continuous Release` from `master` with only `recovery_tag` set to that tag, for example `v1.2.3`. Leave `release_impact` and `prerelease` empty.
+6. Monitor the run. It rebuilds release notes, validates package version/notes/archive, verifies or creates the tag, publishes only when PSGallery lacks that exact version, then creates or updates GitHub release asset and sends stable-release website notification.
+7. Verify PSGallery version, annotated tag target, GitHub release body and asset, and website update. Record any intentionally skipped downstream stage.
+
+Never delete, retag, or republish an existing PSGallery version to recover a release. If provenance checks fail, stop and repair the release metadata through a normal reviewed change.
+
 ## Required Shared Actions
 
 Pin all Standards actions to the same released commit SHA and include a version comment. The release

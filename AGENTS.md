@@ -34,6 +34,7 @@ If guidance conflicts, follow this file first.
 - Pull requests should declare release intent with exactly one `release:*` label; user-facing changes also need a `changelog:*` label or a valid `.changelog/<pr-number>.<impact>.<type>.md` fragment.
 - Do not ask contributors to choose the final release version in normal PRs; release preparation batches merged intent later.
 - Keep release notes sourced from one `CHANGELOG.md` section for both GitHub releases and PSGallery manifest `PrivateData.PSData.ReleaseNotes`.
+- For a partial release with existing tag, follow `docs/ReleaseBlueprint.md` "Recovery Runbook". Do not delete/recreate tag or republish PSGallery version.
 - When changing release behavior, update `docs/ReleaseBlueprint.md`, `docs/BlueprintHelpers.md`, tests, and these agent instructions together.
 
 ## Build, Lint, Test (run from repo root)
