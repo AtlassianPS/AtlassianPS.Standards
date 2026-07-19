@@ -51,3 +51,5 @@ Automated, safe release after reviewed PR merge. `release:none` is only normal s
 ✅ Focused pipeline/package tests: 25 passed.
 
 ✅ Full `Invoke-Build -Task Lint, Build, Test`: 81 passed, 0 failed.
+
+⚠️ PR #39 first CI run exposed Pester 5.7.1 incompatibility with current hosted runners. Pin updated to Pester 5.9.0; CI cache key changes with dependency lockfile.
