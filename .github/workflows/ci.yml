@@ -7,6 +7,24 @@ concurrency:
 on:
   pull_request:
     branches: [master]
+    paths-ignore:
+      - "CHANGELOG.md"
+      - "LICENSE"
+      # AI assistant instruction files
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "GEMINI.md"
+      - ".cursor/**"
+      - ".github/copilot-instructions.md"
+      - ".github/ai-context/**"
+      - ".github/instructions/**"
+      # GitHub/editor meta files
+      - ".github/*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE/**"
+      - ".vscode/**"
+      - ".editorconfig"
+      - ".spelling"
   push:
     branches: [master]
   workflow_dispatch:
