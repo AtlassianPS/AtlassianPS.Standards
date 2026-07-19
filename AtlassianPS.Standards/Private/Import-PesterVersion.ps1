@@ -15,7 +15,9 @@
         if ($loadedPester) {
             Get-Module -Name 'Pester' | Remove-Module -Force -ErrorAction SilentlyContinue
         }
-        Import-Module -Name 'Pester' -RequiredVersion $pesterVersionToUse -ErrorAction Stop
+        # Pester test scripts execute outside this module scope. Load commands globally so
+        # they remain available after this helper returns on every PowerShell platform.
+        Import-Module -Name 'Pester' -RequiredVersion $pesterVersionToUse -Global -ErrorAction Stop
     }
 
     return $pesterVersionToUse
