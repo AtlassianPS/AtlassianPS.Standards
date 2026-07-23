@@ -7,7 +7,6 @@ inputs:
   manifest-path:
     description: Path to the module manifest to include in the commit.
     required: true
-  github-token:
   release-bot-token:
     description: GitHub App or fine-grained token that pushes metadata and triggers CI.
     required: true
