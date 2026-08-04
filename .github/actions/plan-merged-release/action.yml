@@ -27,30 +27,12 @@ outputs:
   release_impact:
     description: Resolved release impact label value.
     value: ${{ steps.plan.outputs.release_impact }}
-  changelog_type:
-    description: Resolved changelog type value.
-    value: ${{ steps.plan.outputs.changelog_type }}
   release_tag:
     description: Computed v-prefixed release tag.
     value: ${{ steps.plan.outputs.release_tag }}
   release_version:
     description: Computed release version without the leading v.
     value: ${{ steps.plan.outputs.release_version }}
-  pr_number:
-    description: Associated pull request number.
-    value: ${{ steps.plan.outputs.pr_number }}
-  pr_title:
-    description: Associated pull request title.
-    value: ${{ steps.plan.outputs.pr_title }}
-  pr_author:
-    description: Associated pull request author login.
-    value: ${{ steps.plan.outputs.pr_author }}
-  fragment_path:
-    description: Generated changelog fragment path when the PR used a changelog label.
-    value: ${{ steps.plan.outputs.fragment_path }}
-  fragment_content:
-    description: Generated changelog fragment content when the PR used a changelog label.
-    value: ${{ steps.plan.outputs.fragment_content }}
 runs:
   using: composite
   steps:

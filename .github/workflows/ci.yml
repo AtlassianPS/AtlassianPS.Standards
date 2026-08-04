@@ -134,8 +134,8 @@ jobs:
           results='${{ toJSON(needs) }}'
           echo "Job results:"
           echo "$results"
-          if echo "$results" | grep -E '"result":[[:space:]]*"(failure|cancelled)"' > /dev/null; then
-            echo "::error::One or more required jobs failed or were cancelled."
+          if echo "$results" | grep -E '"result":[[:space:]]*"(failure|cancelled|skipped)"' > /dev/null; then
+            echo "::error::One or more required jobs failed, were cancelled, or were skipped."
             exit 1
           fi
-          echo "All required jobs passed or were skipped."
+          echo "All required jobs passed."

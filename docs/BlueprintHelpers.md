@@ -78,7 +78,7 @@ Use the shared `build-release-notes` action in GitHub workflows so repositories 
     release-version: ${{ steps.release_ref.outputs.release_tag }}
 
 - name: Create Release
-  uses: softprops/action-gh-release@v3
+  uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
   with:
     body_path: ${{ steps.release_notes.outputs.release_notes_path }}
 ```

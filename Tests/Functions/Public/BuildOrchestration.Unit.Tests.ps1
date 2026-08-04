@@ -12,7 +12,7 @@ Describe 'Invoke-ModuleTests' {
             Mock -CommandName Get-Module -MockWith { $null } -ParameterFilter { $Name -eq 'Pester' }
             Mock -CommandName Import-Module -MockWith {}
 
-            $null = Import-PesterVersion -MinimumVersion ([Version]'5.7.0') -MaximumVersion ([Version]'5.999.0')
+            $null = Import-PesterVersion -MinimumVersion ([Version]'5.7.0') -MaximumVersion ([Version]'5.9.999')
 
             Should -Invoke -CommandName Import-Module -Times 1 -Exactly -ParameterFilter {
                 $Name -eq 'Pester' -and $RequiredVersion -eq [Version]'5.9.0' -and $Global -and $ErrorAction -eq 'Stop'
@@ -52,6 +52,25 @@ Describe 'Invoke-ModuleTests' {
             $script:capturedPesterConfig.Filter.ExcludeTag | Should -Contain 'Unit'
             $script:capturedPesterConfig.Filter.ExcludeTag | Should -Not -Contain 'Integration'
             @($script:capturedPesterConfig.Run.ExcludePath).Count | Should -Be 0
+        }
+    }
+
+    It 'defaults to the locked Pester minor version range' {
+        $testsPath = Join-Path -Path $TestDrive -ChildPath 'tests-version-range'
+        $null = New-Item -Path $testsPath -ItemType Directory -Force
+
+        InModuleScope AtlassianPS.Standards -Parameters @{ TestPath = $testsPath } {
+            param($TestPath)
+
+            Mock -CommandName Import-PesterVersion -MockWith { [Version]'5.9.0' }
+            Mock -CommandName New-PesterConfiguration -MockWith { param($Hashtable) $Hashtable }
+            Mock -CommandName Invoke-Pester -MockWith { [PSCustomObject]@{ FailedCount = 0; ContainersFailedCount = 0 } }
+
+            $null = Invoke-ModuleTests -TestPath $TestPath
+
+            Should -Invoke -CommandName Import-PesterVersion -Times 1 -Exactly -ParameterFilter {
+                $MinimumVersion -eq [Version]'5.7.0' -and $MaximumVersion -eq [Version]'5.9.999'
+            }
         }
     }
 

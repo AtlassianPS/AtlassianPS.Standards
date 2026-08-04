@@ -27,7 +27,7 @@
         [Version]$MinimumPesterVersion = [Version]'5.7.0',
 
         [Parameter()]
-        [Version]$MaximumPesterVersion,
+        [Version]$MaximumPesterVersion = [Version]'5.9.999',
 
         [Parameter()]
         [String]$ResultOutputPath

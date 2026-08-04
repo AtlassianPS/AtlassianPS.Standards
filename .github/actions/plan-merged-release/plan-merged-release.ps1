@@ -23,7 +23,6 @@ if (-not $env:GITHUB_REPOSITORY) {
 }
 
 $releaseImpact = $null
-$fragment = $null
 $manualReleaseImpact = if ($env:RELEASE_IMPACT) { $env:RELEASE_IMPACT.Trim().ToLowerInvariant() } else { '' }
 $prereleaseLabel = if ($env:PRERELEASE_LABEL) { $env:PRERELEASE_LABEL.Trim().ToLowerInvariant() } else { '' }
 if ($prereleaseLabel -and $prereleaseLabel -notmatch '^(?:alpha|beta|rc)(?:-\d+)?$') {
@@ -192,9 +191,4 @@ if ($isManualRelease) {
 }
 else {
     Write-Host "Planned release $releaseTag from merged PR #$prNumber with release:$releaseImpact."
-}
-if (-not $isManualRelease -and -not $fragment) {
-    $safeTitle = $prTitle -replace "`r`n|`r|`n", ' '
-    Write-OutputValue -Name fragment_path -Value ('{0}/{1}.{2}.{3}.md' -f $changelogDirectory, $prNumber, $releaseImpact, $changelogType)
-    Write-OutputValue -Name fragment_content -Value ('* {0} (#{1}, @{2})' -f $safeTitle, $prNumber, $prAuthor)
 }

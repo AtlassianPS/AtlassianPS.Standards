@@ -87,6 +87,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output | Should -Match 'release_tag=v1.3.0'
         $fragmentPath = Join-Path -Path $TestDrive -ChildPath '.changelog/42.minor.fixed.md'
         (Get-Content -LiteralPath $fragmentPath -Raw) | Should -Match ([Regex]::Escape('* Fix release notes (#42, @tester)'))
+        $output | Should -Not -Match 'fragment_path='
+        $output | Should -Not -Match 'fragment_content='
     }
 
     It 'plan-merged-release skips release:none merged PRs' {
@@ -229,6 +231,9 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output = Get-Content -LiteralPath $outputPath -Raw
         $output | Should -Match 'should_release=true'
         $output | Should -Match 'release_impact=minor'
+        Test-Path -LiteralPath (Join-Path -Path $TestDrive -ChildPath '.changelog/43.patch.fixed.md') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path -Path $TestDrive -ChildPath '.changelog/44.minor.added.md') | Should -BeTrue
+        $output | Should -Not -Match 'fragment_path='
     }
 
     It 'plan-merged-release computes a manual release without generating a PR fragment' {
@@ -394,9 +399,13 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/continuous_release.yml'
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
 
-        # Only a bot-authored "Prepare v" commit can publish, so arbitrary commits cannot reach PSGallery.
+        # Only a metadata commit on master can start normal publication. Repository rulesets and
+        # protected environments remain the enforcement boundary for writer provenance.
         $workflow | Should -Match "startsWith\(github\.event\.workflow_run\.head_commit\.message, 'Prepare v'\)"
         $workflow | Should -Match "github\.event\.workflow_run\.head_commit\.author\.name == 'github-actions\[bot\]'"
+        $workflow | Should -Match "github\.ref == 'refs/heads/master'"
+        $workflow | Should -Match "inputs\.release_impact == ''"
+        $workflow | Should -Match "inputs\.prerelease == ''"
 
         # Module-domain work lives in Invoke-Build tasks; deployment plumbing lives in composite
         # actions. Neither manifest stamping nor packaging appears inline in the workflow.
@@ -427,9 +436,30 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'No successful CI run was found for recovery commit'
         $workflow | Should -Match 'skipping immutable publish'
         $workflow | Should -Match 'RECOVERY_TAG'
+        $workflow | Should -Match 'refs/tags/\$env:RECOVERY_TAG\^\{tag\}'
+        $workflow | Should -Match 'GH_TOKEN: \$\{\{ github\.token \}\}'
         $workflow | Should -Match "workflow_run\.event == 'push'"
         $workflow | Should -Match 'PREPARED_COMMIT_MESSAGE'
         $workflow | Should -Match 'ATLASSIANPS_RELEASE_BOT_TOKEN'
+
+        $ciWorkflow = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath '.github/workflows/ci.yml') -Raw
+        $ciWorkflow | Should -Match 'failure\|cancelled\|skipped'
+
+        $codeOwners = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath 'CODEOWNERS')
+        $codeOwners[0] | Should -Match '^\*\s+@atlassianps/maintainers$'
+        $codeOwners[-1] | Should -Match '^docs/ReleaseBlueprint\.md\s+@atlassianps/ci-managers$'
+    }
+
+    It 'plan-merged-release publishes only batch-safe outputs' {
+        $actionPath = Join-Path -Path $projectRoot -ChildPath '.github/actions/plan-merged-release/action.yml'
+        $action = Get-Content -LiteralPath $actionPath -Raw
+
+        $action | Should -Match 'should_release:'
+        $action | Should -Match 'release_impact:'
+        $action | Should -Match 'release_tag:'
+        $action | Should -Not -Match 'fragment_path:'
+        $action | Should -Not -Match 'fragment_content:'
+        $action | Should -Not -Match 'pr_number:'
     }
 
     It 'keeps publishing secrets and publish tasks out of the build script' {

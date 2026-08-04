@@ -107,7 +107,7 @@ GitHub releases should use the generated file path:
 
 ```yaml
 - name: Create Release and Upload Asset
-  uses: softprops/action-gh-release@v3
+  uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
   with:
     tag_name: ${{ steps.release_ref.outputs.release_tag }}
     name: ${{ steps.release_ref.outputs.release_tag }}
@@ -420,14 +420,16 @@ jobs:
   prepare:
     name: Prepare release metadata
     if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.recovery_tag == '') ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/master' &&
+      inputs.recovery_tag == '') ||
       (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'master' &&
       !startsWith(github.event.workflow_run.head_commit.message, 'Prepare v'))
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.event.workflow_run.head_sha }}
@@ -439,16 +441,6 @@ jobs:
           commit-sha: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
           release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release_impact || '' }}
           prerelease-label: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || '' }}
-
-      - name: Create generated changelog fragment
-        if: steps.plan.outputs.should_release == 'true' && steps.plan.outputs.fragment_path != ''
-        shell: pwsh
-        env:
-          FRAGMENT_PATH: ${{ steps.plan.outputs.fragment_path }}
-          FRAGMENT_CONTENT: ${{ steps.plan.outputs.fragment_content }}
-        run: |
-          New-Item -Path (Split-Path -Path $env:FRAGMENT_PATH -Parent) -ItemType Directory -Force | Out-Null
-          $env:FRAGMENT_CONTENT | Set-Content -LiteralPath $env:FRAGMENT_PATH -Encoding utf8
 
       - name: Prepare release changelog
         if: steps.plan.outputs.should_release == 'true'
@@ -481,31 +473,75 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       startsWith(github.event.workflow_run.head_commit.message, 'Prepare v') &&
       github.event.workflow_run.head_commit.author.name == 'github-actions[bot]') ||
-      (github.event_name == 'workflow_dispatch' && inputs.recovery_tag != '')
+       (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/master' &&
+       inputs.recovery_tag != '' &&
+       inputs.release_impact == '' &&
+       inputs.prerelease == '')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.recovery_tag }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || format('refs/tags/{0}', inputs.recovery_tag) }}
 
       - name: Resolve prepared release
         id: prepared_release
         shell: pwsh
         env:
+          RECOVERY_TAG: ${{ inputs.recovery_tag }}
           PREPARED_COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
         run: |
+          if ($env:RECOVERY_TAG) {
+            if ($env:RECOVERY_TAG -notmatch '^v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:-\d+)?)?$') {
+              throw "Recovery tag '$env:RECOVERY_TAG' is not a supported release tag."
+            }
+            git rev-parse --verify --quiet "refs/tags/$env:RECOVERY_TAG^{tag}" | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+              throw "Recovery tag '$env:RECOVERY_TAG' must be an annotated tag."
+            }
+            $tagCommit = git rev-parse "refs/tags/$env:RECOVERY_TAG^{commit}"
+            git merge-base --is-ancestor $tagCommit origin/master
+            if ($LASTEXITCODE -ne 0) {
+              throw "Recovery tag '$env:RECOVERY_TAG' does not identify a commit reachable from master."
+            }
+            "release_tag=$env:RECOVERY_TAG" >> $env:GITHUB_OUTPUT
+            "release_commit=$tagCommit" >> $env:GITHUB_OUTPUT
+            return
+          }
+
           $message = $env:PREPARED_COMMIT_MESSAGE
           if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:-\d+)?)?) release$') {
               throw "Commit message '$message' is not a release metadata commit."
           }
 
           "release_tag=$($Matches.tag)" >> $env:GITHUB_OUTPUT
+          "release_commit=${{ github.event.workflow_run.head_sha }}" >> $env:GITHUB_OUTPUT
+
+      - name: Resolve tested CI artifact
+        id: ci_run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          RELEASE_COMMIT: ${{ steps.prepared_release.outputs.release_commit }}
+        run: |
+          if ($env:WORKFLOW_RUN_ID) {
+            "run_id=$env:WORKFLOW_RUN_ID" >> $env:GITHUB_OUTPUT
+            return
+          }
+
+          $runId = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs?head_sha=$env:RELEASE_COMMIT&status=completed&per_page=100" --jq '.workflow_runs[] | select(.name == "CI" and .conclusion == "success") | .id' |
+              Select-Object -First 1
+          if (-not $runId) {
+            throw "No successful CI run was found for recovery commit '$env:RELEASE_COMMIT'."
+          }
+          "run_id=$runId" >> $env:GITHUB_OUTPUT
 
       - name: Download tested release artifact
-        uses: dawidd6/action-download-artifact@v21
+        uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
         with:
-          run_id: ${{ github.event.workflow_run.id }}
+          run_id: ${{ steps.ci_run.outputs.run_id }}
           name: Release
           path: ./Release/
           if_no_artifact_found: fail
@@ -519,7 +555,15 @@ jobs:
           release-version: ${{ steps.prepared_release.outputs.release_tag }}
 
       - name: Stamp and verify release artifact
-        run: Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.prepared_release.outputs.release_tag }} -VerifyPublishedRelease
+        env:
+          RECOVERY_TAG: ${{ inputs.recovery_tag }}
+        run: |
+          if ($env:RECOVERY_TAG) {
+            Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.prepared_release.outputs.release_tag }}
+          }
+          else {
+            Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.prepared_release.outputs.release_tag }} -VerifyPublishedRelease
+          }
         shell: pwsh
 
       - name: Package release artifact
@@ -557,7 +601,7 @@ jobs:
         shell: pwsh
 
       - name: Create GitHub release and upload asset
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           tag_name: ${{ steps.release_ref.outputs.release_tag }}
           name: ${{ steps.release_ref.outputs.release_tag }}
@@ -571,7 +615,7 @@ jobs:
 
       - name: Notify homepage to update submodule
         if: ${{ !contains(steps.release_ref.outputs.release_tag, '-alpha') && !contains(steps.release_ref.outputs.release_tag, '-beta') && !contains(steps.release_ref.outputs.release_tag, '-rc') }}
-        uses: peter-evans/repository-dispatch@v4
+        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4
         with:
           token: ${{ secrets.HOMEPAGE_PAT }}
           repository: AtlassianPS/AtlassianPS.github.io
@@ -585,11 +629,13 @@ Existing modules use `HOMEPAGE_PAT`; if a repository uses a different name, adju
 ### Releasing A Bucket Already On Master
 
 If a maintainer asks an agent to release unreleased changes that already exist on `master`, do not create an empty release PR.
-Use the manual dispatch path of `continuous_release.yml` instead:
+Use the manual dispatch path of `continuous_release.yml` from `master` only instead:
 
 1. Inspect `CHANGELOG.md` and `.changelog/*.md` to understand the pending release notes.
 2. Choose the highest required impact: `major` beats `minor`, `minor` beats `patch`.
 3. Run `continuous_release.yml` with `release_impact` set to that impact; leave `prerelease` empty for a stable release or enter `alpha`, `beta`, `rc`, or a numbered form like `rc-2` for a prerelease.
+
+Do not combine `recovery_tag` with `release_impact` or `prerelease`. Recovery derives its version and commit from the existing annotated tag and uses the successful CI artifact for that exact commit.
 4. Monitor the run until the release metadata commit, annotated tag, PSGallery publish, GitHub release, and website dispatch for stable releases complete.
 
 The manual path computes the next version from existing stable `vX.Y.Z` tags and folds the current `## Unreleased` body plus all valid changelog fragments into that version section.
