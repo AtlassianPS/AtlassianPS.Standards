@@ -34,10 +34,11 @@ If guidance conflicts, follow this file first.
 - Pull requests should declare release intent with exactly one `release:*` label; user-facing changes also need a `changelog:*` label or a valid `.changelog/<pr-number>.<impact>.<type>.md` fragment.
 - Do not ask contributors to choose the final release version in normal PRs; release preparation batches merged intent later.
 - Keep release notes sourced from one `CHANGELOG.md` section for both GitHub releases and PSGallery manifest `PrivateData.PSData.ReleaseNotes`.
-- `ATLASSIANPS_RELEASE_BOT_TOKEN` must be a GitHub App or fine-grained token. `GITHUB_TOKEN` cannot start follow-up CI after metadata push.
+- Mint short-lived release tokens with `ATLASSIANPS_RELEASE_APP_ID` and `ATLASSIANPS_RELEASE_APP_PRIVATE_KEY`. `GITHUB_TOKEN` cannot start follow-up CI after metadata push.
 - Do not enable release publishing on an unprotected `master`; direct pushes can bypass review and imitate release metadata.
-- Run manual release or recovery dispatches from `master` only. Recovery accepts only `recovery_tag`; do not combine it with manual release impact or prerelease inputs.
-- For a partial release with existing tag, follow `docs/ReleaseBlueprint.md` "Recovery Runbook". Do not delete/recreate tag or republish PSGallery version.
+- Run manual release dispatches from `master` only; operators choose impact or prerelease label, never the final version or source commit.
+- Candidate CI must create the final validated package without publishing secrets. The publish job verifies and promotes that exact artifact without checking out repository code.
+- Rerun failed jobs for transient publish failures. For lasting failures, merge a reviewed fix and release the next version; never delete/recreate a tag or republish a PSGallery version.
 - When changing release behavior, update `docs/ReleaseBlueprint.md`, `docs/BlueprintHelpers.md`, tests, and these agent instructions together.
 
 ## Build, Lint, Test (run from repo root)

@@ -71,10 +71,21 @@ Describe 'Test-ModulePackage' {
         Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value ''
         Compress-Archive -Path $modulePath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
 
-        $result = Test-AtlassianPSModulePackage -BuildOutputPath $buildOutput -ModuleName $moduleName
+        $galleryRoot = Join-Path -Path $TestDrive -ChildPath 'gallery-package'
+        $null = New-Item -Path $galleryRoot -ItemType Directory -Force
+        Copy-Item -Path (Join-Path -Path $modulePath -ChildPath '*') -Destination $galleryRoot -Recurse
+        $galleryPackagePath = Join-Path -Path $buildOutput -ChildPath "$moduleName.1.2.3.nupkg"
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::CreateFromDirectory($galleryRoot, $galleryPackagePath)
+
+        $result = Test-AtlassianPSModulePackage `
+            -BuildOutputPath $buildOutput `
+            -ModuleName $moduleName `
+            -GalleryPackagePath $galleryPackagePath
 
         $result.Name | Should -Be $moduleName
         $result.Version | Should -Be ([Version]'1.2.3')
+        $result.GalleryPackagePath | Should -Be $galleryPackagePath
     }
 
     It 'requires matching version and release notes when requested' {
@@ -170,6 +181,30 @@ Describe 'Test-ModulePackage' {
         {
             Test-AtlassianPSModulePackage -BuildOutputPath $buildOutput -ModuleName $moduleName
         } | Should -Throw -ExpectedMessage '*does not contain expected manifest*'
+    }
+
+    It 'rejects a PSGallery package missing a built module file' {
+        $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-invalid-gallery-package'
+        $moduleName = 'InvalidGalleryPackage'
+        $modulePath = Join-Path -Path $buildOutput -ChildPath $moduleName
+        $galleryRoot = Join-Path -Path $TestDrive -ChildPath 'invalid-gallery-package'
+        $null = New-Item -Path $modulePath, $galleryRoot -ItemType Directory -Force
+        $manifestPath = Join-Path -Path $modulePath -ChildPath "$moduleName.psd1"
+        New-ModuleManifest -Path $manifestPath -RootModule "$moduleName.psm1" -ModuleVersion '1.0.0'
+        Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value 'function Get-Thing {}'
+        Compress-Archive -Path $modulePath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
+
+        Copy-Item -LiteralPath $manifestPath -Destination $galleryRoot
+        $galleryPackagePath = Join-Path -Path $buildOutput -ChildPath "$moduleName.1.0.0.nupkg"
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::CreateFromDirectory($galleryRoot, $galleryPackagePath)
+
+        {
+            Test-AtlassianPSModulePackage `
+                -BuildOutputPath $buildOutput `
+                -ModuleName $moduleName `
+                -GalleryPackagePath $galleryPackagePath
+        } | Should -Throw -ExpectedMessage '*does not contain built module file*psm1*'
     }
 }
 

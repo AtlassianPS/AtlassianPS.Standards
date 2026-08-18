@@ -57,7 +57,7 @@ jobs:
       - name: Upload release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: Release
+          name: Release-Build
           path: ./Release/
 
   test_windows_ps5:
@@ -75,7 +75,7 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: Release
+          name: Release-Build
           path: ./Release/
 
       - name: Setup
@@ -110,7 +110,7 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: Release
+          name: Release-Build
           path: ./Release/
 
       - run: Invoke-Build -Task Test
@@ -122,10 +122,110 @@ jobs:
           name: ${{ matrix.name }}-Unit-Tests
           path: Test*.xml
 
+  release_candidate:
+    name: Release Candidate
+    needs: [build, test_windows_ps5, test_pwsh]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release candidate
+        id: candidate
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          $shouldBuild = $env:EVENT_NAME -eq 'push' -and
+            $env:EVENT_REF -eq 'refs/heads/master' -and
+            $env:COMMIT_MESSAGE -match '^Prepare (?<tag>v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:-\d+)?)?) release$'
+
+          "should_build=$($shouldBuild.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          if ($shouldBuild) {
+            "release_tag=$($Matches.tag)" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: No release candidate required
+        if: steps.candidate.outputs.should_build != 'true'
+        run: echo "This CI run does not prepare a release candidate."
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        if: steps.candidate.outputs.should_build == 'true'
+
+      - uses: ./.github/actions/setup-powershell
+        if: steps.candidate.outputs.should_build == 'true'
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        if: steps.candidate.outputs.should_build == 'true'
+        with:
+          name: Release-Build
+          path: ./Release/
+
+      - uses: ./.github/actions/build-release-notes
+        if: steps.candidate.outputs.should_build == 'true'
+        id: release_notes
+        with:
+          release-version: ${{ steps.candidate.outputs.release_tag }}
+          module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1
+
+      - name: Stamp release artifact
+        if: steps.candidate.outputs.should_build == 'true'
+        run: Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.candidate.outputs.release_tag }} -VerifyPublishedRelease
+        shell: pwsh
+
+      - name: Package and verify release artifact
+        if: steps.candidate.outputs.should_build == 'true'
+        run: Invoke-Build -Task VerifyReleaseArtifact -VersionToPublish ${{ steps.candidate.outputs.release_tag }}
+        shell: pwsh
+
+      - name: Record candidate identity
+        if: steps.candidate.outputs.should_build == 'true'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.candidate.outputs.release_tag }}
+          RELEASE_NOTES_PATH: ${{ steps.release_notes.outputs.release_notes_path }}
+        run: |
+          $packagePath = './Release/AtlassianPS.Standards.zip'
+          $notesPath = (Resolve-Path -LiteralPath $env:RELEASE_NOTES_PATH).ProviderPath
+          $expectedNotesPath = (Resolve-Path -LiteralPath './Release/release-notes.md').ProviderPath
+          if ($notesPath -ne $expectedNotesPath) {
+            throw "Release notes must be written to '$expectedNotesPath'."
+          }
+          $galleryPackages = @(Get-ChildItem -LiteralPath './Release' -Filter '*.nupkg')
+          if ($galleryPackages.Count -ne 1) {
+            throw "Expected one PSGallery package, found $($galleryPackages.Count)."
+          }
+          $galleryPackagePath = $galleryPackages[0].FullName
+
+          $candidate = [ordered]@{
+            schemaVersion      = 1
+            releaseTag        = $env:RELEASE_TAG
+            releaseCommit     = $env:GITHUB_SHA
+            moduleName        = 'AtlassianPS.Standards'
+            packageFile       = 'AtlassianPS.Standards.zip'
+            packageSha256     = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            galleryPackageFile = Split-Path -Path $galleryPackagePath -Leaf
+            galleryPackageSha256 = (Get-FileHash -LiteralPath $galleryPackagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            releaseNotesFile  = 'release-notes.md'
+            releaseNotesSha256 = (Get-FileHash -LiteralPath $notesPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          $candidate | ConvertTo-Json | Set-Content -LiteralPath './Release/release-manifest.json' -Encoding utf8
+
+      - name: Upload release candidate
+        if: steps.candidate.outputs.should_build == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: Release-Candidate
+          path: |
+            ./Release/AtlassianPS.Standards.zip
+            ./Release/*.nupkg
+            ./Release/release-notes.md
+            ./Release/release-manifest.json
+          retention-days: 30
+
   ci-required:
     name: CI Result
     if: always()
-    needs: [lint, build, test_windows_ps5, test_pwsh]
+    needs: [lint, build, test_windows_ps5, test_pwsh, release_candidate]
     runs-on: ubuntu-latest
     steps:
       - name: Aggregate job results

@@ -12,7 +12,7 @@ Consumers call commands with the prefixed names, for example `Test-AtlassianPSMo
 | Area | Helpers | Contract |
 |------|---------|----------|
 | Build output | `Copy-ModuleArtifacts`, `Join-ModuleSource` | Copy release artifacts and merge module source folders into the release `.psm1`. |
-| Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set release metadata, create a local package zip, and validate the package contains the expected manifest. |
+| Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set release metadata, create a local package zip, and validate the zip and PSGallery package against the built module. |
 | External help | `Update-ExternalHelp`, `Remove-OrphanedExternalHelp` | Generate PlatyPS external help and remove generated help files that no longer have markdown sources. |
 | Test bootstrap | `Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment` | Resolve repository/module paths and import the module under test for Pester. |
 | Environment loading | `Import-DotEnvFile` | Load `.env` values into process-scoped environment variables without emitting secret values. |
@@ -48,19 +48,17 @@ Task UpdateManifest {
 
 ## Publish Dry Run
 
-Package validation is intentionally two visible steps: create the package, then validate it.
-Continuous release publishes the CI-tested `Release` artifact directly; repository build scripts should not keep separate `Publish` or `Package` tasks for the release path.
+Candidate CI creates and validates `Release-Candidate`, including the GitHub zip and exact PSGallery
+`.nupkg`. Build scripts keep explicit `Package`, `PackageGallery`, and `VerifyReleaseArtifact` tasks;
+they do not contain publishing tasks or credentials.
 
 ```powershell
-Task TestPublish Build, {
-    $packagePath = New-AtlassianPSModulePackage `
-        -BuildOutputPath $env:BHBuildOutput `
-        -ModuleName $env:BHProjectName
-
+Task VerifyReleaseArtifact Package, PackageGallery, {
     $null = Test-AtlassianPSModulePackage `
         -BuildOutputPath $env:BHBuildOutput `
         -ModuleName $env:BHProjectName `
-        -PackagePath $packagePath
+        -PackagePath $script:PackagePath `
+        -GalleryPackagePath $script:GalleryPackagePath
 }
 ```
 
@@ -68,19 +66,23 @@ Task TestPublish Build, {
 
 Release builds should derive manifest release notes from the same `CHANGELOG.md` section used for the GitHub release body.
 Use tag-form headings, for example `## v1.2.3`, and pass the validated release tag through the build.
-Use the shared `build-release-notes` action in GitHub workflows so repositories do not copy PowerShell plumbing.
+Use the shared `build-release-notes` action in secretless candidate CI so repositories do not copy PowerShell plumbing. Upload its output with the final candidate for the publishing job.
 
 ```yaml
 - name: Build release notes from changelog
   id: release_notes
   uses: AtlassianPS/AtlassianPS.Standards/.github/actions/build-release-notes@<standards-sha>
   with:
-    release-version: ${{ steps.release_ref.outputs.release_tag }}
+    release-version: ${{ steps.candidate.outputs.release_tag }}
+```
 
+After the publisher downloads the candidate, use the uploaded file directly:
+
+```yaml
 - name: Create Release
   uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
   with:
-    body_path: ${{ steps.release_notes.outputs.release_notes_path }}
+    body_path: ./Release/release-notes.md
 ```
 
 ```powershell
@@ -104,7 +106,7 @@ Task SetVersion {
 Release automation should fold pending changelog entries and custom fragments into the next version section, then delete the consumed fragments.
 Use the `prepare-release-changelog` composite action instead of exporting another module helper for GitHub-only release mechanics.
 In the continuous release workflow, commit the resulting `CHANGELOG.md` update and `.changelog` deletions directly to `master` after a release-labelled PR merges.
-Commit the source module manifest version in the release metadata commit. Stamp release notes only into final release artifact, then validate package before publishing; source manifest keeps release notes empty.
+Commit the source module manifest version in the release metadata commit. Stamp release notes only into the final artifact in secretless candidate CI, then package and validate it before upload; the source manifest keeps release notes empty and the publisher does not rebuild.
 For manual release preparation, commit source version and changelog before tagging the release.
 
 ```yaml

@@ -161,7 +161,27 @@ Task Package {
         -ModuleName $env:BHProjectName
 }
 
-Task VerifyReleaseArtifact Package, {
+Task PackageGallery {
+    if (-not $script:BuildInfo.VersionToPublish) {
+        throw 'VersionToPublish is required for PackageGallery. Use -VersionToPublish <semver>.'
+    }
+
+    $expectedVersion = $script:BuildInfo.VersionToPublish.TrimStart('v')
+    $script:GalleryPackagePath = Join-Path `
+        -Path $env:BHBuildOutput `
+        -ChildPath "$($env:BHProjectName).$expectedVersion.nupkg"
+
+    $null = Compress-PSResource `
+        -Path $script:BuildInfo.BuiltManifestPath `
+        -DestinationPath $env:BHBuildOutput `
+        -ErrorAction Stop
+
+    if (-not (Test-Path -LiteralPath $script:GalleryPackagePath -PathType Leaf)) {
+        throw "PSGallery package '$script:GalleryPackagePath' was not created."
+    }
+}
+
+Task VerifyReleaseArtifact Package, PackageGallery, {
     if (-not $script:BuildInfo.VersionToPublish) {
         throw 'VersionToPublish is required for VerifyReleaseArtifact. Use -VersionToPublish <semver>.'
     }
@@ -172,6 +192,7 @@ Task VerifyReleaseArtifact Package, {
         -BuildOutputPath $env:BHBuildOutput `
         -ModuleName $env:BHProjectName `
         -PackagePath $script:PackagePath `
+        -GalleryPackagePath $script:GalleryPackagePath `
         -ExpectedVersion $expectedCore `
         -ExpectedPrerelease $expectedPrerelease `
         -RequireReleaseNotes

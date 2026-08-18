@@ -218,6 +218,26 @@ Describe 'Set-ModuleManifestVersion' {
         ($written -replace "`r`n", "`n") | Should -Be $notes
     }
 
+    It 'activates commented prerelease and release-note placeholders' {
+        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-commented-metadata.psd1'
+        $commentedManifest = $script:manifestTemplate `
+            -replace "            Prerelease   = ''", "            # Prerelease   = ''" `
+            -replace "            ReleaseNotes = ''", "            # ReleaseNotes = ''"
+        Set-Content -LiteralPath $manifestPath -Value $commentedManifest
+
+        $notes = "- Fixed candidate metadata`n- Preserved multi-line notes"
+        $null = Set-AtlassianPSModuleManifestVersion `
+            -BuiltManifestPath $manifestPath `
+            -ModuleName 'Sample' `
+            -VersionToPublish '1.2.3-rc-2' `
+            -ReleaseNotes $notes
+
+        $written = Import-PowerShellDataFile -LiteralPath $manifestPath
+        $written.PrivateData.PSData.Prerelease | Should -Be 'rc-2'
+        ($written.PrivateData.PSData.ReleaseNotes -replace "`r`n", "`n") | Should -Be $notes
+        (Get-Content -LiteralPath $manifestPath -Raw) | Should -Not -Match '(?m)^\s*#\s*(Prerelease|ReleaseNotes)\s*='
+    }
+
     It 'does not check the published version unless -EnforceGreaterThanPublished is set' {
         $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-noenforce.psd1'
         Set-Content -LiteralPath $manifestPath -Value $script:manifestTemplate

@@ -4,10 +4,10 @@
         Validates release module packaging artifacts without publishing.
 
     .DESCRIPTION
-        Checks that the built module directory, manifest, and package archive exist,
+        Checks that the built module directory, manifest, and package archives exist,
         validates the manifest metadata resolves to the expected module name and a
-        concrete version, then expands the package to verify that the archive contains
-        the expected module manifest.
+        concrete version, then expands the packages to verify that the archives contain
+        the expected built module files and metadata.
 
     .PARAMETER BuildOutputPath
         Path to the build output directory, usually Release.
@@ -17,6 +17,10 @@
 
     .PARAMETER PackagePath
         Optional explicit package archive path. Defaults to <BuildOutputPath>/<ModuleName>.zip.
+
+    .PARAMETER GalleryPackagePath
+        Optional PSGallery .nupkg path. When provided, every built module file must exist
+        at the package root with identical contents.
 
     .PARAMETER ExpectedVersion
         Optional expected numeric module version.
@@ -28,7 +32,8 @@
         Optional prerelease label expected in PrivateData.PSData.Prerelease.
 
     .OUTPUTS
-        PSCustomObject with ModulePath, ManifestPath, PackagePath, Name, and Version.
+        PSCustomObject with ModulePath, ManifestPath, PackagePath, GalleryPackagePath,
+        Name, and Version.
 
     .EXAMPLE
         Test-AtlassianPSModulePackage -BuildOutputPath './Release' -ModuleName 'JiraPS'
@@ -48,6 +53,9 @@
 
         [Parameter()]
         [String]$PackagePath,
+
+        [Parameter()]
+        [String]$GalleryPackagePath,
 
         [Parameter()]
         [String]$ExpectedVersion,
@@ -74,6 +82,9 @@
     }
     if (-not (Test-Path -LiteralPath $PackagePath -PathType Leaf)) {
         throw "Release package was not created: $PackagePath"
+    }
+    if ($GalleryPackagePath -and -not (Test-Path -LiteralPath $GalleryPackagePath -PathType Leaf)) {
+        throw "PSGallery package was not created: $GalleryPackagePath"
     }
 
     $manifest = Test-ModuleManifest -Path $releaseManifestPath -ErrorAction Stop
@@ -125,11 +136,67 @@
         Remove-Item -LiteralPath $packageValidationRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 
+    if ($GalleryPackagePath) {
+        $galleryValidationRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath "AtlassianPS-GalleryValidation-$([Guid]::NewGuid().ToString('N'))"
+        try {
+            $null = New-Item -Path $galleryValidationRoot -ItemType Directory -Force
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [System.IO.Compression.ZipFile]::ExtractToDirectory(
+                (Resolve-Path -LiteralPath $GalleryPackagePath).ProviderPath,
+                $galleryValidationRoot
+            )
+
+            $resolvedModulePath = (Resolve-Path -LiteralPath $releaseModulePath).ProviderPath.TrimEnd(
+                [System.IO.Path]::DirectorySeparatorChar,
+                [System.IO.Path]::AltDirectorySeparatorChar
+            )
+            foreach ($builtFile in Get-ChildItem -LiteralPath $resolvedModulePath -File -Recurse) {
+                $relativePath = $builtFile.FullName.Substring($resolvedModulePath.Length).TrimStart(
+                    [System.IO.Path]::DirectorySeparatorChar,
+                    [System.IO.Path]::AltDirectorySeparatorChar
+                )
+                $galleryFilePath = Join-Path -Path $galleryValidationRoot -ChildPath $relativePath
+                if (-not (Test-Path -LiteralPath $galleryFilePath -PathType Leaf)) {
+                    throw "PSGallery package '$GalleryPackagePath' does not contain built module file '$relativePath'."
+                }
+
+                $builtHash = (Get-FileHash -LiteralPath $builtFile.FullName -Algorithm SHA256).Hash
+                $galleryHash = (Get-FileHash -LiteralPath $galleryFilePath -Algorithm SHA256).Hash
+                if ($galleryHash -ne $builtHash) {
+                    throw "PSGallery package file '$relativePath' does not match the built module."
+                }
+            }
+
+            $galleryManifestPath = Join-Path -Path $galleryValidationRoot -ChildPath "$ModuleName.psd1"
+            $galleryManifest = Test-ModuleManifest -Path $galleryManifestPath -ErrorAction Stop
+            if ($galleryManifest.Name -ne $ModuleName) {
+                throw "PSGallery manifest name '$($galleryManifest.Name)' does not match '$ModuleName'."
+            }
+            if ($galleryManifest.Version -ne $manifest.Version) {
+                throw "PSGallery manifest version '$($galleryManifest.Version)' does not match release manifest version '$($manifest.Version)'."
+            }
+            $galleryManifestData = Import-PowerShellDataFile -LiteralPath $galleryManifestPath
+            if ($RequireReleaseNotes -and [String]::IsNullOrWhiteSpace($galleryManifestData.PrivateData.PSData.ReleaseNotes)) {
+                throw 'PSGallery manifest release notes are empty.'
+            }
+            if ($PSBoundParameters.ContainsKey('ExpectedPrerelease') -and $galleryManifestData.PrivateData.PSData.Prerelease -ne $ExpectedPrerelease) {
+                throw "PSGallery manifest prerelease '$($galleryManifestData.PrivateData.PSData.Prerelease)' does not match expected '$ExpectedPrerelease'."
+            }
+        }
+        catch {
+            throw "PSGallery package validation failed for '$GalleryPackagePath': $($_.Exception.Message)"
+        }
+        finally {
+            Remove-Item -LiteralPath $galleryValidationRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     [PSCustomObject]@{
-        ModulePath   = $releaseModulePath
-        ManifestPath = $releaseManifestPath
-        PackagePath  = $PackagePath
-        Name         = $manifest.Name
-        Version      = $manifest.Version
+        ModulePath         = $releaseModulePath
+        ManifestPath       = $releaseManifestPath
+        PackagePath        = $PackagePath
+        GalleryPackagePath = $GalleryPackagePath
+        Name               = $manifest.Name
+        Version            = $manifest.Version
     }
 }

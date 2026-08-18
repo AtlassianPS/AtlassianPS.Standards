@@ -254,8 +254,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
             git init | Out-Null
             Set-Content -LiteralPath (Join-Path -Path $repositoryPath -ChildPath 'README.md') -Value 'test'
             git add README.md
-            git -c user.name='Test User' -c user.email='test@example.invalid' commit -m 'Initial commit' | Out-Null
-            git tag -a v2.3.4 -m v2.3.4
+            git -c user.name='Test User' -c user.email='test@example.invalid' -c commit.gpgsign=false commit -m 'Initial commit' | Out-Null
+            git -c tag.gpgsign=false tag -a v2.3.4 -m v2.3.4
             Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
 
             $env:GITHUB_REPOSITORY = 'AtlassianPS/AtlassianPS.Standards'
@@ -395,55 +395,57 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         }
     }
 
-    It 'continuous release workflow keeps release logic in build tasks and gates publishing safely' {
+    It 'builds one secretless candidate and promotes it without executing repository code' {
         $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/continuous_release.yml'
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
+        $publishWorkflow = $workflow.Substring($workflow.IndexOf('  publish:'))
+        $ciWorkflow = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath '.github/workflows/ci.yml') -Raw
 
         # Only a metadata commit on master can start normal publication. Repository rulesets and
         # protected environments remain the enforcement boundary for writer provenance.
         $workflow | Should -Match "startsWith\(github\.event\.workflow_run\.head_commit\.message, 'Prepare v'\)"
         $workflow | Should -Match "github\.event\.workflow_run\.head_commit\.author\.name == 'github-actions\[bot\]'"
         $workflow | Should -Match "github\.ref == 'refs/heads/master'"
-        $workflow | Should -Match "inputs\.release_impact == ''"
-        $workflow | Should -Match "inputs\.prerelease == ''"
-
-        # Module-domain work lives in Invoke-Build tasks; deployment plumbing lives in composite
-        # actions. Neither manifest stamping nor packaging appears inline in the workflow.
-        $workflow | Should -Match 'Invoke-Build -Task SetSourceVersion'
-        $workflow | Should -Match 'Invoke-Build -Task SetVersion .*-VerifyPublishedRelease'
-        $workflow | Should -Match 'Invoke-Build -Task Package'
-        $workflow | Should -Match 'Invoke-Build -Task VerifyReleaseArtifact'
+        $workflow | Should -Match 'environment: release'
+        $workflow | Should -Match 'actions/create-github-app-token@[0-9a-f]{40}'
+        $workflow | Should -Match 'ATLASSIANPS_RELEASE_APP_ID'
+        $workflow | Should -Match 'ATLASSIANPS_RELEASE_APP_PRIVATE_KEY'
         $workflow | Should -Match 'uses: \./\.github/actions/commit-release-metadata'
-        $workflow | Should -Match 'uses: \./\.github/actions/create-release-tag'
-        $workflow | Should -Match 'uses: \./\.github/actions/resolve-release-tag'
-        $workflow | Should -Not -Match 'Set-AtlassianPSModuleManifestVersion'
-        $workflow | Should -Not -Match 'Get-AtlassianPSReleaseNotesFromChangelog'
-        $workflow | Should -Not -Match 'Compress-Archive'
-
-        # Final package validation and tag creation precede immutable PSGallery publish.
-        $verifyIndex = $workflow.IndexOf('Invoke-Build -Task VerifyReleaseArtifact')
-        $tagIndex = $workflow.IndexOf('uses: ./.github/actions/create-release-tag')
-        $resolveTagIndex = $workflow.IndexOf('uses: ./.github/actions/resolve-release-tag')
-        $publishIndex = $workflow.IndexOf('Publish-Module')
-        $verifyIndex | Should -BeGreaterThan -1
-        $publishIndex | Should -BeGreaterThan $verifyIndex
-        $tagIndex | Should -BeGreaterThan $verifyIndex
-        $resolveTagIndex | Should -BeGreaterThan $tagIndex
-        $publishIndex | Should -BeGreaterThan $tagIndex
-
-        # Recovery reuses only a tagged master commit with successful CI artifact provenance.
-        $workflow | Should -Match 'recovery_tag:'
-        $workflow | Should -Match 'No successful CI run was found for recovery commit'
-        $workflow | Should -Match 'skipping immutable publish'
-        $workflow | Should -Match 'RECOVERY_TAG'
-        $workflow | Should -Match 'refs/tags/\$env:RECOVERY_TAG\^\{tag\}'
-        $workflow | Should -Match 'GH_TOKEN: \$\{\{ github\.token \}\}'
         $workflow | Should -Match "workflow_run\.event == 'push'"
         $workflow | Should -Match 'PREPARED_COMMIT_MESSAGE'
-        $workflow | Should -Match 'ATLASSIANPS_RELEASE_BOT_TOKEN'
 
-        $ciWorkflow = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath '.github/workflows/ci.yml') -Raw
+        # CI owns all repository-dependent stamping, packaging, and validation without release
+        # credentials. The candidate records the exact commit and artifact digests.
+        $ciWorkflow | Should -Match 'name: Release-Candidate'
+        $ciWorkflow | Should -Match 'Invoke-Build -Task SetVersion .*-VerifyPublishedRelease'
+        $ciWorkflow | Should -Match 'Invoke-Build -Task VerifyReleaseArtifact'
+        $ciWorkflow | Should -Match 'release-manifest\.json'
+        $ciWorkflow | Should -Not -Match 'Invoke-Build -Task PackageGallery'
+        $ciWorkflow | Should -Match 'packageSha256'
+        $ciWorkflow | Should -Match 'galleryPackageSha256'
+        $ciWorkflow | Should -Match 'releaseNotesSha256'
+        $ciWorkflow | Should -Not -Match 'PSGALLERY_API_KEY|HOMEPAGE_PAT|ATLASSIANPS_RELEASE_APP_PRIVATE_KEY'
         $ciWorkflow | Should -Match 'failure\|cancelled\|skipped'
+
+        # Promotion consumes the exact candidate and runs no checked-out repository actions or
+        # build commands while publishing credentials are available.
+        $publishWorkflow | Should -Match 'name: Release-Candidate'
+        $publishWorkflow | Should -Match 'Candidate digest verification failed'
+        $publishWorkflow | Should -Match 'ZipFile.*OpenRead'
+        $publishWorkflow | Should -Match 'nuspec\.package\.metadata\.releaseNotes'
+        $publishWorkflow | Should -Match 'Publish-PSResource -NupkgPath'
+        $publishWorkflow | Should -Match '(?ms)permissions:\s+actions: read\s+contents: read'
+        $publishWorkflow | Should -Not -Match 'contents: write'
+        $publishWorkflow | Should -Match 'GITHUB_TOKEN: \$\{\{ steps\.release_app\.outputs\.token \}\}'
+        $publishWorkflow | Should -Not -Match 'GITHUB_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}'
+        $publishWorkflow | Should -Not -Match 'actions/checkout|setup-powershell|Invoke-Build|Compress-Archive|Import-PowerShellDataFile|uses: \./\.github/actions/'
+        $workflow | Should -Not -Match 'recovery_tag|RECOVERY_TAG|No successful CI run was found for recovery commit'
+
+        # Tag creation precedes the immutable PSGallery publication.
+        $tagIndex = $publishWorkflow.IndexOf('Create annotated release tag')
+        $publishIndex = $publishWorkflow.IndexOf('Publish-PSResource')
+        $tagIndex | Should -BeGreaterThan -1
+        $publishIndex | Should -BeGreaterThan $tagIndex
 
         $codeOwners = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath 'CODEOWNERS')
         $codeOwners[0] | Should -Match '^\*\s+@atlassianps/maintainers$'
@@ -469,10 +471,13 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $buildScript | Should -Not -Match '(?m)^Task Publish\b'
         $buildScript | Should -Not -Match 'PSGalleryAPIKey'
         $buildScript | Should -Match '(?m)^Task Package\b'
+        $buildScript | Should -Match '(?m)^Task PackageGallery\b'
+        $buildScript | Should -Match 'Compress-PSResource'
+        $buildScript | Should -Match '(?m)^Task VerifyReleaseArtifact Package, PackageGallery,'
         $buildScript | Should -Match '(?m)^Task SetSourceVersion\b'
         $buildScript | Should -Match '(?m)^Task SetVersion\b'
         $buildScript | Should -Match '(?m)^Task TestPublish\b'
-        # The publish-time stamp/verify is owned by the build task, parameterized by a switch.
+        # Candidate CI owns final stamp/verify, parameterized by a switch.
         $buildScript | Should -Match '\[Switch\]\$VerifyPublishedRelease'
         $buildScript | Should -Match 'EnforceGreaterThanPublished'
     }
