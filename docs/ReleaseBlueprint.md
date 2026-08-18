@@ -34,9 +34,6 @@ Use one `v`-prefixed three-part version wherever a release is identified.
 | Changelog heading | `## vX.Y.Z - YYYY-MM-DD` | `## v3.0.0 - 2026-05-10` |
 | Module manifest | `X.Y.Z` | `ModuleVersion = '3.0.0'` |
 
-Prereleases may append `alpha`, `beta`, `rc`, or a numbered form such as `rc-2`. The module manifest
-stores the numeric part in `ModuleVersion` and the suffix in `PrivateData.PSData.Prerelease`.
-
 `CHANGELOG.md` is the only release-note source. The same version section populates the package manifest
 and GitHub release body. The committed source manifest keeps `ReleaseNotes` empty.
 
@@ -69,15 +66,14 @@ code. Never check out or execute contributor code in that workflow.
 4. If every pending pull request uses `release:none`, planning stops successfully.
 5. Otherwise, the planner calculates the next version, folds changelog fragments, stamps the source
    manifest version, and pushes one `Prepare vX.Y.Z release` metadata commit with the release GitHub App.
-6. CI builds and tests that exact metadata commit on all supported platforms.
-7. A final secretless CI job stamps release notes into the built module, creates the GitHub archive and
-   PSGallery `.nupkg`, validates their contents, and uploads `Release-Candidate`.
-8. The candidate contains the PSGallery package, GitHub archive, and release notes.
-9. After CI succeeds, the publishing job downloads GitHub's immutable `Release-Candidate` artifact from
-   that exact run. The official download action verifies the artifact digest.
-10. Without checking out the repository, the publisher creates the annotated tag, publishes the candidate
-    `.nupkg` to PSGallery, creates the GitHub release from the candidate notes and archive, and notifies
-    the website.
+6. The secretless CI build job stamps release notes into the built module, creates the GitHub archive,
+   validates them, and uploads `Release`.
+7. Every supported platform test consumes that same built module directory.
+8. After CI succeeds, the publishing job downloads GitHub's immutable `Release` artifact from that
+   exact run. The official download action verifies the artifact digest.
+9. Without checking out the repository, the publisher creates the annotated tag, passes the candidate
+   module directory to `Publish-Module`, creates the GitHub release from the candidate notes and archive,
+   and notifies the website.
 
 GitHub Actions events wake the planner; they are not release work items. GitHub concurrency can replace
 a pending event, so the planner must reconcile durable Git and pull-request history rather than rely on
@@ -85,16 +81,18 @@ one event payload.
 
 ## Candidate Artifact Contract
 
-`Release-Candidate` must contain:
+For a release metadata commit, `Release` must contain:
 
 | Path | Purpose |
 |------|---------|
+| `<ModuleName>/` | Validated module directory published to PSGallery |
 | `<ModuleName>.zip` | GitHub release asset |
-| `<ModuleName>.<version>.nupkg` | Exact PSGallery package |
 | `release-notes.md` | GitHub release body |
 
 The publishing job may use trusted pinned third-party actions and inline deployment commands. It must not
 check out repository contents, invoke the repository build, load local actions, or modify the candidate.
+`Publish-Module` packages the validated directory during publication; the pipeline does not prebuild a
+`.nupkg`.
 
 ## Failure Policy
 
@@ -115,8 +113,7 @@ Manual dispatch handles an unreleased bucket already on `master`; it is not a re
 
 1. Run `Continuous Release` from `master`.
 2. Choose the highest required `release_impact` for the pending changes.
-3. Optionally enter a supported prerelease label.
-4. Let the normal metadata-commit, CI-candidate, and promotion flow finish.
+3. Let the normal metadata-commit, CI-candidate, and promotion flow finish.
 
 The operator never enters the final version or source commit.
 
@@ -152,8 +149,7 @@ Keep module-domain behavior in these build tasks:
 - `SetSourceVersion` updates the committed source manifest version.
 - `SetVersion` stamps changelog-derived release notes into the built candidate.
 - `Package` creates the release archive.
-- `PackageGallery` creates the exact PSGallery `.nupkg`.
-- `VerifyReleaseArtifact` validates version, prerelease metadata, release notes, and archive contents.
+- `VerifyReleaseArtifact` validates the module version, release notes, and archive contents.
 
 Keep orchestration in shared Standards actions or reusable workflows. Repository-specific configuration
 should be limited to module name/path, supported test platforms, package path, and website module ID.
@@ -189,7 +185,7 @@ Tests in each repository should verify that:
 - pull-request validation never checks out contributor code;
 - candidate CI contains no publishing credentials;
 - candidate CI stamps, packages, validates, and uploads one immutable artifact;
-- promotion downloads `Release-Candidate` from the triggering CI run;
+- promotion downloads `Release` from the triggering CI run;
 - promotion uses the official download action's artifact digest verification;
 - promotion contains no checkout, local action, or `Invoke-Build` step;
 - tag creation precedes PSGallery publication;

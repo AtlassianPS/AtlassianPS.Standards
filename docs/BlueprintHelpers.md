@@ -12,7 +12,7 @@ Consumers call commands with the prefixed names, for example `Test-AtlassianPSMo
 | Area | Helpers | Contract |
 |------|---------|----------|
 | Build output | `Copy-ModuleArtifacts`, `Join-ModuleSource` | Copy release artifacts and merge module source folders into the release `.psm1`. |
-| Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set release metadata, create a local package zip, and validate the zip and PSGallery package against the built module. |
+| Manifest and package validation | `Update-ModuleManifestExports`, `Set-ModuleManifestVersion`, `Get-ReleaseNotesFromChangelog`, `New-ModulePackage`, `Test-ModulePackage` | Update manifest exports, set release metadata, create a local package zip, and validate it against the built module. |
 | External help | `Update-ExternalHelp`, `Remove-OrphanedExternalHelp` | Generate PlatyPS external help and remove generated help files that no longer have markdown sources. |
 | Test bootstrap | `Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment` | Resolve repository/module paths and import the module under test for Pester. |
 | Environment loading | `Import-DotEnvFile` | Load `.env` values into process-scoped environment variables without emitting secret values. |
@@ -48,17 +48,16 @@ Task UpdateManifest {
 
 ## Publish Dry Run
 
-Candidate CI creates and validates `Release-Candidate`, including the GitHub zip and exact PSGallery
-`.nupkg`. Build scripts keep explicit `Package`, `PackageGallery`, and `VerifyReleaseArtifact` tasks;
-they do not contain publishing tasks or credentials.
+The CI build job creates and validates `Release`, including the module directory and GitHub zip.
+Build scripts keep explicit `Package` and `VerifyReleaseArtifact` tasks; they do not contain publishing
+tasks or credentials. The trusted publisher passes the validated module directory to `Publish-Module`.
 
 ```powershell
-Task VerifyReleaseArtifact Package, PackageGallery, {
+Task VerifyReleaseArtifact Package, {
     $null = Test-AtlassianPSModulePackage `
         -BuildOutputPath $env:BHBuildOutput `
         -ModuleName $env:BHProjectName `
-        -PackagePath $script:PackagePath `
-        -GalleryPackagePath $script:GalleryPackagePath
+        -PackagePath $script:PackagePath
 }
 ```
 

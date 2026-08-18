@@ -62,31 +62,6 @@ Describe 'Import-DotEnvFile' {
 }
 
 Describe 'Test-ModulePackage' {
-    BeforeAll {
-        function ConvertTo-TestNuspec {
-            param(
-                [Parameter(Mandatory)]
-                [String]$ModuleName,
-
-                [Parameter(Mandatory)]
-                [String]$Version,
-
-                [String]$ReleaseNotes = ''
-            )
-
-            @"
-<?xml version="1.0"?>
-<package>
-  <metadata>
-    <id>$ModuleName</id>
-    <version>$Version</version>
-    <releaseNotes>$ReleaseNotes</releaseNotes>
-  </metadata>
-</package>
-"@
-        }
-    }
-
     It 'validates a release module directory, manifest, and package' {
         $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release'
         $moduleName = 'PackageValidation'
@@ -96,23 +71,12 @@ Describe 'Test-ModulePackage' {
         Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value ''
         Compress-Archive -Path $modulePath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
 
-        $galleryRoot = Join-Path -Path $TestDrive -ChildPath 'gallery-package'
-        $null = New-Item -Path $galleryRoot -ItemType Directory -Force
-        Copy-Item -Path (Join-Path -Path $modulePath -ChildPath '*') -Destination $galleryRoot -Recurse
-        ConvertTo-TestNuspec -ModuleName $moduleName -Version '1.2.3' |
-            Set-Content -LiteralPath (Join-Path -Path $galleryRoot -ChildPath "$moduleName.nuspec")
-        $galleryPackagePath = Join-Path -Path $buildOutput -ChildPath "$moduleName.1.2.3.nupkg"
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [System.IO.Compression.ZipFile]::CreateFromDirectory($galleryRoot, $galleryPackagePath)
-
         $result = Test-AtlassianPSModulePackage `
             -BuildOutputPath $buildOutput `
-            -ModuleName $moduleName `
-            -GalleryPackagePath $galleryPackagePath
+            -ModuleName $moduleName
 
         $result.Name | Should -Be $moduleName
         $result.Version | Should -Be ([Version]'1.2.3')
-        $result.GalleryPackagePath | Should -Be $galleryPackagePath
     }
 
     It 'requires matching version and release notes when requested' {
@@ -159,28 +123,6 @@ Describe 'Test-ModulePackage' {
         } | Should -Throw -ExpectedMessage '*does not match expected*'
     }
 
-    It 'rejects a mismatched expected prerelease label' {
-        $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-prerelease-mismatch'
-        $moduleName = 'PrereleaseMismatch'
-        $modulePath = Join-Path -Path $buildOutput -ChildPath $moduleName
-        $null = New-Item -Path $modulePath -ItemType Directory -Force
-        $manifestPath = Join-Path -Path $modulePath -ChildPath "$moduleName.psd1"
-        Set-Content -LiteralPath $manifestPath -Value @"
-@{
-    RootModule = '$moduleName.psm1'
-    ModuleVersion = '1.2.3'
-    GUID = 'b558bd8c-dc02-4ff2-96b7-4d2c61d9d103'
-    PrivateData = @{ PSData = @{ Prerelease = 'beta' } }
-}
-"@
-        Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value ''
-        Compress-Archive -Path $modulePath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
-
-        {
-            Test-AtlassianPSModulePackage -BuildOutputPath $buildOutput -ModuleName $moduleName -ExpectedPrerelease 'rc-2'
-        } | Should -Throw -ExpectedMessage '*prerelease*does not match expected*'
-    }
-
     It 'throws when the release package is missing' {
         $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-missing-package'
         $moduleName = 'MissingPackage'
@@ -210,101 +152,6 @@ Describe 'Test-ModulePackage' {
         } | Should -Throw -ExpectedMessage '*does not contain expected manifest*'
     }
 
-    It 'rejects a PSGallery package missing a built module file' {
-        $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-invalid-gallery-package'
-        $moduleName = 'InvalidGalleryPackage'
-        $modulePath = Join-Path -Path $buildOutput -ChildPath $moduleName
-        $galleryRoot = Join-Path -Path $TestDrive -ChildPath 'invalid-gallery-package'
-        $null = New-Item -Path $modulePath, $galleryRoot -ItemType Directory -Force
-        $manifestPath = Join-Path -Path $modulePath -ChildPath "$moduleName.psd1"
-        New-ModuleManifest -Path $manifestPath -RootModule "$moduleName.psm1" -ModuleVersion '1.0.0'
-        Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value 'function Get-Thing {}'
-        Compress-Archive -Path $modulePath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
-
-        Copy-Item -LiteralPath $manifestPath -Destination $galleryRoot
-        $galleryPackagePath = Join-Path -Path $buildOutput -ChildPath "$moduleName.1.0.0.nupkg"
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [System.IO.Compression.ZipFile]::CreateFromDirectory($galleryRoot, $galleryPackagePath)
-
-        {
-            Test-AtlassianPSModulePackage `
-                -BuildOutputPath $buildOutput `
-                -ModuleName $moduleName `
-                -GalleryPackagePath $galleryPackagePath
-        } | Should -Throw -ExpectedMessage '*does not contain built module file*psm1*'
-    }
-
-    It 'rejects a PSGallery package without a nuspec' {
-        $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-gallery-missing-nuspec'
-        $moduleName = 'MissingNuspec'
-        $modulePath = Join-Path -Path $buildOutput -ChildPath $moduleName
-        $galleryRoot = Join-Path -Path $TestDrive -ChildPath 'gallery-missing-nuspec'
-        $null = New-Item -Path $modulePath, $galleryRoot -ItemType Directory -Force
-        New-ModuleManifest -Path (Join-Path -Path $modulePath -ChildPath "$moduleName.psd1") -RootModule "$moduleName.psm1" -ModuleVersion '1.0.0'
-        Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value ''
-        Compress-Archive -Path $modulePath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
-        Copy-Item -Path (Join-Path -Path $modulePath -ChildPath '*') -Destination $galleryRoot -Recurse
-        $galleryPackagePath = Join-Path -Path $buildOutput -ChildPath "$moduleName.1.0.0.nupkg"
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [System.IO.Compression.ZipFile]::CreateFromDirectory($galleryRoot, $galleryPackagePath)
-
-        {
-            Test-AtlassianPSModulePackage `
-                -BuildOutputPath $buildOutput `
-                -ModuleName $moduleName `
-                -GalleryPackagePath $galleryPackagePath
-        } | Should -Throw -ExpectedMessage '*exactly one nuspec file; found 0*'
-    }
-
-    It 'rejects mismatched PSGallery nuspec metadata' {
-        $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-gallery-wrong-nuspec'
-        $moduleName = 'WrongNuspec'
-        $modulePath = Join-Path -Path $buildOutput -ChildPath $moduleName
-        $galleryRoot = Join-Path -Path $TestDrive -ChildPath 'gallery-wrong-nuspec'
-        $null = New-Item -Path $modulePath, $galleryRoot -ItemType Directory -Force
-        New-ModuleManifest -Path (Join-Path -Path $modulePath -ChildPath "$moduleName.psd1") -RootModule "$moduleName.psm1" -ModuleVersion '1.0.0'
-        Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value ''
-        Compress-Archive -Path $modulePath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
-        Copy-Item -Path (Join-Path -Path $modulePath -ChildPath '*') -Destination $galleryRoot -Recurse
-        ConvertTo-TestNuspec -ModuleName $moduleName -Version '2.0.0' |
-            Set-Content -LiteralPath (Join-Path -Path $galleryRoot -ChildPath "$moduleName.nuspec")
-        $galleryPackagePath = Join-Path -Path $buildOutput -ChildPath "$moduleName.1.0.0.nupkg"
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [System.IO.Compression.ZipFile]::CreateFromDirectory($galleryRoot, $galleryPackagePath)
-
-        {
-            Test-AtlassianPSModulePackage `
-                -BuildOutputPath $buildOutput `
-                -ModuleName $moduleName `
-                -GalleryPackagePath $galleryPackagePath
-        } | Should -Throw -ExpectedMessage '*nuspec version*does not match*1.0.0*'
-    }
-
-    It 'rejects a PSGallery package with multiple nuspec files' {
-        $buildOutput = Join-Path -Path $TestDrive -ChildPath 'Release-gallery-multiple-nuspec'
-        $moduleName = 'MultipleNuspec'
-        $modulePath = Join-Path -Path $buildOutput -ChildPath $moduleName
-        $galleryRoot = Join-Path -Path $TestDrive -ChildPath 'gallery-multiple-nuspec'
-        $null = New-Item -Path $modulePath, $galleryRoot -ItemType Directory -Force
-        New-ModuleManifest -Path (Join-Path -Path $modulePath -ChildPath "$moduleName.psd1") -RootModule "$moduleName.psm1" -ModuleVersion '1.0.0'
-        Set-Content -LiteralPath (Join-Path -Path $modulePath -ChildPath "$moduleName.psm1") -Value ''
-        Compress-Archive -Path $modulePath -DestinationPath (Join-Path -Path $buildOutput -ChildPath "$moduleName.zip")
-        Copy-Item -Path (Join-Path -Path $modulePath -ChildPath '*') -Destination $galleryRoot -Recurse
-        ConvertTo-TestNuspec -ModuleName $moduleName -Version '1.0.0' |
-            Set-Content -LiteralPath (Join-Path -Path $galleryRoot -ChildPath 'one.nuspec')
-        ConvertTo-TestNuspec -ModuleName $moduleName -Version '1.0.0' |
-            Set-Content -LiteralPath (Join-Path -Path $galleryRoot -ChildPath 'two.nuspec')
-        $galleryPackagePath = Join-Path -Path $buildOutput -ChildPath "$moduleName.1.0.0.nupkg"
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [System.IO.Compression.ZipFile]::CreateFromDirectory($galleryRoot, $galleryPackagePath)
-
-        {
-            Test-AtlassianPSModulePackage `
-                -BuildOutputPath $buildOutput `
-                -ModuleName $moduleName `
-                -GalleryPackagePath $galleryPackagePath
-        } | Should -Throw -ExpectedMessage '*exactly one nuspec file; found 2*'
-    }
 }
 
 Describe 'Remove-OrphanedExternalHelp' {

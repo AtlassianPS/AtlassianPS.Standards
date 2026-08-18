@@ -1,22 +1,4 @@
-﻿function Write-OutputValue {
-    param(
-        [Parameter(Mandatory)]
-        [String]$Name,
-
-        [Parameter()]
-        [AllowNull()]
-        [String]$Value
-    )
-
-    if ($null -eq $Value) {
-        $Value = ''
-    }
-
-    $Value = $Value -replace "`r`n|`r|`n", ' '
-    Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value ('{0}={1}' -f $Name, $Value)
-}
-
-. (Join-Path -Path $PSScriptRoot -ChildPath '../_shared/release-intent-core.ps1')
+﻿. (Join-Path -Path $PSScriptRoot -ChildPath '../_shared/release-intent-core.ps1')
 
 if (-not $env:GITHUB_REPOSITORY) {
     throw 'plan-merged-release requires GITHUB_REPOSITORY.'
@@ -24,15 +6,8 @@ if (-not $env:GITHUB_REPOSITORY) {
 
 $releaseImpact = $null
 $manualReleaseImpact = if ($env:RELEASE_IMPACT) { $env:RELEASE_IMPACT.Trim().ToLowerInvariant() } else { '' }
-$prereleaseLabel = if ($env:PRERELEASE_LABEL) { $env:PRERELEASE_LABEL.Trim().ToLowerInvariant() } else { '' }
-if ($prereleaseLabel -and $prereleaseLabel -notmatch '^(?:alpha|beta|rc)(?:-\d+)?$') {
-    throw "Prerelease label '$env:PRERELEASE_LABEL' must be alpha, beta, rc, or a numbered form like rc-2."
-}
 
 $isManualRelease = -not [String]::IsNullOrWhiteSpace($manualReleaseImpact)
-if ($prereleaseLabel -and -not $isManualRelease) {
-    throw 'Prerelease labels are only supported for manual releases.'
-}
 
 if ($isManualRelease) {
     if ($manualReleaseImpact -notin @('patch', 'minor', 'major')) {
@@ -40,34 +15,45 @@ if ($isManualRelease) {
     }
 
     $releaseImpact = $manualReleaseImpact
-    Write-OutputValue -Name release_impact -Value $releaseImpact
 }
 else {
     if (-not $env:COMMIT_SHA) {
         throw 'plan-merged-release requires COMMIT_SHA. Run it from a push workflow or pass commit-sha.'
     }
 
-    $changelogDirectory = if ($env:CHANGELOG_DIRECTORY) { $env:CHANGELOG_DIRECTORY.TrimEnd('/') } else { '.changelog' }
+    $changelogDirectory = '.changelog'
+    $global:LASTEXITCODE = 0
     $stableTags = @(git tag --merged $env:COMMIT_SHA --list 'v[0-9]*' | Where-Object { $_ -match '^v\d+\.\d+\.\d+$' })
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to read release tags merged into '$env:COMMIT_SHA'."
+    }
     $latestStableTag = $stableTags | Sort-Object { [Version]($_.Substring(1)) } -Descending | Select-Object -First 1
+    $global:LASTEXITCODE = 0
     $commits = if ($latestStableTag) {
         @(git rev-list "$latestStableTag..$env:COMMIT_SHA")
     }
     else {
         @(git rev-list $env:COMMIT_SHA)
     }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to read commits through '$env:COMMIT_SHA'."
+    }
 
     $pullRequestsByNumber = @{}
     foreach ($commit in $commits) {
         $route = 'repos/{0}/commits/{1}/pulls' -f $env:GITHUB_REPOSITORY, $commit
-        foreach ($pullRequest in @(gh api $route | ConvertFrom-Json | Where-Object { $_.merged_at })) {
+        $global:LASTEXITCODE = 0
+        $pullRequestJson = gh api $route
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to read pull requests for commit '$commit'."
+        }
+        foreach ($pullRequest in @($pullRequestJson | ConvertFrom-Json | Where-Object { $_.merged_at })) {
             $pullRequestsByNumber[[String]$pullRequest.number] = $pullRequest
         }
     }
 
     if ($pullRequestsByNumber.Count -eq 0) {
-        Write-OutputValue -Name should_release -Value 'false'
-        Write-OutputValue -Name skip_reason -Value 'no merged pull requests since latest release tag'
+        'should_release=false' >> $env:GITHUB_OUTPUT
         Write-Host "Skipping release: no merged pull requests found since '$latestStableTag'."
         return
     }
@@ -79,7 +65,11 @@ else {
         $prTitle = [String]$pullRequest.title
         $prAuthor = [String]$pullRequest.user.login
         $labelsRoute = 'repos/{0}/issues/{1}/labels' -f $env:GITHUB_REPOSITORY, $prNumber
+        $global:LASTEXITCODE = 0
         $labels = @(gh api $labelsRoute --paginate --jq '.[].name')
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to read labels for merged PR #$prNumber."
+        }
         $fragmentPattern = '^{0}/{1}\.(?<impact>patch|minor|major)\.(?<type>added|changed|fixed|removed|deprecated|security|breaking)\.md$' -f [Regex]::Escape($changelogDirectory), $prNumber
         $fragmentFiles = @(
             if (Test-Path -LiteralPath $changelogDirectory -PathType Container) {
@@ -117,15 +107,14 @@ else {
     }
 
     $releaseImpact = $selectedImpact
-    Write-OutputValue -Name release_impact -Value $releaseImpact
     if ($releaseImpact -eq 'none') {
-        Write-OutputValue -Name should_release -Value 'false'
-        Write-OutputValue -Name skip_reason -Value 'release:none'
+        'should_release=false' >> $env:GITHUB_OUTPUT
         Write-Host 'Skipping release: all merged pull requests since latest release tag have release:none.'
         return
     }
 }
 
+$global:LASTEXITCODE = 0
 $versions = @(
     git tag --list 'v[0-9]*' |
         ForEach-Object {
@@ -140,6 +129,9 @@ $versions = @(
         } |
         Sort-Object -Property Version -Descending
 )
+if ($LASTEXITCODE -ne 0) {
+    throw 'Unable to read release tags.'
+}
 $latest = $versions | Select-Object -First 1
 if (-not $latest) {
     $latest = [PSCustomObject]@{ Major = 0; Minor = 0; Patch = 0 }
@@ -164,9 +156,6 @@ switch ($releaseImpact) {
 }
 
 $releaseVersion = '{0}.{1}.{2}' -f $nextMajor, $nextMinor, $nextPatch
-if ($prereleaseLabel) {
-    $releaseVersion = '{0}-{1}' -f $releaseVersion, $prereleaseLabel
-}
 $releaseTag = 'v{0}' -f $releaseVersion
 git show-ref --verify --quiet "refs/tags/$releaseTag"
 $tagExistsExitCode = $LASTEXITCODE
@@ -178,17 +167,11 @@ if ($tagExistsExitCode -ne 1) {
 }
 $global:LASTEXITCODE = 0
 
-Write-OutputValue -Name should_release -Value 'true'
-Write-OutputValue -Name release_version -Value $releaseVersion
-Write-OutputValue -Name release_tag -Value $releaseTag
+'should_release=true' >> $env:GITHUB_OUTPUT
+"release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
 if ($isManualRelease) {
-    if ($prereleaseLabel) {
-        Write-Host "Planned manual prerelease $releaseTag with release:$releaseImpact."
-    }
-    else {
-        Write-Host "Planned manual release $releaseTag with release:$releaseImpact."
-    }
+    Write-Host "Planned manual release $releaseTag with release:$releaseImpact."
 }
 else {
-    Write-Host "Planned release $releaseTag from merged PR #$prNumber with release:$releaseImpact."
+    Write-Host "Planned release $releaseTag from reconciled merged PRs with release:$releaseImpact."
 }

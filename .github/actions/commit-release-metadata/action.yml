@@ -1,5 +1,5 @@
 name: Commit Release Metadata
-description: Commit the prepared changelog and manifest and push them to the release branch.
+description: Commit the prepared changelog and manifest and push them to master.
 inputs:
   release-tag:
     description: Release tag the commit prepares, for example v1.2.3.
@@ -10,10 +10,6 @@ inputs:
   release-bot-token:
     description: GitHub App or fine-grained token that pushes metadata and triggers CI.
     required: true
-  branch:
-    description: Branch to push the release metadata commit to.
-    required: false
-    default: master
 runs:
   using: composite
   steps:
@@ -23,7 +19,6 @@ runs:
         RELEASE_TAG: ${{ inputs.release-tag }}
         MANIFEST_PATH: ${{ inputs.manifest-path }}
         RELEASE_BOT_TOKEN: ${{ inputs.release-bot-token }}
-        TARGET_BRANCH: ${{ inputs.branch }}
       run: |
         set -euo pipefail
 
@@ -42,4 +37,4 @@ runs:
         git add CHANGELOG.md .changelog "${MANIFEST_PATH}"
         git commit -m "Prepare ${RELEASE_TAG} release"
 
-        git push "https://x-access-token:${RELEASE_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${TARGET_BRANCH}"
+        git push "https://x-access-token:${RELEASE_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
