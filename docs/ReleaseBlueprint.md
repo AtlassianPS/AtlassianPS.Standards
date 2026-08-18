@@ -18,7 +18,7 @@ implement the contract; this document does not duplicate their YAML.
 - The highest impact among unreleased merged pull requests determines the next version.
 - The candidate commit contains the final changelog section and exact source manifest version.
 - CI builds, stamps, packages, and validates one final candidate artifact.
-- Promotion verifies the candidate commit, version, file contract, and SHA-256 digests.
+- Promotion downloads the immutable candidate from the exact successful CI run.
 - Promotion never rebuilds the module or runs repository scripts.
 - The tag, PSGallery package, GitHub release, and website entry use the same version.
 - Annotated `v*` tags are immutable.
@@ -72,10 +72,9 @@ code. Never check out or execute contributor code in that workflow.
 6. CI builds and tests that exact metadata commit on all supported platforms.
 7. A final secretless CI job stamps release notes into the built module, creates the GitHub archive and
    PSGallery `.nupkg`, validates their contents, and uploads `Release-Candidate`.
-8. The candidate contains the PSGallery package, GitHub archive, release notes, and
-   `release-manifest.json` with the release tag, commit, file contract, and SHA-256 digests.
-9. After CI succeeds, the publishing job downloads `Release-Candidate` from that exact run and verifies
-   its identity and digests.
+8. The candidate contains the PSGallery package, GitHub archive, and release notes.
+9. After CI succeeds, the publishing job downloads GitHub's immutable `Release-Candidate` artifact from
+   that exact run. The official download action verifies the artifact digest.
 10. Without checking out the repository, the publisher creates the annotated tag, publishes the candidate
     `.nupkg` to PSGallery, creates the GitHub release from the candidate notes and archive, and notifies
     the website.
@@ -93,17 +92,6 @@ one event payload.
 | `<ModuleName>.zip` | GitHub release asset |
 | `<ModuleName>.<version>.nupkg` | Exact PSGallery package |
 | `release-notes.md` | GitHub release body |
-| `release-manifest.json` | Candidate identity and digests |
-
-The manifest records at least:
-
-- schema version;
-- release tag;
-- candidate commit SHA;
-- module name;
-- package filename and SHA-256 digest;
-- PSGallery package filename and SHA-256 digest;
-- release-note filename and SHA-256 digest.
 
 The publishing job may use trusted pinned third-party actions and inline deployment commands. It must not
 check out repository contents, invoke the repository build, load local actions, or modify the candidate.
@@ -200,9 +188,9 @@ Tests in each repository should verify that:
 - action references use immutable SHAs;
 - pull-request validation never checks out contributor code;
 - candidate CI contains no publishing credentials;
-- candidate CI stamps, packages, validates, and records digests;
+- candidate CI stamps, packages, validates, and uploads one immutable artifact;
 - promotion downloads `Release-Candidate` from the triggering CI run;
-- promotion verifies identity and digests before tagging or publishing;
+- promotion uses the official download action's artifact digest verification;
 - promotion contains no checkout, local action, or `Invoke-Build` step;
 - tag creation precedes PSGallery publication;
 - the source manifest keeps release notes empty;

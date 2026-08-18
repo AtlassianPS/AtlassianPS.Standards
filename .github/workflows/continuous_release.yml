@@ -109,83 +109,22 @@ jobs:
             throw "Commit message '$message' is not a release metadata commit."
           }
 
-          "release_tag=$($Matches.tag)" >> $env:GITHUB_OUTPUT
+          $releaseTag = $Matches.tag
+          $releaseVersion = $releaseTag.Substring(1)
+          "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
           "release_commit=${{ github.event.workflow_run.head_sha }}" >> $env:GITHUB_OUTPUT
+          "package_path=./Release/AtlassianPS.Standards.zip" >> $env:GITHUB_OUTPUT
+          "gallery_package_path=./Release/AtlassianPS.Standards.$releaseVersion.nupkg" >> $env:GITHUB_OUTPUT
+          "release_notes_path=./Release/release-notes.md" >> $env:GITHUB_OUTPUT
 
       - name: Download tested release candidate
-        uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          run_id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
           name: Release-Candidate
           path: ./Release/
-          if_no_artifact_found: fail
-
-      - name: Verify candidate identity
-        id: candidate
-        shell: pwsh
-        env:
-          RELEASE_TAG: ${{ steps.prepared_release.outputs.release_tag }}
-          RELEASE_COMMIT: ${{ steps.prepared_release.outputs.release_commit }}
-        run: |
-          $candidatePath = './Release/release-manifest.json'
-          $candidate = Get-Content -LiteralPath $candidatePath -Raw | ConvertFrom-Json
-          if ($candidate.schemaVersion -ne 1) {
-            throw "Unsupported release candidate schema '$($candidate.schemaVersion)'."
-          }
-          if ($candidate.releaseTag -ne $env:RELEASE_TAG -or $candidate.releaseCommit -ne $env:RELEASE_COMMIT) {
-            throw "Candidate identity does not match release '$env:RELEASE_TAG' at '$env:RELEASE_COMMIT'."
-          }
-          if ($candidate.moduleName -ne 'AtlassianPS.Standards' -or
-              $candidate.packageFile -ne 'AtlassianPS.Standards.zip' -or
-              $candidate.galleryPackageFile -ne "AtlassianPS.Standards.$($env:RELEASE_TAG.Substring(1)).nupkg" -or
-              $candidate.releaseNotesFile -ne 'release-notes.md') {
-            throw 'Candidate file contract is invalid.'
-          }
-
-          $packagePath = Join-Path -Path './Release' -ChildPath $candidate.packageFile
-          $galleryPackagePath = Join-Path -Path './Release' -ChildPath $candidate.galleryPackageFile
-          $notesPath = Join-Path -Path './Release' -ChildPath $candidate.releaseNotesFile
-          $packageHash = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
-          $galleryPackageHash = (Get-FileHash -LiteralPath $galleryPackagePath -Algorithm SHA256).Hash.ToLowerInvariant()
-          $notesHash = (Get-FileHash -LiteralPath $notesPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($packageHash -ne $candidate.packageSha256 -or
-              $galleryPackageHash -ne $candidate.galleryPackageSha256 -or
-              $notesHash -ne $candidate.releaseNotesSha256) {
-            throw 'Candidate digest verification failed.'
-          }
-
-          $releaseVersion = $env:RELEASE_TAG.Substring(1)
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $galleryPackagePath))
-          try {
-            $nuspecEntries = @($archive.Entries | Where-Object FullName -Like '*.nuspec')
-            if ($nuspecEntries.Count -ne 1) {
-              throw "Candidate PSGallery package contains $($nuspecEntries.Count) nuspec files."
-            }
-            $reader = [IO.StreamReader]::new($nuspecEntries[0].Open())
-            try {
-              [xml]$nuspec = $reader.ReadToEnd()
-            }
-            finally {
-              $reader.Dispose()
-            }
-          }
-          finally {
-            $archive.Dispose()
-          }
-
-          $candidateNotes = ((Get-Content -LiteralPath $notesPath -Raw) -replace "`r`n|`r", "`n").Trim()
-          $packageNotes = ([String]$nuspec.package.metadata.releaseNotes -replace "`r`n|`r", "`n").Trim()
-          if ([String]$nuspec.package.metadata.id -ne $candidate.moduleName -or
-              [String]$nuspec.package.metadata.version -ne $releaseVersion -or
-              [String]::IsNullOrWhiteSpace($packageNotes) -or
-              $packageNotes -ne $candidateNotes) {
-            throw "Candidate package metadata does not match '$env:RELEASE_TAG'."
-          }
-
-          "package_path=$packagePath" >> $env:GITHUB_OUTPUT
-          "gallery_package_path=$galleryPackagePath" >> $env:GITHUB_OUTPUT
-          "release_notes_path=$notesPath" >> $env:GITHUB_OUTPUT
+          digest-mismatch: error
 
       - name: Create release app token
         id: release_app
@@ -225,7 +164,7 @@ jobs:
 
       - name: Publish tested module artifact
         env:
-          GALLERY_PACKAGE_PATH: ${{ steps.candidate.outputs.gallery_package_path }}
+          GALLERY_PACKAGE_PATH: ${{ steps.prepared_release.outputs.gallery_package_path }}
           RELEASE_TAG: ${{ steps.prepared_release.outputs.release_tag }}
         run: |
           $expectedGalleryVersion = $env:RELEASE_TAG.Substring(1)
@@ -244,8 +183,8 @@ jobs:
         with:
           tag_name: ${{ steps.prepared_release.outputs.release_tag }}
           name: ${{ steps.prepared_release.outputs.release_tag }}
-          body_path: ${{ steps.candidate.outputs.release_notes_path }}
-          files: ${{ steps.candidate.outputs.package_path }}
+          body_path: ${{ steps.prepared_release.outputs.release_notes_path }}
+          files: ${{ steps.prepared_release.outputs.package_path }}
           fail_on_unmatched_files: true
           draft: false
           prerelease: ${{ contains(steps.prepared_release.outputs.release_tag, '-alpha') || contains(steps.prepared_release.outputs.release_tag, '-beta') || contains(steps.prepared_release.outputs.release_tag, '-rc') }}

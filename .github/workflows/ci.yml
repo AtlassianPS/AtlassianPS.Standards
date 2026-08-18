@@ -142,6 +142,7 @@ jobs:
           "should_build=$($shouldBuild.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           if ($shouldBuild) {
             "release_tag=$($Matches.tag)" >> $env:GITHUB_OUTPUT
+            "gallery_package_path=./Release/AtlassianPS.Standards.$($Matches.tag.Substring(1)).nupkg" >> $env:GITHUB_OUTPUT
           }
 
       - name: No release candidate required
@@ -162,7 +163,6 @@ jobs:
 
       - uses: ./.github/actions/build-release-notes
         if: steps.candidate.outputs.should_build == 'true'
-        id: release_notes
         with:
           release-version: ${{ steps.candidate.outputs.release_tag }}
           module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1
@@ -177,39 +177,6 @@ jobs:
         run: Invoke-Build -Task VerifyReleaseArtifact -VersionToPublish ${{ steps.candidate.outputs.release_tag }}
         shell: pwsh
 
-      - name: Record candidate identity
-        if: steps.candidate.outputs.should_build == 'true'
-        shell: pwsh
-        env:
-          RELEASE_TAG: ${{ steps.candidate.outputs.release_tag }}
-          RELEASE_NOTES_PATH: ${{ steps.release_notes.outputs.release_notes_path }}
-        run: |
-          $packagePath = './Release/AtlassianPS.Standards.zip'
-          $notesPath = (Resolve-Path -LiteralPath $env:RELEASE_NOTES_PATH).ProviderPath
-          $expectedNotesPath = (Resolve-Path -LiteralPath './Release/release-notes.md').ProviderPath
-          if ($notesPath -ne $expectedNotesPath) {
-            throw "Release notes must be written to '$expectedNotesPath'."
-          }
-          $galleryPackages = @(Get-ChildItem -LiteralPath './Release' -Filter '*.nupkg')
-          if ($galleryPackages.Count -ne 1) {
-            throw "Expected one PSGallery package, found $($galleryPackages.Count)."
-          }
-          $galleryPackagePath = $galleryPackages[0].FullName
-
-          $candidate = [ordered]@{
-            schemaVersion      = 1
-            releaseTag        = $env:RELEASE_TAG
-            releaseCommit     = $env:GITHUB_SHA
-            moduleName        = 'AtlassianPS.Standards'
-            packageFile       = 'AtlassianPS.Standards.zip'
-            packageSha256     = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
-            galleryPackageFile = Split-Path -Path $galleryPackagePath -Leaf
-            galleryPackageSha256 = (Get-FileHash -LiteralPath $galleryPackagePath -Algorithm SHA256).Hash.ToLowerInvariant()
-            releaseNotesFile  = 'release-notes.md'
-            releaseNotesSha256 = (Get-FileHash -LiteralPath $notesPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          }
-          $candidate | ConvertTo-Json | Set-Content -LiteralPath './Release/release-manifest.json' -Encoding utf8
-
       - name: Upload release candidate
         if: steps.candidate.outputs.should_build == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -217,9 +184,9 @@ jobs:
           name: Release-Candidate
           path: |
             ./Release/AtlassianPS.Standards.zip
-            ./Release/*.nupkg
+            ${{ steps.candidate.outputs.gallery_package_path }}
             ./Release/release-notes.md
-            ./Release/release-manifest.json
+          if-no-files-found: error
           retention-days: 30
 
   ci-required:

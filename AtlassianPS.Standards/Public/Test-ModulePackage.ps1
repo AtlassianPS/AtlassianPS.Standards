@@ -182,6 +182,32 @@
             if ($PSBoundParameters.ContainsKey('ExpectedPrerelease') -and $galleryManifestData.PrivateData.PSData.Prerelease -ne $ExpectedPrerelease) {
                 throw "PSGallery manifest prerelease '$($galleryManifestData.PrivateData.PSData.Prerelease)' does not match expected '$ExpectedPrerelease'."
             }
+
+            $nuspecFiles = @(Get-ChildItem -LiteralPath $galleryValidationRoot -Filter '*.nuspec' -File -Recurse)
+            if ($nuspecFiles.Count -ne 1) {
+                throw "PSGallery package must contain exactly one nuspec file; found $($nuspecFiles.Count)."
+            }
+
+            [xml]$nuspec = Get-Content -LiteralPath $nuspecFiles[0].FullName -Raw -ErrorAction Stop
+            $manifestPrerelease = [String]$manifestData.PrivateData.PSData.Prerelease
+            $expectedGalleryVersion = if ($manifestPrerelease) {
+                "$($manifest.Version)-$manifestPrerelease"
+            }
+            else {
+                $manifest.Version.ToString()
+            }
+            $manifestReleaseNotes = ([String]$manifestData.PrivateData.PSData.ReleaseNotes -replace "`r`n|`r", "`n").Trim()
+            $nuspecReleaseNotes = ([String]$nuspec.package.metadata.releaseNotes -replace "`r`n|`r", "`n").Trim()
+
+            if ([String]$nuspec.package.metadata.id -ne $ModuleName) {
+                throw "PSGallery nuspec ID '$($nuspec.package.metadata.id)' does not match '$ModuleName'."
+            }
+            if ([String]$nuspec.package.metadata.version -ne $expectedGalleryVersion) {
+                throw "PSGallery nuspec version '$($nuspec.package.metadata.version)' does not match '$expectedGalleryVersion'."
+            }
+            if ($nuspecReleaseNotes -ne $manifestReleaseNotes) {
+                throw 'PSGallery nuspec release notes do not match the release manifest.'
+            }
         }
         catch {
             throw "PSGallery package validation failed for '$GalleryPackagePath': $($_.Exception.Message)"

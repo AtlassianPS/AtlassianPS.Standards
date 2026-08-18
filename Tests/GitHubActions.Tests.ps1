@@ -415,24 +415,26 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'PREPARED_COMMIT_MESSAGE'
 
         # CI owns all repository-dependent stamping, packaging, and validation without release
-        # credentials. The candidate records the exact commit and artifact digests.
+        # credentials. GitHub stores the resulting candidate as one immutable artifact.
         $ciWorkflow | Should -Match 'name: Release-Candidate'
         $ciWorkflow | Should -Match 'Invoke-Build -Task SetVersion .*-VerifyPublishedRelease'
         $ciWorkflow | Should -Match 'Invoke-Build -Task VerifyReleaseArtifact'
-        $ciWorkflow | Should -Match 'release-manifest\.json'
         $ciWorkflow | Should -Not -Match 'Invoke-Build -Task PackageGallery'
-        $ciWorkflow | Should -Match 'packageSha256'
-        $ciWorkflow | Should -Match 'galleryPackageSha256'
-        $ciWorkflow | Should -Match 'releaseNotesSha256'
+        $ciWorkflow | Should -Match 'if-no-files-found: error'
+        $ciWorkflow | Should -Match '\$\{\{ steps\.candidate\.outputs\.gallery_package_path \}\}'
+        $ciWorkflow | Should -Not -Match '\./Release/\*\.nupkg'
+        $ciWorkflow | Should -Not -Match 'release-manifest\.json|packageSha256|galleryPackageSha256|releaseNotesSha256'
         $ciWorkflow | Should -Not -Match 'PSGALLERY_API_KEY|HOMEPAGE_PAT|ATLASSIANPS_RELEASE_APP_PRIVATE_KEY'
         $ciWorkflow | Should -Match 'failure\|cancelled\|skipped'
 
-        # Promotion consumes the exact candidate and runs no checked-out repository actions or
-        # build commands while publishing credentials are available.
+        # Promotion downloads the immutable artifact from the exact triggering run and executes
+        # no checked-out repository actions or build commands while credentials are available.
         $publishWorkflow | Should -Match 'name: Release-Candidate'
-        $publishWorkflow | Should -Match 'Candidate digest verification failed'
-        $publishWorkflow | Should -Match 'ZipFile.*OpenRead'
-        $publishWorkflow | Should -Match 'nuspec\.package\.metadata\.releaseNotes'
+        $publishWorkflow | Should -Match 'actions/download-artifact@[0-9a-f]{40}'
+        $publishWorkflow | Should -Match 'github-token: \$\{\{ github\.token \}\}'
+        $publishWorkflow | Should -Match 'run-id: \$\{\{ github\.event\.workflow_run\.id \}\}'
+        $publishWorkflow | Should -Match 'digest-mismatch: error'
+        $publishWorkflow | Should -Not -Match 'dawidd6/action-download-artifact|release-manifest\.json|Get-FileHash|ZipFile'
         $publishWorkflow | Should -Match 'Publish-PSResource -NupkgPath'
         $publishWorkflow | Should -Match '(?ms)permissions:\s+actions: read\s+contents: read'
         $publishWorkflow | Should -Not -Match 'contents: write'

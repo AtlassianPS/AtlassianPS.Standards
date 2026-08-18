@@ -37,7 +37,7 @@ If guidance conflicts, follow this file first.
 - Mint short-lived release tokens with `ATLASSIANPS_RELEASE_APP_ID` and `ATLASSIANPS_RELEASE_APP_PRIVATE_KEY`. `GITHUB_TOKEN` cannot start follow-up CI after metadata push.
 - Do not enable release publishing on an unprotected `master`; direct pushes can bypass review and imitate release metadata.
 - Run manual release dispatches from `master` only; operators choose impact or prerelease label, never the final version or source commit.
-- Candidate CI must create the final validated package without publishing secrets. The publish job verifies and promotes that exact artifact without checking out repository code.
+- Candidate CI must create the final validated package without publishing secrets. The publish job downloads the immutable artifact from the exact successful CI run and promotes it without checking out repository code.
 - Rerun failed jobs for transient publish failures. For lasting failures, merge a reviewed fix and release the next version; never delete/recreate a tag or republish a PSGallery version.
 - When changing release behavior, update `docs/ReleaseBlueprint.md`, `docs/BlueprintHelpers.md`, tests, and these agent instructions together.
 
