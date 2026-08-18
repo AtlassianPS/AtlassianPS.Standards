@@ -419,7 +419,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishWorkflow | Should -Match '(?ms)permissions:\s+actions: read\s+contents: read'
         $publishWorkflow | Should -Not -Match 'contents: write'
         $publishWorkflow | Should -Match '\$PSNativeCommandUseErrorActionPreference = \$true'
-        $publishWorkflow | Should -Match 'GITHUB_TOKEN: \$\{\{ steps\.release_app\.outputs\.token \}\}'
+        $publishWorkflow | Should -Match 'token: \$\{\{ steps\.release_app\.outputs\.token \}\}'
         $publishWorkflow | Should -Not -Match 'GITHUB_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}'
         $publishWorkflow | Should -Not -Match 'actions/checkout|setup-powershell|Invoke-Build|Compress-Archive|Import-PowerShellDataFile|uses: \./\.github/actions/'
         $workflow | Should -Not -Match 'recovery_tag|RECOVERY_TAG|No successful CI run was found for recovery commit'
