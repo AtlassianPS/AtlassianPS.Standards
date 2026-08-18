@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.1.13 - 2026-08-18
+
+* Fixed continuous delivery to build and validate one release candidate in secretless CI, then publish its validated module directory without checking out or rebuilding repository code. `v0.1.12` was not published; its changes are included in this release.
+
 ## v0.1.12 - 2026-06-18
 
 - Fixed continuous release version stamping so the source manifest version is updated in place without reformatting the manifest, release notes stay empty in source and are populated into the built artifact at publish time, and the publish step verifies the artifact version and release notes before publishing.
