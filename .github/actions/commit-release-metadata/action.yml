@@ -1,5 +1,5 @@
 name: Commit Release Metadata
-description: Commit the prepared changelog and manifest and push them to the release branch.
+description: Commit the prepared changelog and manifest and push them to master.
 inputs:
   release-tag:
     description: Release tag the commit prepares, for example v1.2.3.
@@ -7,17 +7,9 @@ inputs:
   manifest-path:
     description: Path to the module manifest to include in the commit.
     required: true
-  github-token:
-    description: Default GITHUB_TOKEN, used when no release bot token is configured.
-    required: true
   release-bot-token:
-    description: Optional token used when branch protection blocks GITHUB_TOKEN pushes.
-    required: false
-    default: ''
-  branch:
-    description: Branch to push the release metadata commit to.
-    required: false
-    default: master
+    description: GitHub App or fine-grained token that pushes metadata and triggers CI.
+    required: true
 runs:
   using: composite
   steps:
@@ -26,20 +18,13 @@ runs:
       env:
         RELEASE_TAG: ${{ inputs.release-tag }}
         MANIFEST_PATH: ${{ inputs.manifest-path }}
-        GITHUB_TOKEN: ${{ inputs.github-token }}
         RELEASE_BOT_TOKEN: ${{ inputs.release-bot-token }}
-        TARGET_BRANCH: ${{ inputs.branch }}
       run: |
         set -euo pipefail
 
-        push_token="${RELEASE_BOT_TOKEN:-${GITHUB_TOKEN:-}}"
-        if [ -z "${push_token}" ]; then
-          echo "::error::No token available for pushing release metadata."
-          exit 1
-        fi
-
         if [ -z "${RELEASE_BOT_TOKEN:-}" ]; then
-          echo "::notice::ATLASSIANPS_RELEASE_BOT_TOKEN is not configured. Falling back to GITHUB_TOKEN."
+          echo "::error::A GitHub App or fine-grained release bot token is required to push metadata and trigger CI."
+          exit 1
         fi
 
         if git diff --quiet -- CHANGELOG.md .changelog "${MANIFEST_PATH}"; then
@@ -52,9 +37,4 @@ runs:
         git add CHANGELOG.md .changelog "${MANIFEST_PATH}"
         git commit -m "Prepare ${RELEASE_TAG} release"
 
-        if ! git push "https://x-access-token:${push_token}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${TARGET_BRANCH}"; then
-          if [ -z "${RELEASE_BOT_TOKEN:-}" ]; then
-            echo "::error::Push with GITHUB_TOKEN failed. Configure ATLASSIANPS_RELEASE_BOT_TOKEN when branch protection prevents direct pushes."
-          fi
-          exit 1
-        fi
+        git push "https://x-access-token:${RELEASE_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master

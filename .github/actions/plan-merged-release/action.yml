@@ -1,56 +1,19 @@
 name: Plan Merged Release
-description: Resolve release intent from the pull request associated with a merged commit and compute the next release tag.
+description: Reconcile merged pull request intent since the latest release tag and compute the next release tag.
 inputs:
-  github-token:
-    description: Token used to read merged pull request metadata.
-    required: false
   commit-sha:
-    description: Merge commit SHA to inspect. Defaults to github.sha.
+    description: Master commit SHA through which release intent is reconciled. Defaults to github.sha.
     required: false
-  changelog-directory:
-    description: Directory containing changelog fragments.
-    required: false
-    default: .changelog
   release-impact:
     description: Optional manual release impact for releasing unreleased changes already on the checked-out branch.
     required: false
-  prerelease-label:
-    description: Optional prerelease label for manual releases. Valid values are alpha, beta, rc, or numbered forms like rc-2.
-    required: false
 outputs:
   should_release:
-    description: Whether the merged pull request should publish a release.
+    description: Whether pending merged changes require a release.
     value: ${{ steps.plan.outputs.should_release }}
-  skip_reason:
-    description: Reason no release should be published.
-    value: ${{ steps.plan.outputs.skip_reason }}
-  release_impact:
-    description: Resolved release impact label value.
-    value: ${{ steps.plan.outputs.release_impact }}
-  changelog_type:
-    description: Resolved changelog type value.
-    value: ${{ steps.plan.outputs.changelog_type }}
   release_tag:
     description: Computed v-prefixed release tag.
     value: ${{ steps.plan.outputs.release_tag }}
-  release_version:
-    description: Computed release version without the leading v.
-    value: ${{ steps.plan.outputs.release_version }}
-  pr_number:
-    description: Associated pull request number.
-    value: ${{ steps.plan.outputs.pr_number }}
-  pr_title:
-    description: Associated pull request title.
-    value: ${{ steps.plan.outputs.pr_title }}
-  pr_author:
-    description: Associated pull request author login.
-    value: ${{ steps.plan.outputs.pr_author }}
-  fragment_path:
-    description: Generated changelog fragment path when the PR used a changelog label.
-    value: ${{ steps.plan.outputs.fragment_path }}
-  fragment_content:
-    description: Generated changelog fragment content when the PR used a changelog label.
-    value: ${{ steps.plan.outputs.fragment_content }}
 runs:
   using: composite
   steps:
@@ -58,10 +21,8 @@ runs:
       id: plan
       shell: pwsh
       env:
-        GH_TOKEN: ${{ inputs.github-token || github.token }}
+        GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         COMMIT_SHA: ${{ inputs.commit-sha || github.sha }}
-        CHANGELOG_DIRECTORY: ${{ inputs.changelog-directory }}
         RELEASE_IMPACT: ${{ inputs.release-impact }}
-        PRERELEASE_LABEL: ${{ inputs.prerelease-label }}
       run: ${{ github.action_path }}/plan-merged-release.ps1

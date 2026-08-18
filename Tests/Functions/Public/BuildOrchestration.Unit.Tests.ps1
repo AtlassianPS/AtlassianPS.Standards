@@ -6,6 +6,20 @@ BeforeAll {
 }
 
 Describe 'Invoke-ModuleTests' {
+    It 'imports Pester globally for test scripts' {
+        InModuleScope AtlassianPS.Standards {
+            Mock -CommandName Get-UsablePesterVersion -MockWith { [Version]'5.7.1' }
+            Mock -CommandName Get-Module -MockWith { $null } -ParameterFilter { $Name -eq 'Pester' }
+            Mock -CommandName Import-Module -MockWith {}
+
+            $null = Import-PesterVersion -MinimumVersion ([Version]'5.7.0')
+
+            Should -Invoke -CommandName Import-Module -Times 1 -Exactly -ParameterFilter {
+                $Name -eq 'Pester' -and $RequiredVersion -eq [Version]'5.7.1' -and $Global -and $ErrorAction -eq 'Stop'
+            }
+        }
+    }
+
     It 'merges tag filters and clears excluded paths for Integration runs' {
         $testsPath = Join-Path -Path $TestDrive -ChildPath 'tests'
         $null = New-Item -Path $testsPath -ItemType Directory -Force
@@ -183,6 +197,26 @@ Describe 'Set-ModuleManifestVersion' {
 
         $written = (Import-PowerShellDataFile -LiteralPath $manifestPath).PrivateData.PSData.ReleaseNotes
         ($written -replace "`r`n", "`n") | Should -Be $notes
+    }
+
+    It 'activates commented prerelease and release-note placeholders' {
+        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-commented-metadata.psd1'
+        $commentedManifest = $script:manifestTemplate `
+            -replace "            Prerelease   = ''", "            # Prerelease   = ''" `
+            -replace "            ReleaseNotes = ''", "            # ReleaseNotes = ''"
+        Set-Content -LiteralPath $manifestPath -Value $commentedManifest
+
+        $notes = "- Fixed candidate metadata`n- Preserved multi-line notes"
+        $null = Set-AtlassianPSModuleManifestVersion `
+            -BuiltManifestPath $manifestPath `
+            -ModuleName 'Sample' `
+            -VersionToPublish '1.2.3-rc-2' `
+            -ReleaseNotes $notes
+
+        $written = Import-PowerShellDataFile -LiteralPath $manifestPath
+        $written.PrivateData.PSData.Prerelease | Should -Be 'rc-2'
+        ($written.PrivateData.PSData.ReleaseNotes -replace "`r`n", "`n") | Should -Be $notes
+        (Get-Content -LiteralPath $manifestPath -Raw) | Should -Not -Match '(?m)^\s*#\s*(Prerelease|ReleaseNotes)\s*='
     }
 
     It 'does not check the published version unless -EnforceGreaterThanPublished is set' {

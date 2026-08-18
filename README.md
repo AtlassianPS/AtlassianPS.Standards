@@ -61,16 +61,16 @@ Invoke-Build -Task Lint, Build, Test
 ## Release
 
 Label-based CD runs after release-labelled pull requests merge to `master`.
-It computes the next semantic version from the merged PR's `release:*` label, prepares `CHANGELOG.md`, stamps the source manifest, commits that release metadata to `master`, validates the release metadata, creates an annotated tag, publishes to PowerShell Gallery, creates the GitHub release from the same changelog section, and notifies the website to update its module submodule.
-The release-preparation commit also stamps the source module manifest with the exact released version and release notes so the tagged repository state matches the published package metadata.
-The workflow should use `ATLASSIANPS_RELEASE_BOT_TOKEN` when pushing the release metadata commit and tag if branch protection does not allow the default `GITHUB_TOKEN` to push to `master`.
+It computes the next semantic version from reviewed `release:*` intent, prepares `CHANGELOG.md`, stamps the source manifest version, and pushes one release-metadata commit with a short-lived GitHub App token.
+Secretless CI stamps and packages the `Release` artifact before the platform tests consume it. The publishing job downloads that immutable artifact from the exact successful CI run and publishes its module directory with `Publish-Module`, without checking out or rebuilding repository code.
+The release environment requires `ATLASSIANPS_RELEASE_APP_ID`, `ATLASSIANPS_RELEASE_APP_PRIVATE_KEY`, `PSGALLERY_API_KEY`, and `HOMEPAGE_PAT`.
 
 The continuous release workflow will:
 
-1. Build the module.
-2. Publish to PowerShell Gallery (when `PSGALLERY_API_KEY` is configured).
-3. Create a GitHub release with a zipped module artifact.
+1. Build, test, stamp, package, and validate the release candidate without publishing credentials.
+2. Create an immutable annotated tag and publish the candidate module to PowerShell Gallery.
+3. Create a GitHub release with the candidate archive and notify the project website.
 
 The source manifest may start a development cycle on a major/minor maintenance baseline, but release-preparation commits stamp the exact `vX.Y.Z` release version before tagging.
 Publish derives PSGallery release notes from the matching changelog version section and fails if that section is missing or empty.
-Do not keep a separate tag-triggered release workflow unless it is intentionally idempotent across already-created tags, PSGallery packages, GitHub releases, and assets.
+Transient failures use GitHub's failed-job rerun. Lasting failures are fixed through a reviewed PR and released as the next version; the pipeline has no historical recovery mode.

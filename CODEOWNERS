@@ -1,6 +1,8 @@
-.github/workflows               @atlassianps/ci-managers
-JiraPS.build.ps1                @atlassianps/ci-managers
-PPSScriptAnalyzerSettings.psd1  @atlassianps/ci-managers
-Tools/                          @atlassianps/ci-managers
+*                                               @atlassianps/maintainers
 
-*                               @atlassianps/maintainers
+.github/workflows/                              @atlassianps/ci-managers
+.github/actions/                                @atlassianps/ci-managers
+AtlassianPS.Standards.build.ps1                 @atlassianps/ci-managers
+AtlassianPS.Standards/AtlassianPS.Standards.psd1 @atlassianps/ci-managers
+Tools/                                           @atlassianps/ci-managers
+docs/ReleaseBlueprint.md                         @atlassianps/ci-managers

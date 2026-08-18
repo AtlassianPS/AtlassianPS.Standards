@@ -102,8 +102,9 @@
 
         $escapedKey = [Regex]::Escape($Key)
         $valueToken = if ($Multiline) { "'(?:[^']|'')*'" } else { "(?<q>['`"])[^'`"]*\k<q>" }
-        # Key boundary, not line start, so single-line and multi-line manifests both match.
-        $pattern = "(?<prefix>(?<![\w-])$escapedKey[ \t]*=[ \t]*)$valueToken"
+        # New-ModuleManifest comments optional metadata placeholders. Consume that marker so
+        # setting Prerelease or ReleaseNotes turns the placeholder into a real assignment.
+        $pattern = "(?<![\w-])(?:#[ \t]*)?(?<assignment>$escapedKey[ \t]*=[ \t]*)$valueToken"
 
         if (-not [Regex]::IsMatch($Content, $pattern)) {
             if ($AllowMissing) {
@@ -115,7 +116,7 @@
         $escapedValue = $Value -replace "'", "''"
         $evaluator = {
             param($match)
-            '{0}''{1}''' -f $match.Groups['prefix'].Value, $escapedValue
+            '{0}''{1}''' -f $match.Groups['assignment'].Value, $escapedValue
         }.GetNewClosure()
 
         return [Regex]::Replace($Content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]$evaluator)

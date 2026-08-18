@@ -34,6 +34,11 @@ If guidance conflicts, follow this file first.
 - Pull requests should declare release intent with exactly one `release:*` label; user-facing changes also need a `changelog:*` label or a valid `.changelog/<pr-number>.<impact>.<type>.md` fragment.
 - Do not ask contributors to choose the final release version in normal PRs; release preparation batches merged intent later.
 - Keep release notes sourced from one `CHANGELOG.md` section for both GitHub releases and PSGallery manifest `PrivateData.PSData.ReleaseNotes`.
+- Mint short-lived release tokens with `ATLASSIANPS_RELEASE_APP_ID` and `ATLASSIANPS_RELEASE_APP_PRIVATE_KEY`. `GITHUB_TOKEN` cannot start follow-up CI after metadata push.
+- Do not enable release publishing on an unprotected `master`; direct pushes can bypass review and imitate release metadata.
+- Run manual release dispatches from `master` only; operators choose the impact, never the final version or source commit.
+- Candidate CI must create the final validated module directory and release archive without publishing secrets. The publish job downloads the immutable artifact from the exact successful CI run and promotes it without checking out repository code.
+- Rerun failed jobs for transient publish failures. For lasting failures, merge a reviewed fix and release the next version; never delete/recreate a tag or republish a PSGallery version.
 - When changing release behavior, update `docs/ReleaseBlueprint.md`, `docs/BlueprintHelpers.md`, tests, and these agent instructions together.
 
 ## Build, Lint, Test (run from repo root)
@@ -74,4 +79,4 @@ Before finalizing, always run the full pipeline: `Invoke-Build -Task Lint, Build
 ## CI/CD Notes
 
 - `.github/workflows/ci.yml` is the required quality gate for runtime/code changes.
-- Instruction-only changes can be skipped by CI path filters; run local validation and report exact command outcomes.
+- CI path filters may skip pull request validation for documentation and metadata-only changes. CI always runs for `master` pushes so every merged release-labelled change reaches release planning.

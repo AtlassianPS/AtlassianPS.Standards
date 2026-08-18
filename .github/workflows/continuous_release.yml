@@ -14,51 +14,38 @@ on:
           - patch
           - minor
           - major
-      prerelease:
-        description: Optional prerelease label for unreleased changes already on master, for example alpha, beta, rc, or rc-2
-        required: false
-        type: string
 
 concurrency:
   group: continuous-release
   cancel-in-progress: false
 
 permissions:
-  actions: read
-  contents: write
+  contents: read
   pull-requests: read
 
 jobs:
   prepare:
     name: Prepare release metadata
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/master') ||
       (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'master' &&
       !startsWith(github.event.workflow_run.head_commit.message, 'Prepare v'))
     runs-on: ubuntu-latest
+    environment: release
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || 'master' }}
 
       - uses: ./.github/actions/plan-merged-release
         id: plan
         with:
-          commit-sha: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
-          release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release_impact || '' }}
-          prerelease-label: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || '' }}
-
-      - name: Create generated changelog fragment
-        if: steps.plan.outputs.should_release == 'true' && steps.plan.outputs.fragment_path != ''
-        shell: pwsh
-        env:
-          FRAGMENT_PATH: ${{ steps.plan.outputs.fragment_path }}
-          FRAGMENT_CONTENT: ${{ steps.plan.outputs.fragment_content }}
-        run: |
-          New-Item -Path (Split-Path -Path $env:FRAGMENT_PATH -Parent) -ItemType Directory -Force | Out-Null
-          $env:FRAGMENT_CONTENT | Set-Content -LiteralPath $env:FRAGMENT_PATH -Encoding utf8
+          commit-sha: ${{ github.event.workflow_run.head_sha }}
+          release-impact: ${{ inputs.release_impact }}
 
       - uses: ./.github/actions/prepare-release-changelog
         if: steps.plan.outputs.should_release == 'true'
@@ -73,95 +60,123 @@ jobs:
         run: Invoke-Build -Task SetSourceVersion -VersionToPublish ${{ steps.plan.outputs.release_tag }}
         shell: pwsh
 
+      - name: Create release app token
+        if: steps.plan.outputs.should_release == 'true'
+        id: release_app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.ATLASSIANPS_RELEASE_APP_ID }}
+          private-key: ${{ secrets.ATLASSIANPS_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: AtlassianPS.Standards
+
       - uses: ./.github/actions/commit-release-metadata
         if: steps.plan.outputs.should_release == 'true'
         with:
           release-tag: ${{ steps.plan.outputs.release_tag }}
           manifest-path: AtlassianPS.Standards/AtlassianPS.Standards.psd1
-          github-token: ${{ github.token }}
-          release-bot-token: ${{ secrets.ATLASSIANPS_RELEASE_BOT_TOKEN }}
+          release-bot-token: ${{ steps.release_app.outputs.token }}
 
   publish:
     name: Publish tested release artifact
     if: >-
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'master' &&
       startsWith(github.event.workflow_run.head_commit.message, 'Prepare v') &&
       github.event.workflow_run.head_commit.author.name == 'github-actions[bot]'
     runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      actions: read
+      contents: read
     steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
-
       - name: Resolve prepared release
         id: prepared_release
         shell: pwsh
+        env:
+          PREPARED_COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
         run: |
-          $message = '${{ github.event.workflow_run.head_commit.message }}'
-          if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:-\d+)?)?) release$') {
-              throw "Commit message '$message' is not a release metadata commit."
+          $message = $env:PREPARED_COMMIT_MESSAGE
+          if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+) release$') {
+            throw "Commit message '$message' is not a release metadata commit."
           }
 
           "release_tag=$($Matches.tag)" >> $env:GITHUB_OUTPUT
 
-      - name: Download tested release artifact
-        uses: dawidd6/action-download-artifact@v21
+      - name: Download tested release candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          run_id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
           name: Release
           path: ./Release/
-          if_no_artifact_found: fail
+          digest-mismatch: error
 
-      - uses: ./.github/actions/setup-powershell
-
-      - uses: ./.github/actions/create-release-tag
+      - name: Create release app token
+        id: release_app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
-          tag: ${{ steps.prepared_release.outputs.release_tag }}
+          app-id: ${{ vars.ATLASSIANPS_RELEASE_APP_ID }}
+          private-key: ${{ secrets.ATLASSIANPS_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: AtlassianPS.Standards
 
-      - uses: ./.github/actions/resolve-release-tag
-        id: release_ref
-        with:
-          tag: ${{ steps.prepared_release.outputs.release_tag }}
-
-      - uses: ./.github/actions/build-release-notes
-        id: release_notes
-        with:
-          release-version: ${{ steps.release_ref.outputs.release_tag }}
-          module-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1
-
-      - name: Stamp and verify release artifact
-        run: Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.release_ref.outputs.release_tag }} -VerifyPublishedRelease
+      - name: Create annotated release tag
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.release_app.outputs.token }}
+          RELEASE_TAG: ${{ steps.prepared_release.outputs.release_tag }}
+          RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
 
-      - name: Package release artifact
-        run: Invoke-Build -Task Package
-        shell: pwsh
+          $refs = @(gh api "repos/$env:GITHUB_REPOSITORY/git/matching-refs/tags/$env:RELEASE_TAG" | ConvertFrom-Json)
+          $existing = $refs | Where-Object { $_.ref -eq "refs/tags/$env:RELEASE_TAG" } | Select-Object -First 1
+          if ($existing) {
+            if ($existing.object.type -ne 'tag') {
+              throw "Release tag '$env:RELEASE_TAG' must be annotated."
+            }
+            $tagObject = gh api "repos/$env:GITHUB_REPOSITORY/git/tags/$($existing.object.sha)" | ConvertFrom-Json
+            if ($tagObject.object.type -ne 'commit' -or $tagObject.object.sha -ne $env:RELEASE_COMMIT) {
+              throw "Release tag '$env:RELEASE_TAG' does not identify '$env:RELEASE_COMMIT'."
+            }
+            Write-Host "Release tag '$env:RELEASE_TAG' already identifies the tested candidate."
+            return
+          }
+
+          $tagObjectSha = gh api -X POST "repos/$env:GITHUB_REPOSITORY/git/tags" -f tag="$env:RELEASE_TAG" -f message="$env:RELEASE_TAG" -f object="$env:RELEASE_COMMIT" -f type=commit --jq .sha
+          gh api -X POST "repos/$env:GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$env:RELEASE_TAG" -f sha="$tagObjectSha" | Out-Null
 
       - name: Publish tested module artifact
-        run: Publish-Module -Path ./Release/AtlassianPS.Standards -NuGetApiKey ${{ secrets.PSGALLERY_API_KEY }} -ErrorAction Stop
+        env:
+          RELEASE_TAG: ${{ steps.prepared_release.outputs.release_tag }}
+        run: |
+          $expectedGalleryVersion = $env:RELEASE_TAG.Substring(1)
+          $published = Find-Module -Name 'AtlassianPS.Standards' -RequiredVersion $expectedGalleryVersion -Repository PSGallery -ErrorAction SilentlyContinue
+          if ($published) {
+            Write-Host "PSGallery already contains AtlassianPS.Standards $expectedGalleryVersion; skipping immutable publish."
+            return
+          }
+          Publish-Module -Path ./Release/AtlassianPS.Standards -Repository PSGallery -NuGetApiKey ${{ secrets.PSGALLERY_API_KEY }} -ErrorAction Stop
         shell: pwsh
 
       - name: Create GitHub release and upload asset
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
-          tag_name: ${{ steps.release_ref.outputs.release_tag }}
-          name: ${{ steps.release_ref.outputs.release_tag }}
-          body_path: ${{ steps.release_notes.outputs.release_notes_path }}
+          tag_name: ${{ steps.prepared_release.outputs.release_tag }}
+          body_path: ./Release/release-notes.md
           files: ./Release/AtlassianPS.Standards.zip
           fail_on_unmatched_files: true
-          draft: false
-          prerelease: ${{ contains(steps.release_ref.outputs.release_tag, '-alpha') || contains(steps.release_ref.outputs.release_tag, '-beta') || contains(steps.release_ref.outputs.release_tag, '-rc') }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.release_app.outputs.token }}
 
       - name: Notify homepage to update submodule
-        if: ${{ !contains(steps.release_ref.outputs.release_tag, '-alpha') && !contains(steps.release_ref.outputs.release_tag, '-beta') && !contains(steps.release_ref.outputs.release_tag, '-rc') }}
-        uses: peter-evans/repository-dispatch@v4
+        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4
         with:
           token: ${{ secrets.HOMEPAGE_PAT }}
           repository: AtlassianPS/AtlassianPS.github.io
           event-type: module-release
-          client-payload: '{"module": "AtlassianPS.Standards", "version": "${{ steps.release_ref.outputs.release_tag }}"}'
+          client-payload: '{"module": "AtlassianPS.Standards", "version": "${{ steps.prepared_release.outputs.release_tag }}"}'
