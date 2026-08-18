@@ -6,6 +6,20 @@ BeforeAll {
 }
 
 Describe 'Invoke-ModuleTests' {
+    It 'imports Pester globally for test scripts' {
+        InModuleScope AtlassianPS.Standards {
+            Mock -CommandName Get-UsablePesterVersion -MockWith { [Version]'5.7.1' }
+            Mock -CommandName Get-Module -MockWith { $null } -ParameterFilter { $Name -eq 'Pester' }
+            Mock -CommandName Import-Module -MockWith {}
+
+            $null = Import-PesterVersion -MinimumVersion ([Version]'5.7.0')
+
+            Should -Invoke -CommandName Import-Module -Times 1 -Exactly -ParameterFilter {
+                $Name -eq 'Pester' -and $RequiredVersion -eq [Version]'5.7.1' -and $Global -and $ErrorAction -eq 'Stop'
+            }
+        }
+    }
+
     It 'merges tag filters and clears excluded paths for Integration runs' {
         $testsPath = Join-Path -Path $TestDrive -ChildPath 'tests'
         $null = New-Item -Path $testsPath -ItemType Directory -Force

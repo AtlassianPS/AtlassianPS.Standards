@@ -11,12 +11,10 @@
 
     $pesterVersionToUse = Get-UsablePesterVersion -MinimumVersion $MinimumVersion -MaximumVersion $MaximumVersion
     $loadedPester = Get-Module -Name 'Pester' | Sort-Object -Property Version -Descending | Select-Object -First 1
-    if ((-not $loadedPester) -or ($loadedPester.Version -ne $pesterVersionToUse)) {
-        if ($loadedPester) {
-            Get-Module -Name 'Pester' | Remove-Module -Force -ErrorAction SilentlyContinue
-        }
-        Import-Module -Name 'Pester' -RequiredVersion $pesterVersionToUse -ErrorAction Stop
+    if ($loadedPester -and $loadedPester.Version -ne $pesterVersionToUse) {
+        Get-Module -Name 'Pester' | Remove-Module -Force -ErrorAction SilentlyContinue
     }
+    Import-Module -Name 'Pester' -RequiredVersion $pesterVersionToUse -Global -ErrorAction Stop
 
     return $pesterVersionToUse
 }
