@@ -386,6 +386,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'ATLASSIANPS_RELEASE_APP_ID'
         $workflow | Should -Match 'ATLASSIANPS_RELEASE_APP_PRIVATE_KEY'
         $workflow | Should -Match 'uses: \./\.github/actions/commit-release-metadata'
+        $workflow | Should -Match 'persist-credentials: false'
         $workflow | Should -Match "workflow_run\.event == 'push'"
         $workflow | Should -Match 'PREPARED_COMMIT_MESSAGE'
 
