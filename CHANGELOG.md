@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.1.14 - 2026-08-19
+
+* fix(cd): pass App token to release action (#41, @lipkau)
+
 ## v0.1.13 - 2026-08-18
 
 * Fixed continuous delivery to build and validate one release candidate in secretless CI, then publish its validated module directory without checking out or rebuilding repository code. `v0.1.12` was not published; its changes are included in this release.
