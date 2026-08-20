@@ -421,6 +421,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishWorkflow | Should -Match '\$PSNativeCommandUseErrorActionPreference = \$true'
         $publishWorkflow | Should -Match 'token: \$\{\{ steps\.release_app\.outputs\.token \}\}'
         $publishWorkflow | Should -Not -Match 'GITHUB_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}'
+        $publishWorkflow | Should -Not -Match 'repository-dispatch|HOMEPAGE_PAT'
         $publishWorkflow | Should -Not -Match 'actions/checkout|setup-powershell|Invoke-Build|Compress-Archive|Import-PowerShellDataFile|uses: \./\.github/actions/'
         $workflow | Should -Not -Match 'recovery_tag|RECOVERY_TAG|No successful CI run was found for recovery commit'
 
