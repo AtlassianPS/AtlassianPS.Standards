@@ -64,9 +64,9 @@ jobs:
       - name: Create release app token
         if: steps.plan.outputs.should_release == 'true'
         id: release_app
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ vars.ATLASSIANPS_RELEASE_APP_ID }}
+          client-id: ${{ vars.ATLASSIANPS_RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.ATLASSIANPS_RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: AtlassianPS.Standards
@@ -117,9 +117,9 @@ jobs:
 
       - name: Create release app token
         id: release_app
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ vars.ATLASSIANPS_RELEASE_APP_ID }}
+          client-id: ${{ vars.ATLASSIANPS_RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.ATLASSIANPS_RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: AtlassianPS.Standards

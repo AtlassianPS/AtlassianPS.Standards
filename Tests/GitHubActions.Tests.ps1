@@ -383,7 +383,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match "github\.ref == 'refs/heads/master'"
         $workflow | Should -Match 'environment: release'
         $workflow | Should -Match 'actions/create-github-app-token@[0-9a-f]{40}'
-        $workflow | Should -Match 'ATLASSIANPS_RELEASE_APP_ID'
+        $workflow | Should -Match 'ATLASSIANPS_RELEASE_APP_CLIENT_ID'
         $workflow | Should -Match 'ATLASSIANPS_RELEASE_APP_PRIVATE_KEY'
         $workflow | Should -Match 'uses: \./\.github/actions/commit-release-metadata'
         $workflow | Should -Match 'persist-credentials: false'
