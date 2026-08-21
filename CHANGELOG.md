@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.1.16 - 2026-08-21
+
+* Centralize module release orchestration (#47, @lipkau)
+
 ## v0.1.15 - 2026-08-21
 
 * Fixed module version stamping to preserve nested dependency versions.
