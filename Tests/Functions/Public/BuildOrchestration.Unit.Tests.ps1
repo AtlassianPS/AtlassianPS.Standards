@@ -175,6 +175,38 @@ Describe 'Set-ModuleManifestVersion' {
         $data.PrivateData.PSData.Prerelease | Should -Be ''
     }
 
+    It 'leaves dependency versions untouched' {
+        $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-with-dependency.psd1'
+        $manifest = @'
+@{
+    RequiredModules      = @(
+        @{
+            ModuleName    = 'Dependency'
+            ModuleVersion = '4.5.6'
+        }
+    )
+    RootModule           = 'Sample.psm1'
+    ModuleVersion        = '0.1'
+    GUID                 = 'b558bd8c-dc02-4ff2-96b7-4d2c61d9d103'
+    Author               = 'AtlassianPS'
+    Description          = 'Sample module.'
+    PrivateData          = @{
+        PSData = @{
+            Prerelease   = ''
+            ReleaseNotes = ''
+        }
+    }
+}
+'@
+        Set-Content -LiteralPath $manifestPath -Value $manifest
+
+        $null = Set-AtlassianPSModuleManifestVersion -BuiltManifestPath $manifestPath -ModuleName 'Sample' -VersionToPublish '1.2.4'
+
+        $data = Import-PowerShellDataFile -LiteralPath $manifestPath
+        $data.ModuleVersion | Should -Be '1.2.4'
+        $data.RequiredModules[0].ModuleVersion | Should -Be '4.5.6'
+    }
+
     It 'leaves release notes untouched when -ReleaseNotes is not provided' {
         $manifestPath = Join-Path -Path $TestDrive -ChildPath 'module-notes-empty.psd1'
         Set-Content -LiteralPath $manifestPath -Value $script:manifestTemplate
