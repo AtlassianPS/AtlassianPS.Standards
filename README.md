@@ -63,7 +63,7 @@ Invoke-Build -Task Lint, Build, Test
 Label-based CD runs after release-labelled pull requests merge to `master`.
 It computes the next semantic version from reviewed `release:*` intent, prepares `CHANGELOG.md`, stamps the source manifest version, and pushes one release-metadata commit with a short-lived GitHub App token.
 Secretless CI stamps and packages the `Release` artifact before the platform tests consume it. The publishing job downloads that immutable artifact from the exact successful CI run and publishes its module directory with `Publish-Module`, without checking out or rebuilding repository code.
-The release environment requires `ATLASSIANPS_RELEASE_APP_ID`, `ATLASSIANPS_RELEASE_APP_PRIVATE_KEY`, `PSGALLERY_API_KEY`, and `HOMEPAGE_PAT`.
+Release workflows read the organization variable `ATLASSIANPS_RELEASE_APP_CLIENT_ID` and the organization secrets `ATLASSIANPS_RELEASE_APP_PRIVATE_KEY`, `PSGALLERY_API_KEY`, and `HOMEPAGE_PAT`.
 
 The continuous release workflow will:
 
