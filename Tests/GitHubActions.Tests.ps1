@@ -8,6 +8,21 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $script:planMergedReleaseScriptPath = Join-Path -Path $script:projectRoot -ChildPath '.github/actions/plan-merged-release/plan-merged-release.ps1'
     }
 
+    It 'pins every external workflow dependency to a full commit SHA' {
+        $workflowRoot = Join-Path -Path $script:projectRoot -ChildPath '.github/workflows'
+        foreach ($workflow in Get-ChildItem -LiteralPath $workflowRoot -Filter '*.yml') {
+            $content = Get-Content -LiteralPath $workflow.FullName -Raw
+            $references = [Regex]::Matches($content, '(?m)^\s*(?:-\s+)?uses:\s+(?<reference>[^\s#]+)')
+            foreach ($match in $references) {
+                $reference = $match.Groups['reference'].Value
+                if ($reference.StartsWith('./')) {
+                    continue
+                }
+                $reference | Should -Match '@[0-9a-f]{40}$' -Because $workflow.Name
+            }
+        }
+    }
+
     It 'plan-merged-release computes the next tag and generated fragment for a merged PR' {
         function gh {
             $arguments = [String[]]$args
@@ -371,10 +386,24 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
     }
 
     It 'builds one secretless candidate and promotes it without executing repository code' {
-        $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/continuous_release.yml'
+        $callerPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/continuous_release.yml'
+        $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/module_release.yml'
+        $caller = Get-Content -LiteralPath $callerPath -Raw
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
         $publishWorkflow = $workflow.Substring($workflow.IndexOf('  publish:'))
         $ciWorkflow = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath '.github/workflows/ci.yml') -Raw
+
+        # Module repositories own only their trigger and module identity. Standards owns the
+        # complete prepare/publish process and evaluates the caller's event context.
+        $caller | Should -Match 'uses: \./\.github/workflows/module_release\.yml'
+        $caller | Should -Match 'module-name: AtlassianPS\.Standards'
+        $caller | Should -Match 'notify-homepage: false'
+        $caller | Should -Match 'secrets: inherit'
+        $caller | Should -Not -Match 'Prepare release metadata|Publish-Module|create-github-app-token'
+        $workflow | Should -Match '(?m)^\s+workflow_call:'
+        $workflow | Should -Match 'repository: \$\{\{ job\.workflow_repository \}\}'
+        $workflow | Should -Match 'ref: \$\{\{ job\.workflow_sha \}\}'
+        $workflow | Should -Match 'uses: \./\.release-workflow/\.github/actions/plan-merged-release'
 
         # Only a metadata commit on master can start normal publication. Repository rulesets and
         # protected environments remain the enforcement boundary for writer provenance.
@@ -385,7 +414,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'actions/create-github-app-token@[0-9a-f]{40}'
         $workflow | Should -Match 'ATLASSIANPS_RELEASE_APP_CLIENT_ID'
         $workflow | Should -Match 'ATLASSIANPS_RELEASE_APP_PRIVATE_KEY'
-        $workflow | Should -Match 'uses: \./\.github/actions/commit-release-metadata'
+        $workflow | Should -Match 'uses: \./\.release-workflow/\.github/actions/commit-release-metadata'
         $workflow | Should -Match 'persist-credentials: false'
         $workflow | Should -Match "workflow_run\.event == 'push'"
         $workflow | Should -Match 'PREPARED_COMMIT_MESSAGE'
@@ -412,17 +441,22 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishWorkflow | Should -Match 'run-id: \$\{\{ github\.event\.workflow_run\.id \}\}'
         $publishWorkflow | Should -Match 'digest-mismatch: error'
         $publishWorkflow | Should -Not -Match 'dawidd6/action-download-artifact|release-manifest\.json|Get-FileHash|ZipFile'
-        $publishWorkflow | Should -Match 'Publish-Module -Path \./Release/AtlassianPS\.Standards'
-        $publishWorkflow | Should -Match 'Find-Module -Name ''AtlassianPS\.Standards'' -RequiredVersion \$expectedGalleryVersion -Repository PSGallery'
+        $publishWorkflow | Should -Match 'Publish-Module -Path \$modulePath'
+        $publishWorkflow | Should -Match 'Find-Module -Name \$env:MODULE_NAME -RequiredVersion \$expectedGalleryVersion -Repository PSGallery'
+        $publishWorkflow | Should -Match '\$installParameters\.RequiredVersion = \$dependency\.RequiredVersion'
+        $publishWorkflow | Should -Match '\$installParameters\.MinimumVersion = \$dependency\.ModuleVersion'
+        $publishWorkflow | Should -Match '\$installParameters\.MaximumVersion = \$dependency\.MaximumVersion'
+        $publishWorkflow | Should -Match '(?ms)if \(\$dependency\.ModuleVersion\) \{.*?MinimumVersion.*?\}\s+if \(\$dependency\.MaximumVersion\) \{.*?MaximumVersion'
         $publishWorkflow | Should -Not -Match '(?m)Publish-Module[^\r\n]*-Force'
         $publishWorkflow | Should -Not -Match 'Publish-PSResource|Find-PSResource|nupkg|gallery_package_path'
+        $workflow | Should -Match '(?ms)prepare:.*?permissions:\s+contents: read\s+pull-requests: read'
         $publishWorkflow | Should -Match '(?ms)permissions:\s+actions: read\s+contents: read'
-        $publishWorkflow | Should -Not -Match 'contents: write'
+        $workflow | Should -Not -Match 'contents: write'
         $publishWorkflow | Should -Match '\$PSNativeCommandUseErrorActionPreference = \$true'
         $publishWorkflow | Should -Match 'token: \$\{\{ steps\.release_app\.outputs\.token \}\}'
         $publishWorkflow | Should -Not -Match 'GITHUB_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}'
-        $publishWorkflow | Should -Not -Match 'repository-dispatch|HOMEPAGE_PAT'
-        $publishWorkflow | Should -Not -Match 'actions/checkout|setup-powershell|Invoke-Build|Compress-Archive|Import-PowerShellDataFile|uses: \./\.github/actions/'
+        $publishWorkflow | Should -Match '(?ms)if: inputs\.notify-homepage\s+uses: peter-evans/repository-dispatch@'
+        $publishWorkflow | Should -Not -Match 'actions/checkout|setup-powershell|Invoke-Build|Compress-Archive|uses: \./\.release-workflow/'
         $workflow | Should -Not -Match 'recovery_tag|RECOVERY_TAG|No successful CI run was found for recovery commit'
 
         # Tag creation precedes the immutable PSGallery publication.

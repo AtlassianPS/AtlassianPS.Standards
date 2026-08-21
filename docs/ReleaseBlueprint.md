@@ -119,13 +119,13 @@ The operator never enters the final version or source commit.
 
 ## Identity And Repository Configuration
 
-Required environment variable:
+Required organization or repository variable:
 
 ```text
-ATLASSIANPS_RELEASE_APP_ID
+ATLASSIANPS_RELEASE_APP_CLIENT_ID
 ```
 
-Required environment secrets:
+Required organization or repository secrets:
 
 ```text
 ATLASSIANPS_RELEASE_APP_PRIVATE_KEY
@@ -151,8 +151,41 @@ Keep module-domain behavior in these build tasks:
 - `Package` creates the release archive.
 - `VerifyReleaseArtifact` validates the module version, release notes, and archive contents.
 
-Keep orchestration in shared Standards actions or reusable workflows. Repository-specific configuration
-should be limited to module name/path, supported test platforms, package path, and website module ID.
+The shared Standards `module_release.yml` reusable workflow owns the complete prepare and publish
+orchestration, including its event conditions. A module repository keeps only the trigger, immutable
+Standards workflow pin, module name, and whether publication should notify the website.
+
+```yaml
+name: Continuous Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      release_impact:
+        required: true
+        type: choice
+        options: [patch, minor, major]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  release:
+    uses: AtlassianPS/AtlassianPS.Standards/.github/workflows/module_release.yml@<standards-sha>
+    with:
+      module-name: ExampleModule
+      release-impact: ${{ inputs.release_impact }}
+    secrets: inherit
+```
+
+The reusable workflow checks out its own implementation at `job.workflow_sha` during preparation, so
+its composite actions and scripts come from the same immutable Standards commit as the workflow. The
+publisher does not check out either repository.
 
 Pin all Standards and third-party Actions references to 40-character commit SHAs. Downstream repositories
 must pin all Standards actions used by one workflow to the same released Standards commit.
@@ -166,36 +199,37 @@ For each module repository:
 1. Update the pinned Standards module and workflow commit together.
 2. Add the required labels and `Release Intent` check.
 3. Add candidate creation to CI and make `CI Result` require it.
-4. Add the serialized continuous-release planner and artifact-only publisher.
+4. Add the thin continuous-release caller pinned to the released Standards commit.
 5. Configure the release environment, App access, PSGallery key, and website token.
 6. Apply the branch, tag, signature, review, and Actions pinning rules.
 7. Remove older tag-triggered or rebuild-on-publish workflows.
 8. Run a shadow candidate build before enabling publication.
 9. Merge one small real patch and verify the complete release path.
 
-Do not copy workflow YAML from this document. Start from the current released Standards workflows or,
-when available, call the versioned reusable workflows directly.
+Do not copy the release implementation into module repositories. Call the released reusable workflow
+at its immutable commit SHA.
 
 ## Required Drift Guards
 
-Tests in each repository should verify that:
+Tests in each module repository should verify that:
 
 - Standards dependencies and action pins agree;
 - action references use immutable SHAs;
 - pull-request validation never checks out contributor code;
 - candidate CI contains no publishing credentials;
 - candidate CI stamps, packages, validates, and uploads one immutable artifact;
-- promotion downloads `Release` from the triggering CI run;
-- promotion uses the official download action's artifact digest verification;
-- promotion contains no checkout, local action, or `Invoke-Build` step;
-- tag creation precedes PSGallery publication;
+- continuous release calls the shared workflow at the same immutable Standards commit;
 - the source manifest keeps release notes empty;
 - no parallel tag-triggered or recovery workflow remains.
+
+Standards tests own the shared workflow's prepare/publish conditions, immutable artifact download,
+digest verification, checkout boundary, tag ordering, dependency installation, idempotency, and
+publication assertions.
 
 Before merging release changes, run:
 
 ```bash
-actionlint .github/workflows/ci.yml .github/workflows/release_intent.yml .github/workflows/continuous_release.yml
+actionlint .github/workflows/ci.yml .github/workflows/release_intent.yml .github/workflows/continuous_release.yml .github/workflows/module_release.yml
 git diff --check
 ```
 
