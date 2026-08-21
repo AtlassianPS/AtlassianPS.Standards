@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.1.15 - 2026-08-21
+
+* Fixed module version stamping to preserve nested dependency versions.
+
 ## v0.1.14 - 2026-08-19
 
 * fix(cd): pass App token to release action (#41, @lipkau)
