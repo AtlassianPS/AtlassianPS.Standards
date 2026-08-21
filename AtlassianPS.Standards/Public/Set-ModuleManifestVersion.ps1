@@ -97,7 +97,9 @@
             # Multiline matches a single-quoted literal spanning lines with '' escapes (ReleaseNotes).
             [Switch]$Multiline,
 
-            [Switch]$AllowMissing
+            [Switch]$AllowMissing,
+
+            [Switch]$Shallowest
         )
 
         $escapedKey = [Regex]::Escape($Key)
@@ -106,7 +108,8 @@
         # setting Prerelease or ReleaseNotes turns the placeholder into a real assignment.
         $pattern = "(?<![\w-])(?:#[ \t]*)?(?<assignment>$escapedKey[ \t]*=[ \t]*)$valueToken"
 
-        if (-not [Regex]::IsMatch($Content, $pattern)) {
+        $matchingAssignments = [Regex]::Matches($Content, $pattern)
+        if ($matchingAssignments.Count -eq 0) {
             if ($AllowMissing) {
                 return $Content
             }
@@ -119,7 +122,17 @@
             '{0}''{1}''' -f $match.Groups['assignment'].Value, $escapedValue
         }.GetNewClosure()
 
-        return [Regex]::Replace($Content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]$evaluator)
+        $assignment = $matchingAssignments[0]
+        if ($Shallowest) {
+            $assignment = $matchingAssignments |
+                Sort-Object { $_.Index - $Content.LastIndexOf("`n", $_.Index) } |
+                Select-Object -First 1
+        }
+
+        $replacement = & $evaluator $assignment
+        $prefix = $Content.Substring(0, $assignment.Index)
+        $suffix = $Content.Substring($assignment.Index + $assignment.Length)
+        return $prefix + $replacement + $suffix
     }
 
     $normalizedVersion = ConvertTo-VersionDescriptor -VersionText $VersionToPublish
@@ -144,7 +157,7 @@
     if ($PSCmdlet.ShouldProcess($BuiltManifestPath, "Set module version to $versionString")) {
         $content = [System.IO.File]::ReadAllText($BuiltManifestPath)
 
-        $content = Set-ManifestScalar -Content $content -Key 'ModuleVersion' -Value $versionString
+        $content = Set-ManifestScalar -Content $content -Key 'ModuleVersion' -Value $versionString -Shallowest
         # Prerelease may be absent in minimal manifests; only required when setting a label.
         $content = Set-ManifestScalar -Content $content -Key 'Prerelease' -Value $prereleaseValue -AllowMissing:([string]::IsNullOrEmpty($prereleaseValue))
         if ($PSBoundParameters.ContainsKey('ReleaseNotes')) {
