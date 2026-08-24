@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.1.17 - 2026-08-24
+
+* Fix release planner label permissions (#50, @lipkau)
+
 ## v0.1.16 - 2026-08-21
 
 * Centralize module release orchestration (#47, @lipkau)
