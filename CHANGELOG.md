@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+* Bound shared lint, style-test, and module-test orchestration to compatible Pester 5.9.x releases while retaining 5.9.0 as the clean-install baseline.
+
 ## v0.1.18 - 2026-08-24
 
 ### Fixed

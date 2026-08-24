@@ -26,7 +26,7 @@
         [String]$PesterVerbosity = 'Normal',
 
         [Parameter()]
-        [Version]$MinimumPesterVersion = [Version]'5.7.0',
+        [Version]$MinimumPesterVersion = [Version]'5.9.0',
 
         [Parameter()]
         [ValidateSet('Error', 'Warning', 'Information', 'ParseError')]
@@ -36,7 +36,10 @@
         [Switch]$SkipStyleTests,
 
         [Parameter()]
-        [Switch]$SkipScriptAnalyzer
+        [Switch]$SkipScriptAnalyzer,
+
+        [Parameter()]
+        [Version]$MaximumPesterVersion = [Version]'5.9.999'
     )
 
     if (-not $ProjectPath) {
@@ -137,10 +140,13 @@
             & $writeLintMessage -Color Gray -Message 'Running style tests...'
             $pesterVersion = Get-Module -Name 'Pester' -ListAvailable |
                 Sort-Object -Property Version -Descending |
-                Where-Object { $_.Version -ge $MinimumPesterVersion } |
+                Where-Object {
+                    $_.Version -ge $MinimumPesterVersion -and
+                    $_.Version -le $MaximumPesterVersion
+                } |
                 Select-Object -First 1 -ExpandProperty Version
             if (-not $pesterVersion) {
-                throw "Pester version $MinimumPesterVersion or newer is required, but no installed version satisfies that range."
+                throw "Pester version between $MinimumPesterVersion and $MaximumPesterVersion is required, but no installed version satisfies that range."
             }
 
             $loadedPester = Get-Module -Name 'Pester' |

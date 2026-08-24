@@ -24,10 +24,10 @@
         [String[]]$ExcludePath = @(),
 
         [Parameter()]
-        [Version]$MinimumPesterVersion = [Version]'5.7.0',
+        [Version]$MinimumPesterVersion = [Version]'5.9.0',
 
         [Parameter()]
-        [Version]$MaximumPesterVersion,
+        [Version]$MaximumPesterVersion = [Version]'5.9.999',
 
         [Parameter()]
         [String]$ResultOutputPath
@@ -36,7 +36,7 @@
     $resolvedTestPath = (Resolve-Path -LiteralPath $TestPath).ProviderPath
     $pesterVersion = Import-PesterVersion -MinimumVersion $MinimumPesterVersion -MaximumVersion $MaximumPesterVersion
     if (-not $pesterVersion) {
-        $pesterVersion = [Version]'5.7.0'
+        $pesterVersion = $MinimumPesterVersion
     }
 
     if (-not $ResultOutputPath) {

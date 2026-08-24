@@ -1,4 +1,4 @@
-﻿#requires -modules @{ ModuleName = "Pester"; ModuleVersion = "5.7"; MaximumVersion = "5.999" }
+﻿#requires -modules @{ ModuleName = "Pester"; ModuleVersion = "5.9.0"; MaximumVersion = "5.9.999" }
 
 BeforeAll {
     . "$PSScriptRoot/../../Helpers/TestTools.ps1"
@@ -8,14 +8,79 @@ BeforeAll {
 Describe 'Invoke-ModuleTests' {
     It 'imports Pester globally for test scripts' {
         InModuleScope AtlassianPS.Standards {
-            Mock -CommandName Get-UsablePesterVersion -MockWith { [Version]'5.7.1' }
+            Mock -CommandName Get-UsablePesterVersion -MockWith { [Version]'5.9.2' }
             Mock -CommandName Get-Module -MockWith { $null } -ParameterFilter { $Name -eq 'Pester' }
             Mock -CommandName Import-Module -MockWith {}
 
-            $null = Import-PesterVersion -MinimumVersion ([Version]'5.7.0')
+            $null = Import-PesterVersion `
+                -MinimumVersion ([Version]'5.9.0') `
+                -MaximumVersion ([Version]'5.9.999')
+
+            Should -Invoke -CommandName Get-UsablePesterVersion -Times 1 -Exactly -ParameterFilter {
+                $MinimumVersion -eq [Version]'5.9.0' -and $MaximumVersion -eq [Version]'5.9.999'
+            }
 
             Should -Invoke -CommandName Import-Module -Times 1 -Exactly -ParameterFilter {
-                $Name -eq 'Pester' -and $RequiredVersion -eq [Version]'5.7.1' -and $Global -and $ErrorAction -eq 'Stop'
+                $Name -eq 'Pester' -and $RequiredVersion -eq [Version]'5.9.2' -and $Global -and $ErrorAction -eq 'Stop'
+            }
+        }
+    }
+
+    It 'selects the newest installed Pester version within the accepted range' {
+        InModuleScope AtlassianPS.Standards {
+            Mock -CommandName Get-Module -MockWith {
+                @(
+                    [PSCustomObject]@{ Version = [Version]'6.0.0' }
+                    [PSCustomObject]@{ Version = [Version]'5.9.4' }
+                    [PSCustomObject]@{ Version = [Version]'5.9.0' }
+                    [PSCustomObject]@{ Version = [Version]'5.8.1' }
+                )
+            } -ParameterFilter { $Name -eq 'Pester' -and $ListAvailable }
+
+            $selectedVersion = Get-UsablePesterVersion `
+                -MinimumVersion ([Version]'5.9.0') `
+                -MaximumVersion ([Version]'5.9.999')
+
+            $selectedVersion | Should -Be ([Version]'5.9.4')
+        }
+    }
+
+    It 'passes the accepted Pester range to module test execution' {
+        $testsPath = Join-Path -Path $TestDrive -ChildPath 'tests-version-range'
+        $null = New-Item -Path $testsPath -ItemType Directory -Force
+
+        InModuleScope AtlassianPS.Standards -Parameters @{ TestPath = $testsPath } {
+            param($TestPath)
+
+            Mock -CommandName Import-PesterVersion -MockWith { [Version]'5.9.3' }
+            Mock -CommandName New-PesterConfiguration -MockWith { param($Hashtable) $Hashtable }
+            Mock -CommandName Invoke-Pester -MockWith {
+                [PSCustomObject]@{ FailedCount = 0; ContainersFailedCount = 0 }
+            }
+
+            $null = Invoke-ModuleTests -TestPath $TestPath
+
+            Should -Invoke -CommandName Import-PesterVersion -Times 1 -Exactly -ParameterFilter {
+                $MinimumVersion -eq [Version]'5.9.0' -and $MaximumVersion -eq [Version]'5.9.999'
+            }
+        }
+    }
+
+    It 'passes the accepted Pester range to style test execution' {
+        $styleTestPath = Join-Path -Path $TestDrive -ChildPath 'Style.Tests.ps1'
+        Set-Content -LiteralPath $styleTestPath -Value 'Describe "style" { It "passes" { $true | Should -BeTrue } }'
+
+        InModuleScope AtlassianPS.Standards -Parameters @{ StyleTestPath = $styleTestPath } {
+            param($StyleTestPath)
+
+            Mock -CommandName Import-PesterVersion -MockWith { [Version]'5.9.3' }
+            Mock -CommandName New-PesterConfiguration -MockWith { param($Hashtable) $Hashtable }
+            Mock -CommandName Invoke-Pester -MockWith { [PSCustomObject]@{ FailedCount = 0 } }
+
+            $null = Invoke-StyleLintTests -StyleTestPath $StyleTestPath
+
+            Should -Invoke -CommandName Import-PesterVersion -Times 1 -Exactly -ParameterFilter {
+                $MinimumVersion -eq [Version]'5.9.0' -and $MaximumVersion -eq [Version]'5.9.999'
             }
         }
     }

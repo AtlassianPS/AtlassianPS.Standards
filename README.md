@@ -58,6 +58,9 @@ Use `Tools/update.dependencies.ps1` to refresh pinned dependency versions in `To
 Invoke-Build -Task Lint, Build, Test
 ```
 
+The shared lint and test helpers select the newest installed Pester version from 5.9.0 through 5.9.999.
+The minimum keeps clean environments reproducible, while the maximum prevents an unreviewed future major version from changing test behavior.
+
 ## Release
 
 Label-based CD runs after release-labelled pull requests merge to `master`.
