@@ -172,6 +172,7 @@ on:
 permissions:
   actions: read
   contents: read
+  issues: read
   pull-requests: read
 
 jobs:
@@ -182,6 +183,9 @@ jobs:
       release-impact: ${{ inputs.release_impact }}
     secrets: inherit
 ```
+
+The caller and the reusable workflow's preparation job both need `issues: read` because GitHub
+exposes pull request labels through the issues labels API.
 
 The reusable workflow checks out its own implementation at `job.workflow_sha` during preparation, so
 its composite actions and scripts come from the same immutable Standards commit as the workflow. The
