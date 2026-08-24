@@ -784,6 +784,16 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         (Get-Content -LiteralPath $releaseNotesPath -Raw) | Should -Match '### Changed'
     }
 
+    It 'treats the changelog fragment directory as optional when committing release metadata' {
+        $actionPath = Join-Path -Path $script:projectRoot -ChildPath '.github/actions/commit-release-metadata/action.yml'
+        $action = Get-Content -LiteralPath $actionPath -Raw
+
+        $action | Should -Match 'git add CHANGELOG\.md "\$\{MANIFEST_PATH\}"'
+        $action | Should -Match 'if \[ -d \.changelog \] \|\| ! git diff --quiet -- \.changelog; then'
+        $action | Should -Match 'git add --all -- \.changelog'
+        $action | Should -Not -Match 'git add CHANGELOG\.md \.changelog'
+    }
+
     It 'preserves heading-like text inside fenced code blocks' {
         $scriptPath = Join-Path -Path $projectRoot -ChildPath '.github/actions/prepare-release-changelog/prepare-release-changelog.ps1'
         $repoPath = Join-Path -Path $TestDrive -ChildPath 'fenced-repo'

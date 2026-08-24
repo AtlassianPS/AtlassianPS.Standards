@@ -34,7 +34,10 @@ runs:
 
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git add CHANGELOG.md .changelog "${MANIFEST_PATH}"
+        git add CHANGELOG.md "${MANIFEST_PATH}"
+        if [ -d .changelog ] || ! git diff --quiet -- .changelog; then
+          git add --all -- .changelog
+        fi
         git commit -m "Prepare ${RELEASE_TAG} release"
 
         git push "https://x-access-token:${RELEASE_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
