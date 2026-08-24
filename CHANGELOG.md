@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.1.18 - 2026-08-24
+
+### Fixed
+
+* Grouped typed changelog fragments under standard release-note headings and consolidated duplicate headings during release preparation (#51, @lipkau).
+
 ## v0.1.17 - 2026-08-24
 
 * Fix release planner label permissions (#50, @lipkau)
