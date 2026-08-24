@@ -57,6 +57,7 @@ $fragments = @(
             Path    = $fragmentFile.FullName
             Name    = $fragmentFile.Name
             Pull    = [Int]$match.Groups['pr'].Value
+            Type    = $match.Groups['type'].Value
             Content = $fragmentContent
         }
     }
@@ -64,18 +65,95 @@ $fragments = @(
 
 $releaseBodyParts = [System.Collections.Generic.List[String]]::new()
 $unreleasedBody = $unreleasedMatch.Groups['body'].Value.Trim()
-if (-not [String]::IsNullOrWhiteSpace($unreleasedBody)) {
-    $releaseBodyParts.Add($unreleasedBody)
+$changelogHeadings = [ordered]@{
+    added      = 'Added'
+    changed    = 'Changed'
+    deprecated = 'Deprecated'
+    removed    = 'Removed'
+    fixed      = 'Fixed'
+    security   = 'Security'
+    breaking   = 'Breaking'
+}
+$changelogTypesByHeading = @{}
+$categorizedContent = @{}
+foreach ($changelogType in $changelogHeadings.Keys) {
+    $changelogTypesByHeading[$changelogHeadings[$changelogType]] = $changelogType
+    $categorizedContent[$changelogType] = [System.Collections.Generic.List[String]]::new()
+}
+
+$uncategorizedLines = [System.Collections.Generic.List[String]]::new()
+$sectionLines = [System.Collections.Generic.List[String]]::new()
+$currentType = $null
+$inFence = $false
+$fenceCharacter = $null
+$fenceLength = 0
+
+foreach ($line in @($unreleasedBody -split "`r`n")) {
+    $headingMatch = if (-not $inFence) { [Regex]::Match($line, '^###[ \t]+(?<heading>[^\r\n]+?)[ \t]*$') }
+    if ($headingMatch.Success) {
+        if ($currentType) {
+            $sectionBody = ($sectionLines.ToArray() -join "`r`n").Trim()
+            if (-not [String]::IsNullOrWhiteSpace($sectionBody)) {
+                $categorizedContent[$currentType].Add($sectionBody)
+            }
+            $sectionLines.Clear()
+        }
+
+        $heading = $headingMatch.Groups['heading'].Value
+        $currentType = $changelogTypesByHeading[$heading]
+        if ($currentType) {
+            continue
+        }
+    }
+
+    if ($currentType) {
+        $sectionLines.Add($line)
+    }
+    else {
+        $uncategorizedLines.Add($line)
+    }
+
+    $fenceMatch = [Regex]::Match($line, '^[ \t]*(?<fence>`{3,}|~{3,})')
+    if (-not $inFence -and $fenceMatch.Success) {
+        $inFence = $true
+        $fenceCharacter = $fenceMatch.Groups['fence'].Value.Substring(0, 1)
+        $fenceLength = $fenceMatch.Groups['fence'].Value.Length
+    }
+    elseif ($inFence) {
+        $closingFencePattern = '^[ \t]*{0}{{{1},}}[ \t]*$' -f [Regex]::Escape($fenceCharacter), $fenceLength
+        if ([Regex]::IsMatch($line, $closingFencePattern)) {
+            $inFence = $false
+            $fenceCharacter = $null
+            $fenceLength = 0
+        }
+    }
+}
+if ($currentType) {
+    $sectionBody = ($sectionLines.ToArray() -join "`r`n").Trim()
+    if (-not [String]::IsNullOrWhiteSpace($sectionBody)) {
+        $categorizedContent[$currentType].Add($sectionBody)
+    }
 }
 foreach ($fragment in @($fragments | Sort-Object -Property Pull, Name)) {
-    $releaseBodyParts.Add($fragment.Content)
+    $categorizedContent[$fragment.Type].Add($fragment.Content)
+}
+
+$uncategorizedBody = ($uncategorizedLines.ToArray() -join "`r`n").Trim()
+if (-not [String]::IsNullOrWhiteSpace($uncategorizedBody)) {
+    $releaseBodyParts.Add($uncategorizedBody)
+}
+foreach ($changelogType in $changelogHeadings.Keys) {
+    if ($categorizedContent[$changelogType].Count -gt 0) {
+        $sectionBody = $categorizedContent[$changelogType].ToArray() -join "`r`n"
+        $releaseBodyParts.Add("### $($changelogHeadings[$changelogType])`r`n`r`n$sectionBody")
+    }
 }
 
 if ($releaseBodyParts.Count -eq 0) {
     throw "No unreleased changelog entries or changelog fragments were found for '$releaseHeading'."
 }
 
-$releaseBody = ($releaseBodyParts.ToArray() -join "`r`n")
+$releaseBody = ($releaseBodyParts.ToArray() -join "`r`n`r`n")
 $newSection = "## Unreleased`r`n`r`n## $releaseHeading - $((Get-Date).ToString('yyyy-MM-dd'))`r`n`r`n$releaseBody`r`n`r`n"
 $updatedContent = '{0}{1}{2}' -f @(
     $content.Substring(0, $unreleasedMatch.Index)

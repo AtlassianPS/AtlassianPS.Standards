@@ -688,7 +688,13 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
 
 ## Unreleased
 
-- Added release intent validation.
+### Fixed
+
+- Preserved an existing fixed entry.
+
+### Fixed
+
+- Preserved a second existing fixed entry.
 
 ## v1.2.2 - 2026-05-01
 
@@ -724,8 +730,11 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
 
         $content = (Get-Content -LiteralPath $changelogPath -Raw) -replace "`r`n", "`n"
         $content | Should -Match '## Unreleased\n\n## v1\.2\.3 - \d{4}-\d{2}-\d{2}'
-        $content | Should -Match '- Added release intent validation\.'
+        ([Regex]::Matches($content, '(?m)^### Fixed$')).Count | Should -Be 1
+        $content | Should -Match '- Preserved an existing fixed entry\.'
+        $content | Should -Match '- Preserved a second existing fixed entry\.'
         $content | Should -Match '\* Fixed generated release comments\. \(#42, @tester\)'
+        $content | Should -Match '(?s)### Fixed\n\n- Preserved an existing fixed entry\.\n- Preserved a second existing fixed entry\.\n\* Fixed generated release comments\.'
         Test-Path -LiteralPath (Join-Path -Path $fragmentDirectory -ChildPath '42.patch.fixed.md') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path -Path $repoPath -ChildPath 'Release/release-notes.md') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path -Path $runnerTemp -ChildPath 'release-notes.md') | Should -BeTrue
@@ -733,5 +742,102 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $output = Get-Content -LiteralPath $outputPath -Raw
         $output | Should -Match 'release_version=v1.2.3'
         $output | Should -Match ([Regex]::Escape((Join-Path -Path $runnerTemp -ChildPath 'release-notes.md')))
+    }
+
+    It 'groups fragments under changelog headings in standard order' {
+        $scriptPath = Join-Path -Path $projectRoot -ChildPath '.github/actions/prepare-release-changelog/prepare-release-changelog.ps1'
+        $repoPath = Join-Path -Path $TestDrive -ChildPath 'categorized-repo'
+        $fragmentDirectory = Join-Path -Path $repoPath -ChildPath '.changelog'
+        New-Item -Path $fragmentDirectory -ItemType Directory -Force | Out-Null
+
+        $changelogPath = Join-Path -Path $repoPath -ChildPath 'CHANGELOG.md'
+        Set-Content -LiteralPath $changelogPath -Value "# Changelog`n`n## Unreleased`n`n## v1.2.2 - 2026-05-01`n`n- Previous release."
+        Set-Content -LiteralPath (Join-Path -Path $fragmentDirectory -ChildPath '44.patch.fixed.md') -Value '* Fixed the later defect.'
+        Set-Content -LiteralPath (Join-Path -Path $fragmentDirectory -ChildPath '43.patch.changed.md') -Value '* Changed the test behavior.'
+
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'categorized-output.txt'
+        $releaseNotesPath = Join-Path -Path $TestDrive -ChildPath 'categorized-notes.md'
+        $previousChangelogPath = $env:CHANGELOG_PATH
+        $previousReleaseVersion = $env:RELEASE_VERSION
+        $previousChangelogDirectory = $env:CHANGELOG_DIRECTORY
+        $previousReleaseNotesPath = $env:RELEASE_NOTES_PATH
+        $previousOutput = $env:GITHUB_OUTPUT
+        try {
+            $env:CHANGELOG_PATH = $changelogPath
+            $env:RELEASE_VERSION = 'v1.2.3'
+            $env:CHANGELOG_DIRECTORY = '.changelog'
+            $env:RELEASE_NOTES_PATH = $releaseNotesPath
+            $env:GITHUB_OUTPUT = $outputPath
+
+            & $scriptPath
+        }
+        finally {
+            $env:CHANGELOG_PATH = $previousChangelogPath
+            $env:RELEASE_VERSION = $previousReleaseVersion
+            $env:CHANGELOG_DIRECTORY = $previousChangelogDirectory
+            $env:RELEASE_NOTES_PATH = $previousReleaseNotesPath
+            $env:GITHUB_OUTPUT = $previousOutput
+        }
+
+        $content = (Get-Content -LiteralPath $changelogPath -Raw) -replace "`r`n", "`n"
+        $content | Should -Match '(?s)### Changed\n\n\* Changed the test behavior\.\n\n### Fixed\n\n\* Fixed the later defect\.'
+        (Get-Content -LiteralPath $releaseNotesPath -Raw) | Should -Match '### Changed'
+    }
+
+    It 'preserves heading-like text inside fenced code blocks' {
+        $scriptPath = Join-Path -Path $projectRoot -ChildPath '.github/actions/prepare-release-changelog/prepare-release-changelog.ps1'
+        $repoPath = Join-Path -Path $TestDrive -ChildPath 'fenced-repo'
+        $fragmentDirectory = Join-Path -Path $repoPath -ChildPath '.changelog'
+        New-Item -Path $fragmentDirectory -ItemType Directory -Force | Out-Null
+
+        $changelogPath = Join-Path -Path $repoPath -ChildPath 'CHANGELOG.md'
+        Set-Content -LiteralPath $changelogPath -Value @'
+# Changelog
+
+## Unreleased
+
+### Changed
+
+- Documented this example:
+
+```markdown
+### Fixed
+
+- This is example text, not a changelog section.
+```
+
+## v1.2.2 - 2026-05-01
+
+- Previous release.
+'@
+        Set-Content -LiteralPath (Join-Path -Path $fragmentDirectory -ChildPath '42.patch.fixed.md') -Value '* Fixed the actual defect.'
+
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'fenced-output.txt'
+        $previousChangelogPath = $env:CHANGELOG_PATH
+        $previousReleaseVersion = $env:RELEASE_VERSION
+        $previousChangelogDirectory = $env:CHANGELOG_DIRECTORY
+        $previousReleaseNotesPath = $env:RELEASE_NOTES_PATH
+        $previousOutput = $env:GITHUB_OUTPUT
+        try {
+            $env:CHANGELOG_PATH = $changelogPath
+            $env:RELEASE_VERSION = 'v1.2.3'
+            $env:CHANGELOG_DIRECTORY = '.changelog'
+            $env:RELEASE_NOTES_PATH = Join-Path -Path $TestDrive -ChildPath 'fenced-notes.md'
+            $env:GITHUB_OUTPUT = $outputPath
+
+            & $scriptPath
+        }
+        finally {
+            $env:CHANGELOG_PATH = $previousChangelogPath
+            $env:RELEASE_VERSION = $previousReleaseVersion
+            $env:CHANGELOG_DIRECTORY = $previousChangelogDirectory
+            $env:RELEASE_NOTES_PATH = $previousReleaseNotesPath
+            $env:GITHUB_OUTPUT = $previousOutput
+        }
+
+        $content = (Get-Content -LiteralPath $changelogPath -Raw) -replace "`r`n", "`n"
+        $content | Should -Match '(?s)```markdown\n### Fixed\n\n- This is example text, not a changelog section\.\n```'
+        ([Regex]::Matches($content, '(?m)^### Fixed$')).Count | Should -Be 2
+        $content | Should -Match '(?s)```\n\n### Fixed\n\n\* Fixed the actual defect\.'
     }
 }

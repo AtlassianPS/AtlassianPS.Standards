@@ -52,6 +52,10 @@ A releasing pull request also needs either one `changelog:*` label or one review
 .changelog/<pr-number>.<patch|minor|major>.<added|changed|fixed|removed|deprecated|security|breaking>.md
 ```
 
+Fragment contents should be Markdown list items without a `###` heading. Release preparation groups
+them under standard release-note headings based on the filename type and consolidates duplicate
+standard headings already present under `## Unreleased`.
+
 `release:none` contributes no version impact or public note. It does not remove the merged code from a
 future package and does not suppress other releasable changes in the same batch.
 
