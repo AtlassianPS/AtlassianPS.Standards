@@ -118,6 +118,7 @@ The action creates `## v1.2.3 - YYYY-MM-DD` immediately after `## Unreleased`, m
 By default, the generated release-notes output file is written under the runner temp directory so release-preparation PRs only need to commit `CHANGELOG.md` and `.changelog` deletions.
 
 Use the `plan-merged-release` composite action from trusted `push` workflows to resolve a merged PR's release labels, compute the next stable semver tag, and generate a standard fragment when the PR used a `changelog:*` label.
+Grant `issues: read` to the workflow that calls it because GitHub serves pull request labels from the issues labels API.
 It does not publish by itself; the shared `module_release.yml` workflow owns metadata commits, release validation, annotated tags, PSGallery publication, and GitHub releases.
 
 ## External Help
