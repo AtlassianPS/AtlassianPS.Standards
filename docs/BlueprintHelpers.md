@@ -114,7 +114,7 @@ For manual release preparation, commit source version and changelog before taggi
     release-version: v1.2.3
 ```
 
-The action creates `## v1.2.3 - YYYY-MM-DD` immediately after `## Unreleased`, moves any existing Unreleased body plus valid `.changelog/*.md` fragment contents into that section, and deletes only the consumed fragments.
+The action creates `## v1.2.3 - YYYY-MM-DD` immediately after `## Unreleased`, moves any existing Unreleased body plus valid `.changelog/*.md` fragment contents into that section, groups typed fragments under standard release-note headings, consolidates duplicate standard headings, and deletes only the consumed fragments. Fragment files should contain list items without their own `###` heading because the filename type supplies the heading.
 By default, the generated release-notes output file is written under the runner temp directory so release-preparation PRs only need to commit `CHANGELOG.md` and `.changelog` deletions.
 
 Use the `plan-merged-release` composite action from trusted `push` workflows to resolve a merged PR's release labels, compute the next stable semver tag, and generate a standard fragment when the PR used a `changelog:*` label.
