@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.1.19 - 2026-08-24
+
+### Fixed
+
+* Allowed manual releases to commit metadata when no `.changelog` directory exists.
+
 ## v0.1.18 - 2026-08-24
 
 ### Fixed
