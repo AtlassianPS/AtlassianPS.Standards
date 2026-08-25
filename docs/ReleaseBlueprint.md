@@ -61,6 +61,8 @@ future package and does not suppress other releasable changes in the same batch.
 
 Use `pull_request_target` only to inspect labels, changed-file metadata, and trusted base-branch action
 code. Never check out or execute contributor code in that workflow.
+Because title and body edits cannot change the validated inputs, release-intent workflows do not
+subscribe to the `edited` activity type.
 
 ## Continuous Release Flow
 
@@ -78,6 +80,10 @@ code. Never check out or execute contributor code in that workflow.
 9. Without checking out the repository, the publisher creates the annotated tag, passes the candidate
    module directory to `Publish-Module`, creates the GitHub release from the candidate notes and archive,
    and notifies the website.
+
+Shared CI and release jobs use explicit timeouts so a hung command cannot consume GitHub's six-hour
+default. Candidate and test-result artifacts are retained for 14 days, which leaves time for release
+promotion and failure analysis without keeping routine artifacts for the repository-wide default.
 
 GitHub Actions events wake the planner; they are not release work items. GitHub concurrency can replace
 a pending event, so the planner must reconcile durable Git and pull-request history rather than rely on

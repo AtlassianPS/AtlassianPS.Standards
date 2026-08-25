@@ -40,6 +40,7 @@ If guidance conflicts, follow this file first.
 - Do not enable release publishing on an unprotected `master`; direct pushes can bypass review and imitate release metadata.
 - Run manual release dispatches from `master` only; operators choose the impact, never the final version or source commit.
 - Candidate CI must create the final validated module directory and release archive without publishing secrets. The publish job downloads the immutable artifact from the exact successful CI run and promotes it without checking out repository code.
+- Keep shared CI and release jobs bounded with explicit timeouts, and retain build and test artifacts for 14 days.
 - Rerun failed jobs for transient publish failures. For lasting failures, merge a reviewed fix and release the next version; never delete/recreate a tag or republish a PSGallery version.
 - When changing release behavior, update `docs/ReleaseBlueprint.md`, `docs/BlueprintHelpers.md`, tests, and these agent instructions together.
 
@@ -84,4 +85,5 @@ Before finalizing, always run the full pipeline: `Invoke-Build -Task Lint, Build
 - `.github/workflows/module_ci.yml` owns the reusable module build, platform-test, optional smoke-test, and release-candidate pipeline.
 - Keep downstream `ci.yml` files limited to triggers, permissions, immutable workflow inputs, and the caller-side `CI Result` compatibility job.
 - Continuous release callers listen only for completed `CI` runs on `master`; pull-request CI must not start release orchestration.
+- Release-intent callers rerun for label and changed-file events, not title or body edits.
 - CI path filters may skip pull request validation for documentation and metadata-only changes. CI always runs for `master` pushes so every merged release-labelled change reaches release planning.
