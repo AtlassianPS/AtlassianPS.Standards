@@ -7,6 +7,22 @@ BeforeAll {
 }
 
 Describe 'Invoke-Lint' {
+    It 'preserves existing positional parameter assignments' {
+        InModuleScope AtlassianPS.Standards {
+            $command = Get-Command -Name 'Invoke-Lint'
+            $parameterPositions = @{}
+            foreach ($parameterName in @('Severity', 'MaximumPesterVersion')) {
+                $parameterAttribute = $command.Parameters[$parameterName].Attributes |
+                    Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+                    Select-Object -First 1
+                $parameterPositions[$parameterName] = $parameterAttribute.Position
+            }
+
+            $parameterPositions.Severity | Should -Be 8
+            $parameterPositions.MaximumPesterVersion | Should -Be 9
+        }
+    }
+
     It 'is exported by the module' {
         $lintCommand = Get-Command -Module 'AtlassianPS.Standards' |
             Where-Object { $_.CommandType -eq 'Function' -and $_.Verb -eq 'Invoke' -and $_.Name -like '*Lint' } |
@@ -67,7 +83,7 @@ Describe 'Invoke-Lint' {
 
             {
                 Invoke-Lint -ProjectPath $ProjectPath -ModulePath $ModulePath -BuildScriptPath $BuildScriptPath -AnalyzerSettingsPath $SettingsPath -MinimumPesterVersion ([Version]'99.0.0')
-            } | Should -Throw -ExpectedMessage "Pester version 99.0.0 or newer is required*"
+            } | Should -Throw -ExpectedMessage "Pester version between 99.0.0 and 5.999 is required*"
         }
     }
 

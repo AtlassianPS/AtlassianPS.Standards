@@ -19,7 +19,8 @@ function Update-DependencyReference {
         [String]$BuildRequirementsPath,
         [String]$ManifestPath,
         [Switch]$SkipBuildRequirement,
-        [Switch]$SkipManifestRequirement
+        [Switch]$SkipManifestRequirement,
+        [Switch]$AllowMajorVersionUpgrade
     )
 
     [PSCustomObject]@{
@@ -27,18 +28,23 @@ function Update-DependencyReference {
         ManifestPath           = $ManifestPath
         SkipBuildRequirement   = [Boolean]$SkipBuildRequirement
         SkipManifestRequirement = [Boolean]$SkipManifestRequirement
+        AllowMajorVersionUpgrade = [Boolean]$AllowMajorVersionUpgrade
     }
 }
 
 Export-ModuleMember -Function Update-DependencyReference
 '@
 
-        $result = & $harness.ScriptPath -SkipBuildRequirement -SkipManifestRequirement
+        $result = & $harness.ScriptPath `
+            -SkipBuildRequirement `
+            -SkipManifestRequirement `
+            -AllowMajorVersionUpgrade
 
         $result.BuildRequirementsPath | Should -Be (Join-Path -Path $harness.Root -ChildPath 'Tools/build.requirements.psd1')
         $result.ManifestPath | Should -Be (Join-Path -Path $harness.Root -ChildPath 'AtlassianPS.Standards/AtlassianPS.Standards.psd1')
         $result.SkipBuildRequirement | Should -BeTrue
         $result.SkipManifestRequirement | Should -BeTrue
+        $result.AllowMajorVersionUpgrade | Should -BeTrue
     }
 
     It 'fails fast when shared updater emits a non-terminating error' {
@@ -49,7 +55,8 @@ function Update-DependencyReference {
         [String]$BuildRequirementsPath,
         [String]$ManifestPath,
         [Switch]$SkipBuildRequirement,
-        [Switch]$SkipManifestRequirement
+        [Switch]$SkipManifestRequirement,
+        [Switch]$AllowMajorVersionUpgrade
     )
 
     Write-Error -Message 'simulated updater failure'

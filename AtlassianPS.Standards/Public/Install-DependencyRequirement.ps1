@@ -190,6 +190,7 @@ function Install-DependencyRequirement {
                 -RequiredVersion $requiredVersion `
                 -Scope CurrentUser `
                 -Repository 'PSGallery' `
+                -SkipPublisherCheck `
                 -AllowClobber `
                 -Force
             $installedCount++

@@ -60,8 +60,12 @@ Describe 'Install-DependencyRequirement' {
             $result.AlreadyPresentCount | Should -Be 1
 
             Should -Invoke -CommandName Install-Module -Scope It -Times 2 -Exactly
-            Should -Invoke -CommandName Install-Module -Scope It -ParameterFilter { $Name -eq 'InvokeBuild' -and $RequiredVersion -eq '5.14.23' }
-            Should -Invoke -CommandName Install-Module -Scope It -ParameterFilter { $Name -eq 'PSScriptAnalyzer' -and $RequiredVersion -eq '1.25.0' }
+            Should -Invoke -CommandName Install-Module -Scope It -ParameterFilter {
+                $Name -eq 'InvokeBuild' -and $RequiredVersion -eq '5.14.23' -and $SkipPublisherCheck
+            }
+            Should -Invoke -CommandName Install-Module -Scope It -ParameterFilter {
+                $Name -eq 'PSScriptAnalyzer' -and $RequiredVersion -eq '1.25.0' -and $SkipPublisherCheck
+            }
         }
     }
 
