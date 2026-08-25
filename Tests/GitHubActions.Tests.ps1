@@ -414,7 +414,10 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $ciWorkflow | Should -Match '(?m)^\s+workflow_call:'
         $ciWorkflow | Should -Match 'build-profile:'
         $ciWorkflow | Should -Match 'smoke-profile:'
-        $ciWorkflow | Should -Match 'BUILD_PROFILE.*jiraps.*RELEASE_CANDIDATE'
+        $ciWorkflow | Should -Match 'BUILD_PROFILE'
+        $ciWorkflow | Should -Match 'standard\|jiraps'
+        $ciWorkflow | Should -Match 'release-candidate:'
+        $ciWorkflow | Should -Not -Match 'JiraPS build profile does not implement the continuous-release artifact contract'
 
         # Only a metadata commit on master can start normal publication. Repository rulesets and
         # protected environments remain the enforcement boundary for writer provenance.

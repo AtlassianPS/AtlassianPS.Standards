@@ -49,7 +49,6 @@ jobs:
         shell: bash
         env:
           BUILD_PROFILE: ${{ inputs.build-profile }}
-          RELEASE_CANDIDATE: ${{ inputs.release-candidate }}
           SMOKE_PROFILE: ${{ inputs.smoke-profile }}
         run: |
           case "$BUILD_PROFILE" in
@@ -61,11 +60,6 @@ jobs:
             none|confluence|jira) ;;
             *) echo "::error::Unsupported smoke profile: $SMOKE_PROFILE"; exit 1 ;;
           esac
-
-          if [[ "$BUILD_PROFILE" == "jiraps" && "$RELEASE_CANDIDATE" == "true" ]]; then
-            echo "::error::The JiraPS build profile does not implement the continuous-release artifact contract."
-            exit 1
-          fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: inputs.detect-changes && github.event_name == 'pull_request'
