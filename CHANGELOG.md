@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.2.0 - 2026-08-25
+
+### Added
+
+* Centralize module CI orchestration (#54, @lipkau)
+
 ## v0.1.19 - 2026-08-24
 
 ### Fixed
