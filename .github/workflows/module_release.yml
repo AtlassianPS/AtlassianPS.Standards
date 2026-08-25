@@ -111,7 +111,7 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'master' &&
       startsWith(github.event.workflow_run.head_commit.message, 'Prepare v') &&
-      github.event.workflow_run.head_commit.author.name == 'github-actions[bot]'
+      github.event.workflow_run.actor.login == 'atlassianps-release-bot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: release

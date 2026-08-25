@@ -36,8 +36,10 @@ If guidance conflicts, follow this file first.
 - Preserve the first-seen order of existing standard and custom `Unreleased` sections when merging changelog fragments.
 - Keep `issues: read` on continuous-release callers and the reusable workflow's preparation job so merged-PR labels remain readable.
 - Do not ask contributors to choose the final release version in normal PRs; release preparation batches merged intent later.
+- Use `release:none` for internal maintenance that should ride with a later package instead of creating avoidable Standards version churn.
 - Keep release notes sourced from one `CHANGELOG.md` section for both GitHub releases and PSGallery manifest `PrivateData.PSData.ReleaseNotes`.
 - Mint short-lived release tokens with `ATLASSIANPS_RELEASE_APP_CLIENT_ID` and `ATLASSIANPS_RELEASE_APP_PRIVATE_KEY`. `GITHUB_TOKEN` cannot start follow-up CI after metadata push.
+- Authenticate prepared release workflow runs with the release App actor login; commit author names are not trusted identity.
 - Do not enable release publishing on an unprotected `master`; direct pushes can bypass review and imitate release metadata.
 - Run manual release dispatches from `master` only; operators choose the impact, never the final version or source commit.
 - Candidate CI must create the final validated module directory and release archive without publishing secrets. The publish job downloads the immutable artifact from the exact successful CI run and promotes it without checking out repository code.
@@ -84,6 +86,7 @@ Before finalizing, always run the full pipeline: `Invoke-Build -Task Lint, Build
 
 - `.github/workflows/ci.yml` is the required quality gate for runtime/code changes.
 - `.github/workflows/module_ci.yml` owns the reusable module build, platform-test, optional smoke-test, and release-candidate pipeline.
+- Keep CI profiles bounded to migration needs. Prefer a common build-task contract over adding product-specific branches to the shared workflow.
 - Keep downstream `ci.yml` files limited to triggers, permissions, immutable workflow inputs, and the caller-side `CI Result` compatibility job.
 - Continuous release callers listen only for completed `CI` runs on `master`; pull-request CI must not start release orchestration.
 - Release-intent callers rerun for label and changed-file events, not title or body edits.
