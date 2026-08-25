@@ -46,7 +46,7 @@ Keep the caller-side result job named `CI Result` so existing branch protection 
 | Input | Default | Purpose |
 |---|---:|---|
 | `detect-changes` | `true` | Skip expensive pull-request jobs for metadata-only changes. |
-| `build-profile` | `standard` | Use `standard` for blueprint modules or `jiraps` for JiraPS's legacy build contract. The JiraPS profile requires `release-candidate: false`. |
+| `build-profile` | `standard` | Use `standard` for blueprint modules or `jiraps` for JiraPS's build and test orchestration. |
 | `smoke-profile` | `none` | Use `confluence` or `jira` to enable the matching Cloud smoke environment. |
 | `exclude-documentation-tests` | `false` | Exclude `Integration` and `Documentation` tags from PowerShell 7 tests. |
 | `release-candidate` | `true` | Stamp and verify `Prepare vX.Y.Z release` builds. |
