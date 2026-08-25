@@ -49,6 +49,8 @@ Task UpdateManifest {
 ## Publish Dry Run
 
 The CI build job creates and validates `Release`, including the module directory and GitHub zip.
+Shared CI retains candidate and test-result artifacts for 14 days and applies explicit job timeouts;
+the smoke-test timeout remains longer than normal unit-test jobs.
 Build scripts keep explicit `Package` and `VerifyReleaseArtifact` tasks; they do not contain publishing
 tasks or credentials. The trusted publisher passes the validated module directory to `Publish-Module`.
 
@@ -106,6 +108,7 @@ Release automation should fold pending changelog entries and custom fragments in
 Use the `prepare-release-changelog` composite action instead of exporting another module helper for GitHub-only release mechanics.
 In the continuous release workflow, commit the resulting `CHANGELOG.md` update and `.changelog` deletions directly to `master` after a release-labelled PR merges.
 Automatic continuous release runs should listen only for completed `CI` workflows on `master`; keep manual dispatch available for unreleased changes already on `master`.
+Bound both release preparation and publication with explicit job timeouts so stalled external operations cannot consume the six-hour default.
 Commit the source module manifest version in the release metadata commit. Stamp release notes only into the final artifact in secretless candidate CI, then package and validate it before upload; the source manifest keeps release notes empty and the publisher does not rebuild.
 For manual release preparation, commit source version and changelog before tagging the release.
 
