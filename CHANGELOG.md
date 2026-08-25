@@ -2,9 +2,12 @@
 
 ## Unreleased
 
+## v0.3.1 - 2026-08-25
+
 ### Changed
 
 - Allowed the JiraPS reusable CI profile to build and verify continuous-release candidates when the repository implements the shared artifact contract.
+* Enable JiraPS release candidate validation (#55, @lipkau)
 
 ## v0.3.0 - 2026-08-25
 
