@@ -55,6 +55,12 @@ Keep the caller-side result job named `CI Result` so existing branch protection 
 Callers with a smoke profile must use `secrets: inherit` so the workflow can read the organization Cloud test secret.
 Fork and Dependabot pull requests skip smoke tests.
 
+Profiles are a bounded migration tool, not an extension point for product behavior.
+Prefer converging repositories on the standard `Lint`, `Build`, `Test`, `SetVersion`, and
+`VerifyReleaseArtifact` task contract. Keep product-specific provisioning, fixtures, Docker lifecycle,
+and full integration orchestration in the module repository instead of adding more product branches to
+`module_ci.yml`.
+
 ## Validation
 
 Validate both the reusable workflow and every changed caller before merging:

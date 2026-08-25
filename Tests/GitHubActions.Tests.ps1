@@ -419,10 +419,11 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $ciWorkflow | Should -Match 'release-candidate:'
         $ciWorkflow | Should -Not -Match 'JiraPS build profile does not implement the continuous-release artifact contract'
 
-        # Only a metadata commit on master can start normal publication. Repository rulesets and
-        # protected environments remain the enforcement boundary for writer provenance.
+        # Only a metadata commit pushed by the release App on master can start normal publication.
+        # Commit author fields are user-controlled and are not an identity boundary.
         $workflow | Should -Match "startsWith\(github\.event\.workflow_run\.head_commit\.message, 'Prepare v'\)"
-        $workflow | Should -Match "github\.event\.workflow_run\.head_commit\.author\.name == 'github-actions\[bot\]'"
+        $workflow | Should -Match "github\.event\.workflow_run\.actor\.login == 'atlassianps-release-bot\[bot\]'"
+        $workflow | Should -Not -Match 'head_commit\.author\.name'
         $workflow | Should -Match "github\.ref == 'refs/heads/master'"
         $workflow | Should -Match 'environment: release'
         $workflow | Should -Match 'actions/create-github-app-token@[0-9a-f]{40}'

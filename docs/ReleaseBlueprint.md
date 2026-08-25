@@ -15,6 +15,7 @@ implement the contract; this document does not duplicate their YAML.
 
 - Every pull request declares exactly one `release:*` intent before merge.
 - Only protected `master` commits can become release candidates.
+- Only a workflow run triggered by the `atlassianps-release-bot` GitHub App can promote a prepared release commit.
 - The highest impact among unreleased merged pull requests determines the next version.
 - The candidate commit contains the final changelog section and exact source manifest version.
 - CI builds, stamps, packages, and validates one final candidate artifact.
@@ -59,6 +60,11 @@ their first-seen order; fragment-only headings are appended in standard order.
 
 `release:none` contributes no version impact or public note. It does not remove the merged code from a
 future package and does not suppress other releasable changes in the same batch.
+
+Use `release:none` for internal maintenance that does not justify publishing a new package by itself.
+For an uncommon coordinated release, maintain the combined notes directly under `## Unreleased`, keep
+automatic release disabled while the held pull requests merge, and manually dispatch the final impact.
+Do not manufacture extra patch releases solely to distribute workflow-pin or housekeeping changes.
 
 Use `pull_request_target` only to inspect labels, changed-file metadata, and trusted base-branch action
 code. Never check out or execute contributor code in that workflow.
@@ -152,6 +158,10 @@ tokens or use personal access tokens for routine release writes.
 Protect `master` with required `CI Result`, `Release Intent`, signed commits, review-thread resolution,
 and CODEOWNERS review. Protect the `refs/tags/v*` namespace from creation, update, and deletion except by
 the release App. Require full commit SHAs for Actions.
+
+The publish job must authenticate `github.event.workflow_run.actor.login` as
+`atlassianps-release-bot[bot]`. Commit author and committer names are metadata supplied by Git clients
+and must not be used as the release identity boundary.
 
 ## Shared Implementation
 
