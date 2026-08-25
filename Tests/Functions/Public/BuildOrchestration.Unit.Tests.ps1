@@ -14,6 +14,10 @@ Describe 'Invoke-ModuleTests' {
 
             $null = Import-PesterVersion -MinimumVersion ([Version]'5.7.0')
 
+            Should -Invoke -CommandName Get-UsablePesterVersion -Times 1 -Exactly -ParameterFilter {
+                $MinimumVersion -eq [Version]'5.7.0' -and $MaximumVersion -eq [Version]'5.999'
+            }
+
             Should -Invoke -CommandName Import-Module -Times 1 -Exactly -ParameterFilter {
                 $Name -eq 'Pester' -and $RequiredVersion -eq [Version]'5.7.1' -and $Global -and $ErrorAction -eq 'Stop'
             }

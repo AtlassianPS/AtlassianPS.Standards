@@ -67,7 +67,7 @@ Describe 'Invoke-Lint' {
 
             {
                 Invoke-Lint -ProjectPath $ProjectPath -ModulePath $ModulePath -BuildScriptPath $BuildScriptPath -AnalyzerSettingsPath $SettingsPath -MinimumPesterVersion ([Version]'99.0.0')
-            } | Should -Throw -ExpectedMessage "Pester version 99.0.0 or newer is required*"
+            } | Should -Throw -ExpectedMessage "Pester version between 99.0.0 and 5.999 is required*"
         }
     }
 

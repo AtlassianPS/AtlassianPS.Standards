@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+* Keep automated dependency updates within the currently pinned major version unless a major upgrade is explicitly requested, and keep shared test orchestration on the supported Pester 5 range.
+
 ## v0.1.19 - 2026-08-24
 
 ### Fixed

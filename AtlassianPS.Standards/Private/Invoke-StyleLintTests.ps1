@@ -12,10 +12,15 @@
         [String]$PesterVerbosity = 'Normal',
 
         [Parameter()]
-        [Version]$MinimumPesterVersion = [Version]'5.7.0'
+        [Version]$MinimumPesterVersion = [Version]'5.7.0',
+
+        [Parameter()]
+        [Version]$MaximumPesterVersion = [Version]'5.999'
     )
 
-    $pesterVersion = Import-PesterVersion -MinimumVersion $MinimumPesterVersion
+    $pesterVersion = Import-PesterVersion `
+        -MinimumVersion $MinimumPesterVersion `
+        -MaximumVersion $MaximumPesterVersion
     if (-not $pesterVersion) {
         $pesterVersion = [Version]'5.7.0'
     }

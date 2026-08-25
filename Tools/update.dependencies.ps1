@@ -6,7 +6,10 @@ param(
     [Switch]$SkipBuildRequirement,
 
     [Parameter()]
-    [Switch]$SkipManifestRequirement
+    [Switch]$SkipManifestRequirement,
+
+    [Parameter()]
+    [Switch]$AllowMajorVersionUpgrade
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,6 +29,7 @@ $result = AtlassianPS.Standards\Update-DependencyReference `
     -ManifestPath (Join-Path -Path $projectRoot -ChildPath 'AtlassianPS.Standards/AtlassianPS.Standards.psd1') `
     -SkipBuildRequirement:$SkipBuildRequirement `
     -SkipManifestRequirement:$SkipManifestRequirement `
+    -AllowMajorVersionUpgrade:$AllowMajorVersionUpgrade `
     -ErrorAction Stop
 
 $result
