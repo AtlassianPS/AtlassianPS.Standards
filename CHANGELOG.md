@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.3.2 - 2026-08-25
+
+### Changed
+
+* Bound shared CI and release resource usage (#57, @lipkau)
+
 ## v0.3.1 - 2026-08-25
 
 ### Changed
