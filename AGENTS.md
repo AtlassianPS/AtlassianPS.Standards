@@ -83,4 +83,5 @@ Before finalizing, always run the full pipeline: `Invoke-Build -Task Lint, Build
 - `.github/workflows/ci.yml` is the required quality gate for runtime/code changes.
 - `.github/workflows/module_ci.yml` owns the reusable module build, platform-test, optional smoke-test, and release-candidate pipeline.
 - Keep downstream `ci.yml` files limited to triggers, permissions, immutable workflow inputs, and the caller-side `CI Result` compatibility job.
+- Continuous release callers listen only for completed `CI` runs on `master`; pull-request CI must not start release orchestration.
 - CI path filters may skip pull request validation for documentation and metadata-only changes. CI always runs for `master` pushes so every merged release-labelled change reaches release planning.

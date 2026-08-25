@@ -166,6 +166,7 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
+    branches: [master]
   workflow_dispatch:
     inputs:
       release_impact:
