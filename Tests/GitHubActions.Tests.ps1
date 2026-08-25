@@ -391,7 +391,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $caller = Get-Content -LiteralPath $callerPath -Raw
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
         $publishWorkflow = $workflow.Substring($workflow.IndexOf('  publish:'))
-        $ciWorkflow = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath '.github/workflows/ci.yml') -Raw
+        $ciCaller = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath '.github/workflows/ci.yml') -Raw
+        $ciWorkflow = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath '.github/workflows/module_ci.yml') -Raw
 
         # Module repositories own only their trigger and module identity. Standards owns the
         # complete prepare/publish process and evaluates the caller's event context.
@@ -405,6 +406,15 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match 'repository: \$\{\{ job\.workflow_repository \}\}'
         $workflow | Should -Match 'ref: \$\{\{ job\.workflow_sha \}\}'
         $workflow | Should -Match 'uses: \./\.release-workflow/\.github/actions/plan-merged-release'
+
+        $ciCaller | Should -Match 'uses: \./\.github/workflows/module_ci\.yml'
+        $ciCaller | Should -Match 'module-manifest-path: \./AtlassianPS\.Standards/AtlassianPS\.Standards\.psd1'
+        $ciCaller | Should -Match '(?ms)ci-required:.*?name: CI Result.*?needs: module-ci'
+        $ciCaller | Should -Not -Match 'paths-ignore:|detect-changes: false'
+        $ciWorkflow | Should -Match '(?m)^\s+workflow_call:'
+        $ciWorkflow | Should -Match 'build-profile:'
+        $ciWorkflow | Should -Match 'smoke-profile:'
+        $ciWorkflow | Should -Match 'BUILD_PROFILE.*jiraps.*RELEASE_CANDIDATE'
 
         # Only a metadata commit on master can start normal publication. Repository rulesets and
         # protected environments remain the enforcement boundary for writer provenance.
@@ -432,7 +442,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $ciWorkflow | Should -Not -Match 'nupkg|gallery_package_path'
         $ciWorkflow | Should -Not -Match 'release-manifest\.json|packageSha256|galleryPackageSha256|releaseNotesSha256'
         $ciWorkflow | Should -Not -Match 'PSGALLERY_API_KEY|HOMEPAGE_PAT|ATLASSIANPS_RELEASE_APP_PRIVATE_KEY'
-        $ciWorkflow | Should -Match 'failure\|cancelled\|skipped'
+        $ciCaller | Should -Match 'PIPELINE_RESULT.*success'
 
         # Promotion downloads the immutable artifact from the exact triggering run and executes
         # no checked-out repository actions or build commands while credentials are available.

@@ -1,0 +1,265 @@
+name: Module CI
+
+on:
+  workflow_call:
+    inputs:
+      detect-changes:
+        description: Skip expensive jobs when a pull request changes only ignored metadata.
+        required: false
+        default: true
+        type: boolean
+      build-profile:
+        description: Build contract implemented by the module repository.
+        required: false
+        default: standard
+        type: string
+      smoke-profile:
+        description: "Optional Cloud smoke-test environment: none, confluence, or jira."
+        required: false
+        default: none
+        type: string
+      exclude-documentation-tests:
+        description: Exclude Integration and Documentation tags from PowerShell 7 matrix tests.
+        required: false
+        default: false
+        type: boolean
+      release-candidate:
+        description: Stamp and verify continuous-release metadata commits.
+        required: false
+        default: true
+        type: boolean
+      module-manifest-path:
+        description: Source manifest used to load Standards while Standards tests itself.
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      run-ci: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || !inputs.detect-changes || steps.filter.outputs.code == 'true' }}
+    steps:
+      - name: Validate workflow inputs
+        shell: bash
+        env:
+          BUILD_PROFILE: ${{ inputs.build-profile }}
+          RELEASE_CANDIDATE: ${{ inputs.release-candidate }}
+          SMOKE_PROFILE: ${{ inputs.smoke-profile }}
+        run: |
+          case "$BUILD_PROFILE" in
+            standard|jiraps) ;;
+            *) echo "::error::Unsupported build profile: $BUILD_PROFILE"; exit 1 ;;
+          esac
+
+          case "$SMOKE_PROFILE" in
+            none|confluence|jira) ;;
+            *) echo "::error::Unsupported smoke profile: $SMOKE_PROFILE"; exit 1 ;;
+          esac
+
+          if [[ "$BUILD_PROFILE" == "jiraps" && "$RELEASE_CANDIDATE" == "true" ]]; then
+            echo "::error::The JiraPS build profile does not implement the continuous-release artifact contract."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: inputs.detect-changes && github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        name: Decide whether full CI is required
+        if: inputs.detect-changes && github.event_name == 'pull_request'
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - '**'
+              - '!.editorconfig'
+              - '!.github/copilot-instructions.md'
+              - '!.spelling'
+              - '!AGENTS.md'
+              - '!CHANGELOG.md'
+              - '!CLAUDE.md'
+              - '!GEMINI.md'
+              - '!LICENSE'
+              - '!.cursor/**'
+              - '!.github/*.md'
+              - '!.github/ai-context/**'
+              - '!.github/instructions/**'
+              - '!.github/ISSUE_TEMPLATE/**'
+              - '!.github/PULL_REQUEST_TEMPLATE/**'
+              - '!.vscode/**'
+              - '!docs-regenerated/**'
+
+  build:
+    name: Lint and build
+    needs: changes
+    if: needs.changes.outputs.run-ci == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint GitHub Actions
+        if: inputs.build-profile == 'jiraps'
+        uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
+
+      - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@f691d79ab6b5e44b67db390f6a61ebf00e2f7293 # v0.1.19
+
+      - name: Build module
+        if: inputs.build-profile == 'standard'
+        run: Invoke-Build -Task Lint, Build
+        shell: pwsh
+
+      - name: Build JiraPS module
+        if: inputs.build-profile == 'jiraps'
+        run: |
+          Invoke-Build -Task Lint
+          Invoke-Build -Task Clean, TestPublish
+        shell: pwsh
+
+      - name: Resolve release build
+        id: release
+        if: inputs.release-candidate && github.event_name == 'push' && github.ref == 'refs/heads/master'
+        shell: pwsh
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if ($env:COMMIT_MESSAGE -match '^Prepare (?<tag>v\d+\.\d+\.\d+) release$') {
+            "tag=$($Matches.tag)" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Build release notes
+        if: steps.release.outputs.tag != ''
+        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/build-release-notes@f691d79ab6b5e44b67db390f6a61ebf00e2f7293 # v0.1.19
+        with:
+          release-version: ${{ steps.release.outputs.tag }}
+          module-path: ${{ inputs.module-manifest-path }}
+
+      - name: Stamp and verify release build
+        if: steps.release.outputs.tag != ''
+        run: |
+          Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.release.outputs.tag }}
+          Invoke-Build -Task VerifyReleaseArtifact -VersionToPublish ${{ steps.release.outputs.tag }}
+        shell: pwsh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: Release
+          path: ./Release/
+          if-no-files-found: error
+
+  test_windows_ps5:
+    name: Test (Windows PS5)
+    needs: [changes, build]
+    if: needs.changes.outputs.run-ci == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@f691d79ab6b5e44b67db390f6a61ebf00e2f7293 # v0.1.19
+        with:
+          ps-version: "5"
+          skip-setup: "true"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: Release
+          path: ./Release/
+
+      - name: Setup
+        shell: powershell
+        run: |
+          ./Tools/setup.ps1
+          Invoke-Build -Task ShowDebugInfo
+
+      - run: Invoke-Build -Task Test
+        shell: powershell
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: Windows-PS5-Unit-Tests
+          path: Test*.xml
+
+  test_pwsh:
+    name: Test (${{ matrix.name }})
+    needs: [changes, build]
+    if: needs.changes.outputs.run-ci == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: "Windows PS7" }
+          - { os: ubuntu-latest, name: "Ubuntu" }
+          - { os: macos-latest, name: "macOS" }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@f691d79ab6b5e44b67db390f6a61ebf00e2f7293 # v0.1.19
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: Release
+          path: ./Release/
+
+      - name: Run tests
+        shell: pwsh
+        env:
+          EXCLUDE_DOCUMENTATION_TESTS: ${{ inputs.exclude-documentation-tests }}
+        run: |
+          if ($env:EXCLUDE_DOCUMENTATION_TESTS -eq 'true') {
+            Invoke-Build -Task Test -ExcludeTag 'Integration', 'Documentation'
+          }
+          else {
+            Invoke-Build -Task Test
+          }
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: ${{ matrix.name }}-Unit-Tests
+          path: Test*.xml
+
+  smoke_tests:
+    name: Smoke tests
+    needs: [changes, build]
+    if: >-
+      inputs.smoke-profile != 'none' &&
+      needs.changes.outputs.run-ci == 'true' &&
+      (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'))
+    runs-on: ubuntu-latest
+    env:
+      CI_CONFLUENCE_TYPE: ${{ inputs.smoke-profile == 'confluence' && 'Cloud' || '' }}
+      CONFLUENCE_CLOUD_URL: ${{ vars.CONFLUENCE_CLOUD_URL }}
+      ATLASSIAN_CLOUD_USER: ${{ vars.ATLASSIAN_CLOUD_USER }}
+      ATLASSIAN_CLOUD_PAT: ${{ secrets.ATLASSIAN_CLOUD_PAT }}
+      JIRA_CLOUD_URL: ${{ vars.JIRA_CLOUD_URL }}
+      JIRA_CLOUD_USERNAME: ${{ vars.ATLASSIAN_CLOUD_USER }}
+      JIRA_CLOUD_PASSWORD: ${{ secrets.ATLASSIAN_CLOUD_PAT }}
+      JIRA_TEST_PROJECT: ${{ vars.JIRA_TEST_PROJECT }}
+      JIRA_TEST_ISSUE: ${{ vars.JIRA_TEST_ISSUE }}
+      JIRA_TEST_USER: ${{ vars.JIRA_TEST_USER }}
+      JIRA_TEST_GROUP: ${{ vars.JIRA_TEST_GROUP }}
+      JIRA_TEST_FILTER: ${{ vars.JIRA_TEST_FILTER }}
+      JIRA_TEST_VERSION: ${{ vars.JIRA_TEST_VERSION }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@f691d79ab6b5e44b67db390f6a61ebf00e2f7293 # v0.1.19
+
+      - run: Invoke-Build -Task TestIntegration -Tag 'Smoke' -PesterVerbosity Detailed
+        shell: pwsh
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: Smoke-Tests
+          path: Test-Integration.xml
