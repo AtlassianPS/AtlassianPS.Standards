@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.3.4 - 2026-08-25
+
+### Fixed
+
+* Restricted prepared-release publication to workflow runs triggered by the AtlassianPS release bot instead of trusting mutable commit author metadata.
+
 ## v0.3.3 - 2026-08-25
 
 ### Fixed
