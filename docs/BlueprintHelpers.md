@@ -105,6 +105,7 @@ Task SetVersion {
 Release automation should fold pending changelog entries and custom fragments into the next version section, then delete the consumed fragments.
 Use the `prepare-release-changelog` composite action instead of exporting another module helper for GitHub-only release mechanics.
 In the continuous release workflow, commit the resulting `CHANGELOG.md` update and `.changelog` deletions directly to `master` after a release-labelled PR merges.
+Automatic continuous release runs should listen only for completed `CI` workflows on `master`; keep manual dispatch available for unreleased changes already on `master`.
 Commit the source module manifest version in the release metadata commit. Stamp release notes only into the final artifact in secretless candidate CI, then package and validate it before upload; the source manifest keeps release notes empty and the publisher does not rebuild.
 For manual release preparation, commit source version and changelog before tagging the release.
 
