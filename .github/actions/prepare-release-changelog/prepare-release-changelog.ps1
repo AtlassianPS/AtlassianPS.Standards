@@ -75,15 +75,18 @@ $changelogHeadings = [ordered]@{
     breaking   = 'Breaking'
 }
 $changelogTypesByHeading = @{}
-$categorizedContent = @{}
+$fragmentContentByType = @{}
 foreach ($changelogType in $changelogHeadings.Keys) {
     $changelogTypesByHeading[$changelogHeadings[$changelogType]] = $changelogType
-    $categorizedContent[$changelogType] = [System.Collections.Generic.List[String]]::new()
+    $fragmentContentByType[$changelogType] = [System.Collections.Generic.List[String]]::new()
 }
 
-$uncategorizedLines = [System.Collections.Generic.List[String]]::new()
-$sectionLines = [System.Collections.Generic.List[String]]::new()
-$currentType = $null
+$parsedSections = [System.Collections.Generic.List[Object]]::new()
+$currentSection = [PSCustomObject]@{
+    Heading = $null
+    Type    = $null
+    Lines   = [System.Collections.Generic.List[String]]::new()
+}
 $inFence = $false
 $fenceCharacter = $null
 $fenceLength = 0
@@ -91,27 +94,17 @@ $fenceLength = 0
 foreach ($line in @($unreleasedBody -split "`r`n")) {
     $headingMatch = if (-not $inFence) { [Regex]::Match($line, '^###[ \t]+(?<heading>[^\r\n]+?)[ \t]*$') }
     if ($headingMatch.Success) {
-        if ($currentType) {
-            $sectionBody = ($sectionLines.ToArray() -join "`r`n").Trim()
-            if (-not [String]::IsNullOrWhiteSpace($sectionBody)) {
-                $categorizedContent[$currentType].Add($sectionBody)
-            }
-            $sectionLines.Clear()
-        }
-
         $heading = $headingMatch.Groups['heading'].Value
-        $currentType = $changelogTypesByHeading[$heading]
-        if ($currentType) {
-            continue
+        $parsedSections.Add($currentSection)
+        $currentSection = [PSCustomObject]@{
+            Heading = $heading
+            Type    = $changelogTypesByHeading[$heading]
+            Lines   = [System.Collections.Generic.List[String]]::new()
         }
+        continue
     }
 
-    if ($currentType) {
-        $sectionLines.Add($line)
-    }
-    else {
-        $uncategorizedLines.Add($line)
-    }
+    $currentSection.Lines.Add($line)
 
     $fenceMatch = [Regex]::Match($line, '^[ \t]*(?<fence>`{3,}|~{3,})')
     if (-not $inFence -and $fenceMatch.Success) {
@@ -128,24 +121,87 @@ foreach ($line in @($unreleasedBody -split "`r`n")) {
         }
     }
 }
-if ($currentType) {
-    $sectionBody = ($sectionLines.ToArray() -join "`r`n").Trim()
+$parsedSections.Add($currentSection)
+
+$orderedSections = [System.Collections.Generic.List[Object]]::new()
+$standardSectionsByType = @{}
+foreach ($section in $parsedSections) {
+    $sectionBody = ($section.Lines.ToArray() -join "`r`n").Trim()
+    if (-not $section.Heading) {
+        if (-not [String]::IsNullOrWhiteSpace($sectionBody)) {
+            $orderedSections.Add([PSCustomObject]@{
+                    Heading = $null
+                    Type    = $null
+                    Content = [System.Collections.Generic.List[String]]::new()
+                })
+            $orderedSections[$orderedSections.Count - 1].Content.Add($sectionBody)
+        }
+        continue
+    }
+
+    if (-not $section.Type) {
+        $customSection = [PSCustomObject]@{
+            Heading = $section.Heading
+            Type    = $null
+            Content = [System.Collections.Generic.List[String]]::new()
+        }
+        if (-not [String]::IsNullOrWhiteSpace($sectionBody)) {
+            $customSection.Content.Add($sectionBody)
+        }
+        $orderedSections.Add($customSection)
+        continue
+    }
+
+    if (-not $standardSectionsByType.ContainsKey($section.Type)) {
+        $standardSection = [PSCustomObject]@{
+            Heading = $changelogHeadings[$section.Type]
+            Type    = $section.Type
+            Content = [System.Collections.Generic.List[String]]::new()
+        }
+        $standardSectionsByType[$section.Type] = $standardSection
+        $orderedSections.Add($standardSection)
+    }
     if (-not [String]::IsNullOrWhiteSpace($sectionBody)) {
-        $categorizedContent[$currentType].Add($sectionBody)
+        $standardSectionsByType[$section.Type].Content.Add($sectionBody)
     }
 }
 foreach ($fragment in @($fragments | Sort-Object -Property Pull, Name)) {
-    $categorizedContent[$fragment.Type].Add($fragment.Content)
+    $fragmentContentByType[$fragment.Type].Add($fragment.Content)
 }
 
-$uncategorizedBody = ($uncategorizedLines.ToArray() -join "`r`n").Trim()
-if (-not [String]::IsNullOrWhiteSpace($uncategorizedBody)) {
-    $releaseBodyParts.Add($uncategorizedBody)
-}
 foreach ($changelogType in $changelogHeadings.Keys) {
-    if ($categorizedContent[$changelogType].Count -gt 0) {
-        $sectionBody = $categorizedContent[$changelogType].ToArray() -join "`r`n"
-        $releaseBodyParts.Add("### $($changelogHeadings[$changelogType])`r`n`r`n$sectionBody")
+    if ($fragmentContentByType[$changelogType].Count -eq 0) {
+        continue
+    }
+
+    if (-not $standardSectionsByType.ContainsKey($changelogType)) {
+        $standardSection = [PSCustomObject]@{
+            Heading = $changelogHeadings[$changelogType]
+            Type    = $changelogType
+            Content = [System.Collections.Generic.List[String]]::new()
+        }
+        $standardSectionsByType[$changelogType] = $standardSection
+        $orderedSections.Add($standardSection)
+    }
+    foreach ($fragmentContent in $fragmentContentByType[$changelogType]) {
+        $standardSectionsByType[$changelogType].Content.Add($fragmentContent)
+    }
+}
+
+foreach ($section in $orderedSections) {
+    $sectionBody = ($section.Content.ToArray() -join "`r`n").Trim()
+    if (-not $section.Heading) {
+        if (-not [String]::IsNullOrWhiteSpace($sectionBody)) {
+            $releaseBodyParts.Add($sectionBody)
+        }
+        continue
+    }
+
+    if (-not [String]::IsNullOrWhiteSpace($sectionBody)) {
+        $releaseBodyParts.Add("### $($section.Heading)`r`n`r`n$sectionBody")
+    }
+    elseif (-not $section.Type) {
+        $releaseBodyParts.Add("### $($section.Heading)")
     }
 }
 
