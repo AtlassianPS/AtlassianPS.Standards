@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.3.0 - 2026-08-25
+
+### Changed
+
+* Constrain automated dependency updates (#53, @lipkau)
+
 ### Fixed
 
 * Keep automated dependency updates within the currently pinned major version unless a major upgrade is explicitly requested, and keep shared test orchestration on the supported Pester 5 range.
