@@ -282,15 +282,15 @@ Describe 'Update-DependencyReference' {
             Should -Match "standardsActionSha = '2222222222222222222222222222222222222222'"
     }
 
-    It 'does not update Standards references with WhatIf' {
-        $projectPath = Join-Path -Path $TestDrive -ChildPath 'whatif-project'
+    It 'repairs drifted Standards references when the dependency version is current' {
+        $projectPath = Join-Path -Path $TestDrive -ChildPath 'drift-project'
         $toolsPath = Join-Path -Path $projectPath -ChildPath 'Tools'
         $workflowPath = Join-Path -Path $projectPath -ChildPath '.github/workflows'
         $null = New-Item -Path $toolsPath, $workflowPath -ItemType Directory -Force
 
         $buildRequirementsPath = Join-Path -Path $toolsPath -ChildPath 'build.requirements.psd1'
         $workflowFile = Join-Path -Path $workflowPath -ChildPath 'ci.yml'
-        Set-Content -LiteralPath $buildRequirementsPath -Value '@(@{ ModuleName = "AtlassianPS.Standards"; RequiredVersion = "0.1.19" })'
+        Set-Content -LiteralPath $buildRequirementsPath -Value '@(@{ ModuleName = "AtlassianPS.Standards"; RequiredVersion = "0.1.20" })'
         Set-Content -LiteralPath $workflowFile -Value 'uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup@1111111111111111111111111111111111111111 # v0.1.19'
 
         InModuleScope AtlassianPS.Standards -Parameters @{
@@ -307,16 +307,75 @@ Describe 'Update-DependencyReference' {
 
             $result = Update-DependencyReference `
                 -BuildRequirementsPath $BuildRequirementsPath `
-                -SkipManifestRequirement `
+                -SkipManifestRequirement
+
+            $result.BuildRequirementUpdated | Should -BeFalse
+            $result.StandardsReferenceUpdated | Should -BeTrue
+        }
+
+        Get-Content -LiteralPath $workflowFile -Raw |
+            Should -Match '@2222222222222222222222222222222222222222 # v0\.1\.20'
+    }
+
+    It 'does not update Standards references with WhatIf' {
+        $projectPath = Join-Path -Path $TestDrive -ChildPath 'whatif-project'
+        $toolsPath = Join-Path -Path $projectPath -ChildPath 'Tools'
+        $workflowPath = Join-Path -Path $projectPath -ChildPath '.github/workflows'
+        $testsPath = Join-Path -Path $projectPath -ChildPath 'Tests/Tools'
+        $null = New-Item -Path $toolsPath, $workflowPath, $testsPath -ItemType Directory -Force
+
+        $buildRequirementsPath = Join-Path -Path $toolsPath -ChildPath 'build.requirements.psd1'
+        $manifestPath = Join-Path -Path $projectPath -ChildPath 'Sample.psd1'
+        $workflowFile = Join-Path -Path $workflowPath -ChildPath 'ci.yml'
+        $buildFile = Join-Path -Path $projectPath -ChildPath 'Sample.build.ps1'
+        $consistencyTest = Join-Path -Path $testsPath -ChildPath 'StandardsVersionConsistency.Unit.Tests.ps1'
+        Set-Content -LiteralPath $buildRequirementsPath -Value '@(@{ ModuleName = "AtlassianPS.Standards"; RequiredVersion = "0.1.19" })'
+        Set-Content -LiteralPath $manifestPath -Value '@{ RequiredModules = @(@{ ModuleName = "PSScriptAnalyzer"; RequiredVersion = "1.25.0" }) }'
+        Set-Content -LiteralPath $workflowFile -Value 'uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup@1111111111111111111111111111111111111111 # v0.1.19'
+        Set-Content -LiteralPath $buildFile -Value "#requires -modules @{ ModuleName = 'AtlassianPS.Standards'; ModuleVersion = '0.1.19'; MaximumVersion = '0.1.19' }"
+        Set-Content -LiteralPath $consistencyTest -Value '$script:standardsActionSha = ''1111111111111111111111111111111111111111'''
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            BuildRequirementsPath = $buildRequirementsPath
+            ManifestPath          = $manifestPath
+        } {
+            param($BuildRequirementsPath, $ManifestPath)
+
+            Mock -CommandName Find-Module -MockWith {
+                param([String]$Name)
+                switch ($Name) {
+                    'AtlassianPS.Standards' { [PSCustomObject]@{ Version = '0.1.20' } }
+                    'PSScriptAnalyzer' { [PSCustomObject]@{ Version = '1.25.2' } }
+                    default { throw "Unexpected module lookup: $Name" }
+                }
+            }
+            Mock -CommandName Invoke-RestMethod -MockWith {
+                [PSCustomObject]@{ sha = '2222222222222222222222222222222222222222' }
+            }
+
+            $result = Update-DependencyReference `
+                -BuildRequirementsPath $BuildRequirementsPath `
+                -ManifestPath $ManifestPath `
                 -WhatIf
 
+            $result.BuildRequirementUpdated | Should -BeFalse
+            $result.ManifestUpdated | Should -BeFalse
             $result.StandardsReferenceUpdated | Should -BeFalse
+            $result.UpdatedModuleCount | Should -Be 0
+            $result.UpdatedModuleName | Should -BeNullOrEmpty
+            $result.UpdateDetail | Should -BeNullOrEmpty
         }
 
         Get-Content -LiteralPath $workflowFile -Raw |
             Should -Match '@1111111111111111111111111111111111111111 # v0\.1\.19'
+        Get-Content -LiteralPath $buildFile -Raw |
+            Should -Match "ModuleVersion = '0\.1\.19'; MaximumVersion = '0\.1\.19'"
+        Get-Content -LiteralPath $consistencyTest -Raw |
+            Should -Match "standardsActionSha = '1111111111111111111111111111111111111111'"
         Get-Content -LiteralPath $buildRequirementsPath -Raw |
             Should -Match 'RequiredVersion = "0\.1\.19"'
+        Get-Content -LiteralPath $manifestPath -Raw |
+            Should -Match 'RequiredVersion = "1\.25\.0"'
     }
 
     It 'throws when module lookup fails by default' {
@@ -407,6 +466,57 @@ Describe 'Update-DependencyReference' {
 
         Get-Content -LiteralPath $buildRequirementsPath -Raw |
             Should -Match 'RequiredVersion = "0\.1\.19"'
+        Get-Content -LiteralPath $workflowFile -Raw |
+            Should -Match '@1111111111111111111111111111111111111111 # v0\.1\.19'
+    }
+
+    It 'keeps a ModuleVersion Standards pin when SHA lookup fails and another dependency updates' {
+        $projectPath = Join-Path -Path $TestDrive -ChildPath 'module-version-rollback-project'
+        $toolsPath = Join-Path -Path $projectPath -ChildPath 'Tools'
+        $workflowPath = Join-Path -Path $projectPath -ChildPath '.github/workflows'
+        $null = New-Item -Path $toolsPath, $workflowPath -ItemType Directory -Force
+
+        $buildRequirementsPath = Join-Path -Path $toolsPath -ChildPath 'build.requirements.psd1'
+        $workflowFile = Join-Path -Path $workflowPath -ChildPath 'ci.yml'
+        Set-Content -LiteralPath $buildRequirementsPath -Value @'
+@(
+    @{ ModuleName = "AtlassianPS.Standards"; ModuleVersion = "0.1.19" }
+    @{ ModuleName = "InvokeBuild"; RequiredVersion = "5.14.23" }
+)
+'@
+        Set-Content -LiteralPath $workflowFile -Value 'uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup@1111111111111111111111111111111111111111 # v0.1.19'
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            BuildRequirementsPath = $buildRequirementsPath
+        } {
+            param($BuildRequirementsPath)
+
+            Mock -CommandName Find-Module -MockWith {
+                param([String]$Name)
+                switch ($Name) {
+                    'AtlassianPS.Standards' { [PSCustomObject]@{ Version = '0.1.20' } }
+                    'InvokeBuild' { [PSCustomObject]@{ Version = '5.14.30' } }
+                    default { throw "Unexpected module lookup: $Name" }
+                }
+            }
+            Mock -CommandName Invoke-RestMethod -MockWith {
+                throw 'release tag is unavailable'
+            }
+
+            $result = Update-DependencyReference `
+                -BuildRequirementsPath $BuildRequirementsPath `
+                -SkipManifestRequirement `
+                -AllowLookupFailure
+
+            $result.BuildRequirementUpdated | Should -BeTrue
+            $result.UpdatedModuleName | Should -Contain 'InvokeBuild'
+            $result.UpdatedModuleName | Should -Not -Contain 'AtlassianPS.Standards'
+        }
+
+        Get-Content -LiteralPath $buildRequirementsPath -Raw |
+            Should -Match 'AtlassianPS\.Standards"; RequiredVersion = "0\.1\.19"'
+        Get-Content -LiteralPath $buildRequirementsPath -Raw |
+            Should -Match 'InvokeBuild"; RequiredVersion = "5\.14\.30"'
         Get-Content -LiteralPath $workflowFile -Raw |
             Should -Match '@1111111111111111111111111111111111111111 # v0\.1\.19'
     }

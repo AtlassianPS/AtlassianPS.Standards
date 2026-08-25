@@ -93,7 +93,11 @@ function Update-DependencyReference {
     }
 
     function Set-FileTextState {
-        [CmdletBinding(SupportsShouldProcess)]
+        [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+            'PSUseShouldProcessForStateChangingFunctions', '',
+            Justification = 'The parent command gates each file write with ShouldProcess.'
+        )]
+        [CmdletBinding()]
         param(
             [Parameter(Mandatory)]
             [ValidateNotNull()]
@@ -109,10 +113,8 @@ function Update-DependencyReference {
             $normalizedText += $State.NewLine
         }
 
-        if ($PSCmdlet.ShouldProcess($State.Path, 'Write updated dependency content')) {
-            $encoding = [System.Text.UTF8Encoding]::new($State.HasBom)
-            [System.IO.File]::WriteAllText($State.Path, $normalizedText, $encoding)
-        }
+        $encoding = [System.Text.UTF8Encoding]::new($State.HasBom)
+        [System.IO.File]::WriteAllText($State.Path, $normalizedText, $encoding)
     }
 
     function Get-DataFileExpressionValue {
@@ -384,8 +386,10 @@ function Update-DependencyReference {
 
     $versionCache = @{}
     $dependencyUpdates = [System.Collections.Generic.List[Object]]::new()
+    $appliedDependencyUpdates = [System.Collections.Generic.List[Object]]::new()
     $buildRequirementUpdated = $false
-    $manifestUpdated = $false
+    $buildRequirementWriteApplied = $false
+    $manifestWriteApplied = $false
     $standardsReferenceUpdated = $false
     $skippedModuleUpdates = [System.Collections.Generic.HashSet[String]]::new(
         [System.StringComparer]::OrdinalIgnoreCase
@@ -456,103 +460,115 @@ function Update-DependencyReference {
                 })
         }
 
-        if ($buildRequirementUpdated) {
-            $pendingReferenceUpdates = [System.Collections.Generic.List[Object]]::new()
+        $pendingReferenceUpdates = [System.Collections.Generic.List[Object]]::new()
 
-            $standardsRequirement = $updatedRequirements |
-                Where-Object { $_.ModuleName -eq 'AtlassianPS.Standards' } |
-                Select-Object -First 1
-            if ($standardsRequirement) {
-                $projectPath = Split-Path -Path (Split-Path -Path $buildState.Path -Parent) -Parent
-                $workflowPath = Join-Path -Path $projectPath -ChildPath '.github/workflows'
-                $referenceFiles = @(
-                    if (Test-Path -LiteralPath $workflowPath -PathType Container) {
-                        Get-ChildItem -LiteralPath $workflowPath -Filter '*.yml' -File
+        $standardsRequirement = $updatedRequirements |
+            Where-Object { $_.ModuleName -eq 'AtlassianPS.Standards' } |
+            Select-Object -First 1
+        if ($standardsRequirement) {
+            $projectPath = Split-Path -Path (Split-Path -Path $buildState.Path -Parent) -Parent
+            $workflowPath = Join-Path -Path $projectPath -ChildPath '.github/workflows'
+            $referenceFiles = @(
+                if (Test-Path -LiteralPath $workflowPath -PathType Container) {
+                    Get-ChildItem -LiteralPath $workflowPath -Filter '*.yml' -File
+                }
+
+                Get-ChildItem -LiteralPath $projectPath -Filter '*.build.ps1' -File -ErrorAction SilentlyContinue
+
+                $consistencyTestPath = Join-Path -Path $projectPath -ChildPath 'Tests/Tools/StandardsVersionConsistency.Unit.Tests.ps1'
+                if (Test-Path -LiteralPath $consistencyTestPath -PathType Leaf) {
+                    Get-Item -LiteralPath $consistencyTestPath
+                }
+            )
+
+            if ($referenceFiles.Count -gt 0) {
+                $tag = "v$($standardsRequirement.RequiredVersion)"
+                try {
+                    $releaseCommit = Invoke-RestMethod `
+                        -Uri "https://api.github.com/repos/AtlassianPS/AtlassianPS.Standards/commits/$tag" `
+                        -Headers @{ Accept = 'application/vnd.github+json' } `
+                        -ErrorAction Stop
+                    $standardsCommit = [string]$releaseCommit.sha
+                    if ($standardsCommit -notmatch '^[0-9a-f]{40}$') {
+                        throw "GitHub did not return a valid commit SHA for AtlassianPS.Standards $tag."
                     }
-
-                    Get-ChildItem -LiteralPath $projectPath -Filter '*.build.ps1' -File -ErrorAction SilentlyContinue
-
-                    $consistencyTestPath = Join-Path -Path $projectPath -ChildPath 'Tests/Tools/StandardsVersionConsistency.Unit.Tests.ps1'
-                    if (Test-Path -LiteralPath $consistencyTestPath -PathType Leaf) {
-                        Get-Item -LiteralPath $consistencyTestPath
-                    }
-                )
-
-                if ($referenceFiles.Count -gt 0) {
-                    $tag = "v$($standardsRequirement.RequiredVersion)"
-                    try {
-                        $releaseCommit = Invoke-RestMethod `
-                            -Uri "https://api.github.com/repos/AtlassianPS/AtlassianPS.Standards/commits/$tag" `
-                            -Headers @{ Accept = 'application/vnd.github+json' } `
-                            -ErrorAction Stop
-                        $standardsCommit = [string]$releaseCommit.sha
-                        if ($standardsCommit -notmatch '^[0-9a-f]{40}$') {
-                            throw "GitHub did not return a valid commit SHA for AtlassianPS.Standards $tag."
-                        }
-                    }
-                    catch {
-                        if ($AllowLookupFailure) {
-                            Write-Warning "Unable to resolve the AtlassianPS.Standards workflow commit for $tag. Keeping the existing Standards version and reference pins."
-                            $originalStandardsRequirement = $buildRequirementEntries |
-                                Where-Object {
-                                    (Get-RequirementPropertyValue -Requirement $_ -Name 'ModuleName') -eq 'AtlassianPS.Standards'
-                                } |
-                                Select-Object -First 1
-                            $standardsRequirement.RequiredVersion = Get-RequirementPropertyValue `
+                }
+                catch {
+                    if ($AllowLookupFailure) {
+                        Write-Warning "Unable to resolve the AtlassianPS.Standards workflow commit for $tag. Keeping the existing Standards version and reference pins."
+                        $originalStandardsRequirement = $buildRequirementEntries |
+                            Where-Object {
+                                (Get-RequirementPropertyValue -Requirement $_ -Name 'ModuleName') -eq 'AtlassianPS.Standards'
+                            } |
+                            Select-Object -First 1
+                        $originalStandardsVersion = Get-RequirementPropertyValue `
+                            -Requirement $originalStandardsRequirement `
+                            -Name 'RequiredVersion'
+                        if (-not $originalStandardsVersion) {
+                            $originalStandardsVersion = Get-RequirementPropertyValue `
                                 -Requirement $originalStandardsRequirement `
-                                -Name 'RequiredVersion'
-                            $null = $skippedModuleUpdates.Add('AtlassianPS.Standards')
-                            for ($index = $dependencyUpdates.Count - 1; $index -ge 0; $index--) {
-                                if ($dependencyUpdates[$index].ModuleName -eq 'AtlassianPS.Standards') {
-                                    $dependencyUpdates.RemoveAt($index)
-                                }
+                                -Name 'ModuleVersion'
+                        }
+                        $standardsRequirement.RequiredVersion = $originalStandardsVersion
+                        $null = $skippedModuleUpdates.Add('AtlassianPS.Standards')
+                        for ($index = $dependencyUpdates.Count - 1; $index -ge 0; $index--) {
+                            if ($dependencyUpdates[$index].ModuleName -eq 'AtlassianPS.Standards') {
+                                $dependencyUpdates.RemoveAt($index)
                             }
-                            $buildRequirementUpdated = $dependencyUpdates.Count -gt 0
-                            $referenceFiles = @()
                         }
-                        else {
-                            throw "Unable to resolve the AtlassianPS.Standards workflow commit for $tag. Original error: $($_.Exception.Message)"
-                        }
+                        $buildRequirementUpdated = $dependencyUpdates.Count -gt 0
+                        $referenceFiles = @()
                     }
+                    else {
+                        throw "Unable to resolve the AtlassianPS.Standards workflow commit for $tag. Original error: $($_.Exception.Message)"
+                    }
+                }
 
-                    foreach ($referenceFile in $referenceFiles) {
-                        $referenceState = Get-FileTextState -Path $referenceFile.FullName
-                        $updatedReferenceContent = [regex]::Replace(
-                            $referenceState.Text,
-                            '(?<prefix>AtlassianPS/AtlassianPS\.Standards/\.github/(?:actions/[^@\s]+|workflows/module_release\.yml)@)[0-9a-f]{40}(?<suffix>\s+#\s+v)\d+\.\d+\.\d+',
-                            ('${prefix}' + $standardsCommit + '${suffix}' + $standardsRequirement.RequiredVersion)
-                        )
-                        $updatedReferenceContent = [regex]::Replace(
-                            $updatedReferenceContent,
-                            '(?<prefix>\$script:standardsActionSha\s*=\s*[''"])[0-9a-f]{40}(?<suffix>[''"])',
-                            ('${prefix}' + $standardsCommit + '${suffix}')
-                        )
-                        $updatedReferenceContent = [regex]::Replace(
-                            $updatedReferenceContent,
-                            '(?<prefix>#requires\s+-modules\s+@\{\s*ModuleName\s*=\s*[''"]AtlassianPS\.Standards[''"];\s*ModuleVersion\s*=\s*[''"])\d+\.\d+\.\d+(?<middle>[''"];\s*MaximumVersion\s*=\s*[''"])\d+\.\d+\.\d+(?<suffix>[''"]\s*\})',
-                            ('${prefix}' + $standardsRequirement.RequiredVersion + '${middle}' + $standardsRequirement.RequiredVersion + '${suffix}')
-                        )
+                foreach ($referenceFile in $referenceFiles) {
+                    $referenceState = Get-FileTextState -Path $referenceFile.FullName
+                    $updatedReferenceContent = [regex]::Replace(
+                        $referenceState.Text,
+                        '(?<prefix>AtlassianPS/AtlassianPS\.Standards/\.github/(?:actions/[^@\s]+|workflows/module_release\.yml)@)[0-9a-f]{40}(?<suffix>\s+#\s+v)\d+\.\d+\.\d+',
+                        ('${prefix}' + $standardsCommit + '${suffix}' + $standardsRequirement.RequiredVersion)
+                    )
+                    $updatedReferenceContent = [regex]::Replace(
+                        $updatedReferenceContent,
+                        '(?<prefix>\$script:standardsActionSha\s*=\s*[''"])[0-9a-f]{40}(?<suffix>[''"])',
+                        ('${prefix}' + $standardsCommit + '${suffix}')
+                    )
+                    $updatedReferenceContent = [regex]::Replace(
+                        $updatedReferenceContent,
+                        '(?<prefix>#requires\s+-modules\s+@\{\s*ModuleName\s*=\s*[''"]AtlassianPS\.Standards[''"];\s*ModuleVersion\s*=\s*[''"])\d+\.\d+\.\d+(?<middle>[''"];\s*MaximumVersion\s*=\s*[''"])\d+\.\d+\.\d+(?<suffix>[''"]\s*\})',
+                        ('${prefix}' + $standardsRequirement.RequiredVersion + '${middle}' + $standardsRequirement.RequiredVersion + '${suffix}')
+                    )
 
-                        if ($updatedReferenceContent -ne $referenceState.Text) {
-                            $pendingReferenceUpdates.Add([PSCustomObject]@{
-                                    State = $referenceState
-                                    Text  = $updatedReferenceContent
-                                })
-                        }
+                    if ($updatedReferenceContent -ne $referenceState.Text) {
+                        $pendingReferenceUpdates.Add([PSCustomObject]@{
+                                State = $referenceState
+                                Text  = $updatedReferenceContent
+                            })
                     }
                 }
             }
+        }
 
+        if ($buildRequirementUpdated) {
             $updatedBuildContent = ConvertTo-BuildRequirementsContent -Requirements @($updatedRequirements) -NewLine $buildState.NewLine
-            if (
-                $buildRequirementUpdated -and
-                $PSCmdlet.ShouldProcess($buildState.Path, 'Update dependency versions and synchronized references')
-            ) {
+            if ($PSCmdlet.ShouldProcess($buildState.Path, 'Update dependency versions')) {
                 Set-FileTextState -State $buildState -Text $updatedBuildContent
-                foreach ($pendingReferenceUpdate in $pendingReferenceUpdates) {
-                    Set-FileTextState -State $pendingReferenceUpdate.State -Text $pendingReferenceUpdate.Text
+                $buildRequirementWriteApplied = $true
+                foreach ($dependencyUpdate in $dependencyUpdates) {
+                    if ($dependencyUpdate.FilePath -eq $buildState.Path) {
+                        $appliedDependencyUpdates.Add($dependencyUpdate)
+                    }
                 }
-                $standardsReferenceUpdated = $pendingReferenceUpdates.Count -gt 0
+            }
+        }
+
+        foreach ($pendingReferenceUpdate in $pendingReferenceUpdates) {
+            if ($PSCmdlet.ShouldProcess($pendingReferenceUpdate.State.Path, 'Synchronize AtlassianPS.Standards reference')) {
+                Set-FileTextState -State $pendingReferenceUpdate.State -Text $pendingReferenceUpdate.Text
+                $standardsReferenceUpdated = $true
             }
         }
     }
@@ -618,24 +634,29 @@ function Update-DependencyReference {
         }
 
         if ($updatedManifestContent -ne $manifestContent) {
-            $manifestUpdated = $true
             if ($PSCmdlet.ShouldProcess($manifestState.Path, 'Update dependency versions in module manifest')) {
                 Set-FileTextState -State $manifestState -Text $updatedManifestContent
+                $manifestWriteApplied = $true
+                foreach ($dependencyUpdate in $dependencyUpdates) {
+                    if ($dependencyUpdate.FilePath -eq $manifestState.Path) {
+                        $appliedDependencyUpdates.Add($dependencyUpdate)
+                    }
+                }
             }
         }
     }
 
     $uniqueModuleNames = @(
-        $dependencyUpdates.ModuleName |
+        $appliedDependencyUpdates.ModuleName |
             Sort-Object -Unique
     )
 
     return [PSCustomObject]@{
-        BuildRequirementUpdated   = $buildRequirementUpdated
-        ManifestUpdated           = $manifestUpdated
+        BuildRequirementUpdated   = $buildRequirementWriteApplied
+        ManifestUpdated           = $manifestWriteApplied
         StandardsReferenceUpdated = $standardsReferenceUpdated
         UpdatedModuleCount        = $uniqueModuleNames.Count
         UpdatedModuleName         = $uniqueModuleNames
-        UpdateDetail              = @($dependencyUpdates)
+        UpdateDetail              = @($appliedDependencyUpdates)
     }
 }

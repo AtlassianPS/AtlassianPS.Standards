@@ -29,9 +29,6 @@
         [Version]$MinimumPesterVersion = [Version]'5.7.0',
 
         [Parameter()]
-        [Version]$MaximumPesterVersion = [Version]'5.999',
-
-        [Parameter()]
         [ValidateSet('Error', 'Warning', 'Information', 'ParseError')]
         [String[]]$Severity = @('Error', 'Warning'),
 
@@ -39,7 +36,10 @@
         [Switch]$SkipStyleTests,
 
         [Parameter()]
-        [Switch]$SkipScriptAnalyzer
+        [Switch]$SkipScriptAnalyzer,
+
+        [Parameter()]
+        [Version]$MaximumPesterVersion = [Version]'5.999'
     )
 
     if (-not $ProjectPath) {

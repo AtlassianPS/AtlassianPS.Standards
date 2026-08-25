@@ -7,6 +7,22 @@ BeforeAll {
 }
 
 Describe 'Invoke-Lint' {
+    It 'preserves existing positional parameter assignments' {
+        InModuleScope AtlassianPS.Standards {
+            $command = Get-Command -Name 'Invoke-Lint'
+            $parameterPositions = @{}
+            foreach ($parameterName in @('Severity', 'MaximumPesterVersion')) {
+                $parameterAttribute = $command.Parameters[$parameterName].Attributes |
+                    Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+                    Select-Object -First 1
+                $parameterPositions[$parameterName] = $parameterAttribute.Position
+            }
+
+            $parameterPositions.Severity | Should -Be 8
+            $parameterPositions.MaximumPesterVersion | Should -Be 9
+        }
+    }
+
     It 'is exported by the module' {
         $lintCommand = Get-Command -Module 'AtlassianPS.Standards' |
             Where-Object { $_.CommandType -eq 'Function' -and $_.Verb -eq 'Invoke' -and $_.Name -like '*Lint' } |

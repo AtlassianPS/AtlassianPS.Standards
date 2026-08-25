@@ -33,7 +33,7 @@ Describe 'Invoke-ModuleTests' {
         } {
             param($TestPath)
 
-            Mock -CommandName Import-PesterVersion -MockWith {}
+            Mock -CommandName Import-PesterVersion -MockWith { [Version]'5.9.0' }
             Mock -CommandName New-PesterConfiguration -MockWith {
                 param($Hashtable)
                 $script:capturedPesterConfig = $Hashtable
@@ -51,6 +51,10 @@ Describe 'Invoke-ModuleTests' {
                 -Tag @('Integration') `
                 -ExcludeTag @('Unit') `
                 -ExcludePath @('Tests/Integration')
+
+            Should -Invoke -CommandName Import-PesterVersion -Times 1 -Exactly -ParameterFilter {
+                $MinimumVersion -eq [Version]'5.9.0' -and $MaximumVersion -eq [Version]'5.9.999'
+            }
 
             $script:capturedPesterConfig.Filter.Tag | Should -Contain 'Integration'
             $script:capturedPesterConfig.Filter.ExcludeTag | Should -Contain 'Unit'
