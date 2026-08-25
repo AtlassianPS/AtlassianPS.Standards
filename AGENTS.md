@@ -33,6 +33,7 @@ If guidance conflicts, follow this file first.
 - Keep the end-to-end release process in the shared `module_release.yml` reusable workflow; use small composite actions for its concrete operations.
 - Pull requests should declare release intent with exactly one `release:*` label; user-facing changes also need a `changelog:*` label or a valid `.changelog/<pr-number>.<impact>.<type>.md` fragment.
 - Keep changelog fragment contents to Markdown list items without `###` headings; release preparation derives and consolidates standard headings from fragment types.
+- Preserve the first-seen order of existing standard and custom `Unreleased` sections when merging changelog fragments.
 - Keep `issues: read` on continuous-release callers and the reusable workflow's preparation job so merged-PR labels remain readable.
 - Do not ask contributors to choose the final release version in normal PRs; release preparation batches merged intent later.
 - Keep release notes sourced from one `CHANGELOG.md` section for both GitHub releases and PSGallery manifest `PrivateData.PSData.ReleaseNotes`.

@@ -54,7 +54,8 @@ A releasing pull request also needs either one `changelog:*` label or one review
 
 Fragment contents should be Markdown list items without a `###` heading. Release preparation groups
 them under standard release-note headings based on the filename type and consolidates duplicate
-standard headings already present under `## Unreleased`.
+standard headings already present under `## Unreleased`. Existing standard and custom sections keep
+their first-seen order; fragment-only headings are appended in standard order.
 
 `release:none` contributes no version impact or public note. It does not remove the merged code from a
 future package and does not suppress other releasable changes in the same batch.

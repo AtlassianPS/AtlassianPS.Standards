@@ -797,6 +797,80 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         (Get-Content -LiteralPath $releaseNotesPath -Raw) | Should -Match '### Changed'
     }
 
+    It 'preserves mixed existing section order while merging fragments' {
+        $scriptPath = Join-Path -Path $projectRoot -ChildPath '.github/actions/prepare-release-changelog/prepare-release-changelog.ps1'
+        $repoPath = Join-Path -Path $TestDrive -ChildPath 'ordered-repo'
+        $fragmentDirectory = Join-Path -Path $repoPath -ChildPath '.changelog'
+        New-Item -Path $fragmentDirectory -ItemType Directory -Force | Out-Null
+
+        $changelogPath = Join-Path -Path $repoPath -ChildPath 'CHANGELOG.md'
+        Set-Content -LiteralPath $changelogPath -Value @'
+# Changelog
+
+## Unreleased
+
+Release introduction.
+
+### Highlights for users
+
+- Important overview.
+
+### Changed
+
+- Existing change.
+
+### Removed (Breaking)
+
+- Existing removal.
+
+### Added
+
+- Existing addition.
+
+### Internal
+
+- Existing internal change.
+
+### Fixed
+
+- Existing fix.
+
+## v1.2.2 - 2026-05-01
+
+- Previous release.
+'@
+        Set-Content -LiteralPath (Join-Path -Path $fragmentDirectory -ChildPath '42.patch.changed.md') -Value '* Fragment change.'
+
+        $outputPath = Join-Path -Path $TestDrive -ChildPath 'ordered-output.txt'
+        $releaseNotesPath = Join-Path -Path $TestDrive -ChildPath 'ordered-notes.md'
+        $previousChangelogPath = $env:CHANGELOG_PATH
+        $previousReleaseVersion = $env:RELEASE_VERSION
+        $previousChangelogDirectory = $env:CHANGELOG_DIRECTORY
+        $previousReleaseNotesPath = $env:RELEASE_NOTES_PATH
+        $previousOutput = $env:GITHUB_OUTPUT
+        try {
+            $env:CHANGELOG_PATH = $changelogPath
+            $env:RELEASE_VERSION = 'v1.2.3'
+            $env:CHANGELOG_DIRECTORY = '.changelog'
+            $env:RELEASE_NOTES_PATH = $releaseNotesPath
+            $env:GITHUB_OUTPUT = $outputPath
+
+            & $scriptPath
+        }
+        finally {
+            $env:CHANGELOG_PATH = $previousChangelogPath
+            $env:RELEASE_VERSION = $previousReleaseVersion
+            $env:CHANGELOG_DIRECTORY = $previousChangelogDirectory
+            $env:RELEASE_NOTES_PATH = $previousReleaseNotesPath
+            $env:GITHUB_OUTPUT = $previousOutput
+        }
+
+        $releaseNotes = (Get-Content -LiteralPath $releaseNotesPath -Raw) -replace "`r`n", "`n"
+        $releaseNotes | Should -Match '(?s)Release introduction\..*### Highlights for users.*### Changed.*### Removed \(Breaking\).*### Added.*### Internal.*### Fixed'
+        ([Regex]::Matches($releaseNotes, '(?m)^### Changed$')).Count | Should -Be 1
+        $releaseNotes | Should -Match '(?s)### Changed\n\n- Existing change\.\n\* Fragment change\.'
+    }
+
     It 'treats the changelog fragment directory as optional when committing release metadata' {
         $actionPath = Join-Path -Path $script:projectRoot -ChildPath '.github/actions/commit-release-metadata/action.yml'
         $action = Get-Content -LiteralPath $actionPath -Raw
