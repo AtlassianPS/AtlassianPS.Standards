@@ -42,6 +42,7 @@ If guidance conflicts, follow this file first.
 - Authenticate prepared release workflow runs with the release App actor login; commit author names are not trusted identity.
 - Do not enable release publishing on an unprotected `master`; direct pushes can bypass review and imitate release metadata.
 - Run manual release dispatches from `master` only; operators choose the impact, never the final version or source commit.
+- Never trigger or enable a major release without fresh, explicit human confirmation that names the repository and intended major version. A `release:major` label, breaking-change notes, a merged pull request, inferred Semantic Versioning, or a general request to continue is not authorization.
 - Candidate CI must create the final validated module directory and release archive without publishing secrets. The publish job downloads the immutable artifact from the exact successful CI run and promotes it without checking out repository code.
 - Keep shared CI and release jobs bounded with explicit timeouts, and retain build and test artifacts for 14 days.
 - Rerun failed jobs for transient publish failures. For lasting failures, merge a reviewed fix and release the next version; never delete/recreate a tag or republish a PSGallery version.
