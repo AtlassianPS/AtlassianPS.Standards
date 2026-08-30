@@ -71,6 +71,18 @@ code. Never check out or execute contributor code in that workflow.
 Because title and body edits cannot change the validated inputs, release-intent workflows do not
 subscribe to the `edited` activity type.
 
+## Major Release Authorization
+
+A major release is a separate product decision and requires fresh, explicit confirmation from a
+human maintainer that names both the repository and intended major version.
+A `release:major` label, breaking-change notes, a merged pull request, automatic version calculation,
+or a general request to continue release work expresses intent but does not authorize the release.
+
+Obtain that confirmation before merging a change with pending major-release intent, enabling
+continuous delivery while major intent is pending, or manually dispatching `release_impact: major`.
+Until confirmation is given, keep publication disabled and report the proposed major release instead.
+Do not push a major release metadata commit, create or push its tag, or publish its package.
+
 ## Continuous Release Flow
 
 1. `Release Intent` validates labels and changelog input on the pull request.
