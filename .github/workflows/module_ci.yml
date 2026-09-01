@@ -133,7 +133,7 @@ jobs:
 
       - name: Build release notes
         if: steps.release.outputs.tag != ''
-        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/build-release-notes@f691d79ab6b5e44b67db390f6a61ebf00e2f7293 # v0.1.19
+        uses: AtlassianPS/AtlassianPS.Standards/.github/actions/build-release-notes@bd959dc3de7ee8426f89c31a62e0282e7140bd51 # v0.3.4
         with:
           release-version: ${{ steps.release.outputs.tag }}
           module-path: ${{ inputs.module-manifest-path }}
