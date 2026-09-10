@@ -112,7 +112,11 @@ Describe 'Invoke-Lint' {
             param($ProjectPath, $ModulePath, $BuildScriptPath, $SettingsPath)
 
             Mock -CommandName Invoke-Pester -MockWith {
-                [PSCustomObject]@{ FailedCount = 0 }
+                [PSCustomObject]@{
+                    FailedCount           = 0
+                    FailedBlocksCount     = 0
+                    FailedContainersCount = 0
+                }
             }
             Mock -CommandName Invoke-ScriptAnalyzer -MockWith { @() }
 
@@ -151,7 +155,11 @@ Describe 'Invoke-Lint' {
                 param($ProjectPath, $ModulePath, $BuildScriptPath, $SettingsPath)
 
                 Mock -CommandName Invoke-Pester -MockWith {
-                    [PSCustomObject]@{ FailedCount = 1 }
+                    [PSCustomObject]@{
+                        FailedCount           = 0
+                        FailedBlocksCount     = 1
+                        FailedContainersCount = 0
+                    }
                 }
                 Mock -CommandName Invoke-ScriptAnalyzer -MockWith {
                     @(

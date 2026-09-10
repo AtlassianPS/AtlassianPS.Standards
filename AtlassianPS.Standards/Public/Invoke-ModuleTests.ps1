@@ -111,13 +111,22 @@
         $testResults = Invoke-Pester @invokePesterParams
     }
 
-    $containerFailureCount = 0
-    if ($testResults.PSObject.Properties.Name -contains 'ContainersFailedCount') {
-        $containerFailureCount = [int]$testResults.ContainersFailedCount
+    $failedBlockCount = 0
+    if ($testResults.PSObject.Properties.Name -contains 'FailedBlocksCount') {
+        $failedBlockCount = [int]$testResults.FailedBlocksCount
     }
 
-    if (($testResults.FailedCount -gt 0) -or ($containerFailureCount -gt 0)) {
-        throw ("Pester reported failures. Failed tests: {0}; failed containers: {1}." -f $testResults.FailedCount, $containerFailureCount)
+    $failedContainerCount = 0
+    if ($testResults.PSObject.Properties.Name -contains 'FailedContainersCount') {
+        $failedContainerCount = [int]$testResults.FailedContainersCount
+    }
+    elseif ($testResults.PSObject.Properties.Name -contains 'ContainersFailedCount') {
+        $failedContainerCount = [int]$testResults.ContainersFailedCount
+    }
+
+    $failureCount = [int]$testResults.FailedCount + $failedBlockCount + $failedContainerCount
+    if ($failureCount -gt 0) {
+        throw ("Pester reported failures. Failed tests: {0}; failed blocks: {1}; failed containers: {2}." -f $testResults.FailedCount, $failedBlockCount, $failedContainerCount)
     }
 
     return $testResults

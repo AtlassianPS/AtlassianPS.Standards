@@ -171,7 +171,7 @@
             $pesterConfig = New-PesterConfiguration -Hashtable $pesterConfigHash
             $testResults = Invoke-Pester -Configuration $pesterConfig
 
-            $styleFailures = [int]$testResults.FailedCount
+            $styleFailures = [int]($testResults.FailedCount + $testResults.FailedBlocksCount + $testResults.FailedContainersCount)
             if ($styleFailures -gt 0) {
                 $failures.Add("$styleFailures style test(s) failed.")
             }
