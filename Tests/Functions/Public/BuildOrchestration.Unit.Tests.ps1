@@ -42,7 +42,8 @@ Describe 'Invoke-ModuleTests' {
             Mock -CommandName Invoke-Pester -MockWith {
                 [PSCustomObject]@{
                     FailedCount           = 0
-                    ContainersFailedCount = 0
+                    FailedBlocksCount     = 0
+                    FailedContainersCount = 0
                 }
             }
 
@@ -77,11 +78,70 @@ Describe 'Invoke-ModuleTests' {
             Mock -CommandName Invoke-Pester -MockWith {
                 [PSCustomObject]@{
                     FailedCount           = 1
-                    ContainersFailedCount = 0
+                    FailedBlocksCount     = 0
+                    FailedContainersCount = 0
                 }
             }
 
             { Invoke-ModuleTests -TestPath $TestPath } | Should -Throw -ExpectedMessage 'Pester reported failures*'
+        }
+    }
+
+    It 'throws when Pester returns <FailureType> failures' -ForEach @(
+        @{
+            FailureType           = 'block'
+            FailedBlocksCount     = 1
+            FailedContainersCount = 0
+        }
+        @{
+            FailureType           = 'container'
+            FailedBlocksCount     = 0
+            FailedContainersCount = 1
+        }
+    ) {
+        $testsPath = Join-Path -Path $TestDrive -ChildPath 'tests-setup-failure'
+        $null = New-Item -Path $testsPath -ItemType Directory -Force
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            TestPath              = $testsPath
+            FailedBlocksCount     = $FailedBlocksCount
+            FailedContainersCount = $FailedContainersCount
+        } {
+            param($TestPath, $FailedBlocksCount, $FailedContainersCount)
+
+            Mock -CommandName Import-PesterVersion -MockWith {}
+            Mock -CommandName New-PesterConfiguration -MockWith { param($Hashtable) $Hashtable }
+            Mock -CommandName Invoke-Pester -MockWith {
+                [PSCustomObject]@{
+                    FailedCount           = 0
+                    FailedBlocksCount     = $FailedBlocksCount
+                    FailedContainersCount = $FailedContainersCount
+                }
+            }
+
+            { Invoke-ModuleTests -TestPath $TestPath } | Should -Throw -ExpectedMessage 'Pester reported failures*'
+        }
+    }
+
+    It 'preserves the Pester 4 container failure gate' {
+        $testsPath = Join-Path -Path $TestDrive -ChildPath 'tests-legacy-container-failure'
+        $null = New-Item -Path $testsPath -ItemType Directory -Force
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            TestPath = $testsPath
+        } {
+            param($TestPath)
+
+            Mock -CommandName Import-PesterVersion -MockWith { [Version]'4.10.1' }
+            Mock -CommandName Invoke-Pester -MockWith {
+                [PSCustomObject]@{
+                    FailedCount           = 0
+                    ContainersFailedCount = 1
+                }
+            }
+
+            { Invoke-ModuleTests -TestPath $TestPath -MinimumPesterVersion ([Version]'4.10.0') -MaximumPesterVersion ([Version]'4.10.1') } |
+                Should -Throw -ExpectedMessage 'Pester reported failures*failed containers: 1*'
         }
     }
 
@@ -110,7 +170,9 @@ Describe 'Invoke-ModuleTests' {
             }
             Mock -CommandName Invoke-Pester -MockWith {
                 [PSCustomObject]@{
-                    FailedCount = 0
+                    FailedCount           = 0
+                    FailedBlocksCount     = 0
+                    FailedContainersCount = 0
                 }
             }
 
