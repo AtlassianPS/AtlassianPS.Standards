@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.3.5 - 2026-09-11
+
+### Fixed
+
+* Fail builds on all Pester failures (#65, @lipkau)
+
 ## v0.3.4 - 2026-08-25
 
 ### Fixed
