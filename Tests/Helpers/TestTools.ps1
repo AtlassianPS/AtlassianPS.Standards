@@ -110,7 +110,7 @@ function Resolve-ModuleSource {
 
     .DESCRIPTION
         This lightweight helper function replaces the BuildHelpers dependency for
-        Pester v5 tests. It determines whether tests are running against the source
+        Pester tests. It determines whether tests are running against the source
         module in the AtlassianPS.Standards/ directory or a built Release module and returns the
         appropriate manifest path.
 

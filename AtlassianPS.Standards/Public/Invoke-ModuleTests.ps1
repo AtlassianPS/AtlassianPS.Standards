@@ -24,10 +24,10 @@
         [String[]]$ExcludePath = @(),
 
         [Parameter()]
-        [Version]$MinimumPesterVersion = [Version]'5.9.0',
+        [Version]$MinimumPesterVersion = [Version]'6.2.0',
 
         [Parameter()]
-        [Version]$MaximumPesterVersion = [Version]'5.9.999',
+        [Version]$MaximumPesterVersion = [Version]'6.999',
 
         [Parameter()]
         [String]$ResultOutputPath
@@ -36,7 +36,7 @@
     $resolvedTestPath = (Resolve-Path -LiteralPath $TestPath).ProviderPath
     $pesterVersion = Import-PesterVersion -MinimumVersion $MinimumPesterVersion -MaximumVersion $MaximumPesterVersion
     if (-not $pesterVersion) {
-        $pesterVersion = [Version]'5.9.0'
+        $pesterVersion = [Version]'6.2.0'
     }
 
     if (-not $ResultOutputPath) {
@@ -108,7 +108,7 @@
             $invokePesterParams.ExcludeTag = $pesterConfigHash.Filter.ExcludeTag
         }
 
-        $testResults = Invoke-Pester @invokePesterParams
+        $testResults = Invoke-LegacyPester -Parameters $invokePesterParams
     }
 
     $failedBlockCount = 0

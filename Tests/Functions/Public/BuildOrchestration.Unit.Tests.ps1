@@ -1,4 +1,4 @@
-﻿#requires -modules @{ ModuleName = "Pester"; ModuleVersion = "5.7"; MaximumVersion = "5.999" }
+﻿#requires -modules @{ ModuleName = "Pester"; ModuleVersion = "6.2.0"; MaximumVersion = "6.999" }
 
 BeforeAll {
     . "$PSScriptRoot/../../Helpers/TestTools.ps1"
@@ -8,18 +8,18 @@ BeforeAll {
 Describe 'Invoke-ModuleTests' {
     It 'imports Pester globally for test scripts' {
         InModuleScope AtlassianPS.Standards {
-            Mock -CommandName Get-UsablePesterVersion -MockWith { [Version]'5.7.1' }
+            Mock -CommandName Get-UsablePesterVersion -MockWith { [Version]'6.2.0' }
             Mock -CommandName Get-Module -MockWith { $null } -ParameterFilter { $Name -eq 'Pester' }
             Mock -CommandName Import-Module -MockWith {}
 
-            $null = Import-PesterVersion -MinimumVersion ([Version]'5.7.0')
+            $null = Import-PesterVersion -MinimumVersion ([Version]'6.2.0')
 
             Should -Invoke -CommandName Get-UsablePesterVersion -Times 1 -Exactly -ParameterFilter {
-                $MinimumVersion -eq [Version]'5.7.0' -and $MaximumVersion -eq [Version]'5.999'
+                $MinimumVersion -eq [Version]'6.2.0' -and $MaximumVersion -eq [Version]'6.999'
             }
 
             Should -Invoke -CommandName Import-Module -Times 1 -Exactly -ParameterFilter {
-                $Name -eq 'Pester' -and $RequiredVersion -eq [Version]'5.7.1' -and $Global -and $ErrorAction -eq 'Stop'
+                $Name -eq 'Pester' -and $RequiredVersion -eq [Version]'6.2.0' -and $Global -and $ErrorAction -eq 'Stop'
             }
         }
     }
@@ -33,7 +33,7 @@ Describe 'Invoke-ModuleTests' {
         } {
             param($TestPath)
 
-            Mock -CommandName Import-PesterVersion -MockWith { [Version]'5.9.0' }
+            Mock -CommandName Import-PesterVersion -MockWith { [Version]'6.2.0' }
             Mock -CommandName New-PesterConfiguration -MockWith {
                 param($Hashtable)
                 $script:capturedPesterConfig = $Hashtable
@@ -54,7 +54,7 @@ Describe 'Invoke-ModuleTests' {
                 -ExcludePath @('Tests/Integration')
 
             Should -Invoke -CommandName Import-PesterVersion -Times 1 -Exactly -ParameterFilter {
-                $MinimumVersion -eq [Version]'5.9.0' -and $MaximumVersion -eq [Version]'5.9.999'
+                $MinimumVersion -eq [Version]'6.2.0' -and $MaximumVersion -eq [Version]'6.999'
             }
 
             $script:capturedPesterConfig.Filter.Tag | Should -Contain 'Integration'
@@ -133,7 +133,7 @@ Describe 'Invoke-ModuleTests' {
             param($TestPath)
 
             Mock -CommandName Import-PesterVersion -MockWith { [Version]'4.10.1' }
-            Mock -CommandName Invoke-Pester -MockWith {
+            Mock -CommandName Invoke-LegacyPester -MockWith {
                 [PSCustomObject]@{
                     FailedCount           = 0
                     ContainersFailedCount = 1
@@ -142,6 +142,13 @@ Describe 'Invoke-ModuleTests' {
 
             { Invoke-ModuleTests -TestPath $TestPath -MinimumPesterVersion ([Version]'4.10.0') -MaximumPesterVersion ([Version]'4.10.1') } |
                 Should -Throw -ExpectedMessage 'Pester reported failures*failed containers: 1*'
+
+            Should -Invoke -CommandName Invoke-LegacyPester -Times 1 -Exactly -ParameterFilter {
+                $Parameters.Script -eq $TestPath -and
+                $Parameters.PassThru -and
+                $Parameters.OutputFormat -eq 'NUnitXml' -and
+                $Parameters.OutputFile
+            }
         }
     }
 

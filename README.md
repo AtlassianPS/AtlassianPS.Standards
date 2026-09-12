@@ -55,6 +55,8 @@ Use `Tools/update.dependencies.ps1` to refresh pinned dependency versions in `To
 
 ## Build, Lint, Test
 
+The shared test orchestration targets Pester 6.2 on Windows PowerShell 5.1 and PowerShell 7.4 or newer.
+
 ```powershell
 Invoke-Build -Task Lint, Build, Test
 ```

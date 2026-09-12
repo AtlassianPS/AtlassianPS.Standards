@@ -3,10 +3,10 @@
     [OutputType([Version])]
     param(
         [Parameter()]
-        [Version]$MinimumVersion = [Version]'5.7.0',
+        [Version]$MinimumVersion = [Version]'6.2.0',
 
         [Parameter()]
-        [Version]$MaximumVersion = [Version]'5.999'
+        [Version]$MaximumVersion = [Version]'6.999'
     )
 
     $pesterVersionToUse = Get-UsablePesterVersion -MinimumVersion $MinimumVersion -MaximumVersion $MaximumVersion
