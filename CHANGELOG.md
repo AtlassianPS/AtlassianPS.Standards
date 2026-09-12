@@ -4,7 +4,7 @@
 
 ### Changed
 
-* Updated shared test and lint orchestration to Pester 6.2 while preserving the explicit Pester 4 compatibility path and complete test, block, and container failure gating.
+* Updated shared test and lint orchestration to Pester 6.2, removed the unused Pester 4 execution path, and preserved complete test, block, and container failure gating.
 
 ## v0.3.5 - 2026-09-11
 

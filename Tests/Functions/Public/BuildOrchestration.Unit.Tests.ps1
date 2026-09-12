@@ -123,35 +123,6 @@ Describe 'Invoke-ModuleTests' {
         }
     }
 
-    It 'preserves the Pester 4 container failure gate' {
-        $testsPath = Join-Path -Path $TestDrive -ChildPath 'tests-legacy-container-failure'
-        $null = New-Item -Path $testsPath -ItemType Directory -Force
-
-        InModuleScope AtlassianPS.Standards -Parameters @{
-            TestPath = $testsPath
-        } {
-            param($TestPath)
-
-            Mock -CommandName Import-PesterVersion -MockWith { [Version]'4.10.1' }
-            Mock -CommandName Invoke-LegacyPester -MockWith {
-                [PSCustomObject]@{
-                    FailedCount           = 0
-                    ContainersFailedCount = 1
-                }
-            }
-
-            { Invoke-ModuleTests -TestPath $TestPath -MinimumPesterVersion ([Version]'4.10.0') -MaximumPesterVersion ([Version]'4.10.1') } |
-                Should -Throw -ExpectedMessage 'Pester reported failures*failed containers: 1*'
-
-            Should -Invoke -CommandName Invoke-LegacyPester -Times 1 -Exactly -ParameterFilter {
-                $Parameters.Script -eq $TestPath -and
-                $Parameters.PassThru -and
-                $Parameters.OutputFormat -eq 'NUnitXml' -and
-                $Parameters.OutputFile
-            }
-        }
-    }
-
     It 'computes default output path when BHProjectPath is not set' {
         $testsPath = Join-Path -Path $TestDrive -ChildPath 'tests-default-output'
         $null = New-Item -Path $testsPath -ItemType Directory -Force
