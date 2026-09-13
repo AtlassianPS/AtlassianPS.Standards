@@ -70,7 +70,7 @@ jobs:
       - id: filter
         name: Decide whether full CI is required
         if: inputs.detect-changes && github.event_name == 'pull_request'
-        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
           predicate-quantifier: every
           filters: |
