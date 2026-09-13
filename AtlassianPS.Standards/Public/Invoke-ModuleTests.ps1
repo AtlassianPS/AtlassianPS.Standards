@@ -24,20 +24,17 @@
         [String[]]$ExcludePath = @(),
 
         [Parameter()]
-        [Version]$MinimumPesterVersion = [Version]'5.9.0',
+        [Version]$MinimumPesterVersion = [Version]'6.2.0',
 
         [Parameter()]
-        [Version]$MaximumPesterVersion = [Version]'5.9.999',
+        [Version]$MaximumPesterVersion = [Version]'6.999',
 
         [Parameter()]
         [String]$ResultOutputPath
     )
 
     $resolvedTestPath = (Resolve-Path -LiteralPath $TestPath).ProviderPath
-    $pesterVersion = Import-PesterVersion -MinimumVersion $MinimumPesterVersion -MaximumVersion $MaximumPesterVersion
-    if (-not $pesterVersion) {
-        $pesterVersion = [Version]'5.9.0'
-    }
+    $null = Import-PesterVersion -MinimumVersion $MinimumPesterVersion -MaximumVersion $MaximumPesterVersion
 
     if (-not $ResultOutputPath) {
         $platformInfo = Get-HostPlatformInfo
@@ -88,28 +85,8 @@
         $pesterConfigHash.Filter.ExcludeTag = @($merged)
     }
 
-    if ($pesterVersion.Major -ge 5) {
-        $pesterConfig = New-PesterConfiguration -Hashtable $pesterConfigHash
-        $testResults = Invoke-Pester -Configuration $pesterConfig
-    }
-    else {
-        $invokePesterParams = @{
-            Script       = $resolvedTestPath
-            PassThru     = $true
-            OutputFile   = $ResultOutputPath
-            OutputFormat = 'NUnitXml'
-        }
-
-        if ($pesterConfigHash.Filter.Tag) {
-            $invokePesterParams.Tag = $pesterConfigHash.Filter.Tag
-        }
-
-        if ($pesterConfigHash.Filter.ExcludeTag.Count -gt 0) {
-            $invokePesterParams.ExcludeTag = $pesterConfigHash.Filter.ExcludeTag
-        }
-
-        $testResults = Invoke-Pester @invokePesterParams
-    }
+    $pesterConfig = New-PesterConfiguration -Hashtable $pesterConfigHash
+    $testResults = Invoke-Pester -Configuration $pesterConfig
 
     $failedBlockCount = 0
     if ($testResults.PSObject.Properties.Name -contains 'FailedBlocksCount') {
@@ -119,9 +96,6 @@
     $failedContainerCount = 0
     if ($testResults.PSObject.Properties.Name -contains 'FailedContainersCount') {
         $failedContainerCount = [int]$testResults.FailedContainersCount
-    }
-    elseif ($testResults.PSObject.Properties.Name -contains 'ContainersFailedCount') {
-        $failedContainerCount = [int]$testResults.ContainersFailedCount
     }
 
     $failureCount = [int]$testResults.FailedCount + $failedBlockCount + $failedContainerCount

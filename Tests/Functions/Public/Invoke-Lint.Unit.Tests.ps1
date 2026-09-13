@@ -1,4 +1,4 @@
-﻿#requires -modules @{ ModuleName = "Pester"; ModuleVersion = "5.7"; MaximumVersion = "5.999" }
+﻿#requires -modules @{ ModuleName = "Pester"; ModuleVersion = "6.2.0"; MaximumVersion = "6.999" }
 
 BeforeAll {
     . "$PSScriptRoot/../../Helpers/TestTools.ps1"
@@ -83,7 +83,7 @@ Describe 'Invoke-Lint' {
 
             {
                 Invoke-Lint -ProjectPath $ProjectPath -ModulePath $ModulePath -BuildScriptPath $BuildScriptPath -AnalyzerSettingsPath $SettingsPath -MinimumPesterVersion ([Version]'99.0.0')
-            } | Should -Throw -ExpectedMessage "Pester version between 99.0.0 and 5.999 is required*"
+            } | Should -Throw -ExpectedMessage "Pester version between 99.0.0 and 6.999 is required*"
         }
     }
 
