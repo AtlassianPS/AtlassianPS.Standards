@@ -23,6 +23,31 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         }
     }
 
+    It 'keeps released Standards action self-references on one version' {
+        $workflowPath = Join-Path -Path $script:projectRoot -ChildPath '.github/workflows/module_ci.yml'
+        $content = Get-Content -LiteralPath $workflowPath -Raw
+        $allReferences = [Regex]::Matches(
+            $content,
+            'AtlassianPS/AtlassianPS\.Standards/\.github/actions/[^@\s]+@[^\s#]+'
+        )
+        $references = [Regex]::Matches(
+            $content,
+            'AtlassianPS/AtlassianPS\.Standards/\.github/actions/[^@\s]+@(?<sha>[0-9a-f]{40})\s+#\s+(?<version>v\d+\.\d+\.\d+)'
+        )
+
+        $allReferences.Count | Should -BeGreaterThan 0
+        $references.Count | Should -Be $allReferences.Count
+        @($references | ForEach-Object { $_.Groups['sha'].Value } | Sort-Object -Unique).Count | Should -Be 1
+        @($references | ForEach-Object { $_.Groups['version'].Value } | Sort-Object -Unique).Count | Should -Be 1
+    }
+
+    It 'groups GitHub Actions dependency updates into one pull request' {
+        $dependabotPath = Join-Path -Path $script:projectRoot -ChildPath '.github/dependabot.yml'
+        $content = Get-Content -LiteralPath $dependabotPath -Raw
+
+        $content | Should -Match '(?ms)groups:\s+github-actions:\s+patterns:\s+- "\*"'
+    }
+
     It 'plan-merged-release computes the next tag and generated fragment for a merged PR' {
         function gh {
             $arguments = [String[]]$args
