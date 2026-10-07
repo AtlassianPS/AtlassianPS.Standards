@@ -148,6 +148,9 @@ The operator never enters the final version or source commit.
 
 ## Identity And Repository Configuration
 
+The single-maintainer governance policy below follows the
+[approved WP5 decision](https://github.com/AtlassianPS/AtlassianPS/issues/13#issuecomment-6034428988).
+
 Required organization or repository variable:
 
 ```text
@@ -162,14 +165,32 @@ PSGALLERY_API_KEY
 HOMEPAGE_PAT
 ```
 
-Configure a `release` environment restricted to `master`. The release GitHub App should have only the
-repository permissions needed to push release metadata and create tags. Workflows mint short-lived
-installation tokens with a SHA-pinned `actions/create-github-app-token`; they do not store installation
-tokens or use personal access tokens for routine release writes.
+Configure a `release` environment restricted to the literal `master` branch, with no mandatory
+reviewers or wait timer. The existing environment setting allows administrator bypass; routine
+publishing uses the branch restriction and the workflow's release conditions. The release GitHub App
+should have only the repository permissions needed to push release metadata and create tags.
+Workflows mint short-lived installation tokens with a SHA-pinned `actions/create-github-app-token`;
+they do not store installation tokens or use personal access tokens for routine release writes.
 
-Protect `master` with required `CI Result`, `Release Intent`, signed commits, review-thread resolution,
-and CODEOWNERS review. Protect the `refs/tags/v*` namespace from creation, update, and deletion except by
-the release App. Require full commit SHAs for Actions.
+Require a pull request and GitHub Actions checks on the default branch. Module repositories require
+`CI Result` and `Release Intent`; the `.github` controller requires `test` from its `CI` workflow;
+the website requires `build`. Bind these checks to the GitHub Actions App. Keep checks non-strict,
+block branch deletion and force pushes, and configure no administrator bypass. The maintainer
+reviews the diff and check results before merging. Zero approvals are required, so independent
+approval, CODEOWNERS review, review-thread resolution and signed commits are optional.
+
+Only the release App has an always-bypass on module default-branch rulesets, because preparation
+pushes release metadata directly. This bypass applies to the whole ruleset; trusted release
+workflows constrain its intended use. The dependency-update App has no bypass. Emergency human
+recovery requires a documented temporary ruleset edit and restoration of the approved settings.
+
+Protect `refs/tags/v*` with an App-only creation ruleset and a separate update/deletion ruleset
+with no bypass actors. Even the release App cannot move or delete an existing release tag.
+The publisher must create annotated tags and validate an existing tag without modifying it on retry.
+
+Enable GitHub's full-length commit SHA requirement for actions in each active repository.
+Reusable workflows must also use full SHAs, verified through source review and drift tests;
+GitHub's native action pinning setting still permits reusable workflows referenced by tags.
 
 The publish job must authenticate `github.event.workflow_run.actor.login` as
 `atlassianps-release-bot[bot]`. Commit author and committer names are metadata supplied by Git clients
@@ -239,7 +260,7 @@ For each module repository:
 3. Add candidate creation to CI and make `CI Result` require it.
 4. Add the thin continuous-release caller pinned to the released Standards commit.
 5. Configure the release environment, App access, PSGallery key, and website token.
-6. Apply the branch, tag, signature, review, and Actions pinning rules.
+6. Apply the branch, tag, review, bypass, environment and Actions pinning policy above.
 7. Remove older tag-triggered or rebuild-on-publish workflows.
 8. Run a shadow candidate build before enabling publication.
 9. Merge one small real patch and verify the complete release path.
