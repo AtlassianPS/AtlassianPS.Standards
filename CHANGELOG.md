@@ -2,9 +2,12 @@
 
 ## Unreleased
 
+## v0.4.1 - 2026-10-19
+
 ### Fixed
 
 * Authenticate Standards workflow commit lookups with `GITHUB_TOKEN` to avoid the shared unauthenticated GitHub API rate limit.
+* fix(deps): authenticate workflow commit lookups (#75, @lipkau)
 
 ## v0.4.0 - 2026-09-13
 
