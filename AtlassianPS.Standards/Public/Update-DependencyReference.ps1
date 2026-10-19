@@ -484,9 +484,14 @@ function Update-DependencyReference {
             if ($referenceFiles.Count -gt 0) {
                 $tag = "v$($standardsRequirement.RequiredVersion)"
                 try {
+                    $headers = @{ Accept = 'application/vnd.github+json' }
+                    if ($env:GITHUB_TOKEN) {
+                        $headers.Authorization = "Bearer $env:GITHUB_TOKEN"
+                    }
+
                     $releaseCommit = Invoke-RestMethod `
                         -Uri "https://api.github.com/repos/AtlassianPS/AtlassianPS.Standards/commits/$tag" `
-                        -Headers @{ Accept = 'application/vnd.github+json' } `
+                        -Headers $headers `
                         -ErrorAction Stop
                     $standardsCommit = [string]$releaseCommit.sha
                     if ($standardsCommit -notmatch '^[0-9a-f]{40}$') {

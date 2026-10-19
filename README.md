@@ -51,7 +51,7 @@ Release flow guidance lives in [`docs/ReleaseBlueprint.md`](docs/ReleaseBlueprin
 
 `setup.ps1` installs the union of runtime dependencies from `AtlassianPS.Standards.psd1` (`RequiredModules`) and build-only dependencies from `Tools/build.requirements.psd1`.
 
-Use `Tools/update.dependencies.ps1` to refresh pinned dependency versions in `Tools/build.requirements.psd1` and `AtlassianPS.Standards.psd1`. Updates stay within the currently pinned major version by default; use `Update-AtlassianPSDependencyReference -AllowMajorVersionUpgrade` for an intentional major upgrade. Lookup errors fail fast unless an explicit non-blocking/manual run uses `-AllowLookupFailure`.
+Use `Tools/update.dependencies.ps1` to refresh pinned dependency versions in `Tools/build.requirements.psd1` and `AtlassianPS.Standards.psd1`. Updates stay within the currently pinned major version by default; use `Update-AtlassianPSDependencyReference -AllowMajorVersionUpgrade` for an intentional major upgrade. Lookup errors fail fast unless an explicit non-blocking/manual run uses `-AllowLookupFailure`. Set `GITHUB_TOKEN` to authenticate GitHub API requests when resolving Standards workflow commits in automation.
 
 ## Build, Lint, Test
 
