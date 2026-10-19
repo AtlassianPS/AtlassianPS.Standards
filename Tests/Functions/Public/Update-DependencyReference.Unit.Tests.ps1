@@ -235,6 +235,42 @@ Describe 'Update-DependencyReference' {
             Should -Match 'Pester"; RequiredVersion = "6.1.0"'
     }
 
+    It 'uses GitHub authentication only when GITHUB_TOKEN is set' -ForEach @(
+        @{ Token = 'test-github-token' }
+        @{ Token = $null }
+    ) {
+        $projectPath = Join-Path $TestDrive 'authentication-project'
+        $toolsPath = Join-Path $projectPath 'Tools'
+        $workflowPath = Join-Path $projectPath '.github/workflows'
+        $null = New-Item -Path $toolsPath, $workflowPath -ItemType Directory -Force
+        $requirementsPath = Join-Path $toolsPath 'build.requirements.psd1'
+        Set-Content -LiteralPath $requirementsPath -Value '@(@{ ModuleName = "AtlassianPS.Standards"; RequiredVersion = "0.4.0" })'
+        Set-Content -LiteralPath (Join-Path $workflowPath 'ci.yml') -Value 'uses: AtlassianPS/AtlassianPS.Standards/.github/workflows/module_ci.yml@1111111111111111111111111111111111111111 # v0.4.0'
+        $originalToken = $env:GITHUB_TOKEN
+        try {
+            $env:GITHUB_TOKEN = $Token
+            InModuleScope AtlassianPS.Standards -Parameters @{
+                RequirementsPath = $requirementsPath
+                Token            = $Token
+            } {
+                param($RequirementsPath, $Token)
+                Mock Find-Module { [PSCustomObject]@{ Version = '0.4.0' } }
+                Mock Invoke-RestMethod { [PSCustomObject]@{ sha = '2' * 40 } }
+
+                $null = Update-DependencyReference -BuildRequirementsPath $RequirementsPath -SkipManifestRequirement
+
+                Should -Invoke Invoke-RestMethod -Times 1 -Exactly -ParameterFilter {
+                    $Uri -eq 'https://api.github.com/repos/AtlassianPS/AtlassianPS.Standards/commits/v0.4.0' -and
+                    $Headers.Accept -eq 'application/vnd.github+json' -and
+                    $(if ($Token) { $Headers.Authorization -eq "Bearer $Token" } else { -not $Headers.ContainsKey('Authorization') })
+                }
+            }
+        }
+        finally {
+            $env:GITHUB_TOKEN = $originalToken
+        }
+    }
+
     It 'updates Standards workflow and consistency-test pins together' {
         $projectPath = Join-Path -Path $TestDrive -ChildPath 'project'
         $toolsPath = Join-Path -Path $projectPath -ChildPath 'Tools'
