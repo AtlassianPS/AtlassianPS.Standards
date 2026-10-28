@@ -484,7 +484,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishWorkflow | Should -Not -Match 'dawidd6/action-download-artifact|release-manifest\.json|ZipFile'
         $publishWorkflow | Should -Match 'Publish-Module -Path \$modulePath'
         $publishWorkflow | Should -Match 'Find-Module @lookup'
-        $publishWorkflow | Should -Match 'RequiredVersion = \$expectedGalleryVersion'
+        $publishWorkflow | Should -Match 'RequiredVersion\s+= \$expectedGalleryVersion'
         $publishWorkflow | Should -Match '\$installParameters\.RequiredVersion = \$dependency\.RequiredVersion'
         $publishWorkflow | Should -Match '\$installParameters\.MinimumVersion = \$dependency\.ModuleVersion'
         $publishWorkflow | Should -Match '\$installParameters\.MaximumVersion = \$dependency\.MaximumVersion'

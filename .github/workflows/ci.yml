@@ -45,13 +45,20 @@ jobs:
       - name: Acquire and load the existing immutable candidate
         shell: pwsh
         run: |
-          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile -File ./Tools/Test-CandidateAcquisition.ps1 -ModuleName AtlassianPS.Configuration -RequiredVersion 0.3.0-alpha0002
+          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile `
+            -File ./Tools/Test-CandidateAcquisition.ps1 `
+            -ModuleName AtlassianPS.Configuration `
+            -RequiredVersion 0.3.0-alpha0002
+
           if ($LASTEXITCODE -ne 0) { throw 'Exact candidate acquisition failed.' }
 
       - name: Verify normal acquisition still selects stable
         shell: pwsh
         run: |
-          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile -File ./Tools/Test-CandidateAcquisition.ps1 -StableModuleName AtlassianPS.Configuration
+          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile `
+            -File ./Tools/Test-CandidateAcquisition.ps1 `
+            -StableModuleName AtlassianPS.Configuration
+
           if ($LASTEXITCODE -ne 0) { throw 'Stable acquisition failed.' }
 
   ci-required:

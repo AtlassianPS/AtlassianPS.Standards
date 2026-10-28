@@ -97,16 +97,23 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $sourceRef = 'HEAD'
+
           if ($env:PRERELEASE_BRANCH) {
             if ($env:RELEASE_CHANNEL -cnotin @('alpha', 'beta')) {
               throw 'prerelease-branch requires the alpha or beta channel.'
             }
+
             git check-ref-format "refs/heads/$env:PRERELEASE_BRANCH"
             if ($LASTEXITCODE -ne 0) { throw 'Invalid prerelease branch name.' }
+
             $sourceRef = "refs/remotes/origin/$env:PRERELEASE_BRANCH"
           }
+
           $sourceCommit = git rev-parse --verify --quiet "$sourceRef^{commit}"
-          if ($LASTEXITCODE -ne 0) { throw "Unable to resolve prerelease branch '$env:PRERELEASE_BRANCH'." }
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to resolve prerelease branch '$env:PRERELEASE_BRANCH'."
+          }
+
           "source_commit=$sourceCommit" >> $env:GITHUB_OUTPUT
 
       - name: Checkout release workflow implementation
@@ -206,6 +213,7 @@ jobs:
             "release_tag=$env:PLANNED_CANDIDATE" >> $env:GITHUB_OUTPUT
             return
           }
+
           $message = $env:PREPARED_COMMIT_MESSAGE
           if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+) release$') {
             throw "Commit message '$message' is not a release metadata commit."
@@ -243,6 +251,7 @@ jobs:
 
           if ($env:RELEASE_TAG.Contains('-')) {
             $ledger = Get-Content ./Release/candidate-ledger.json -Raw | ConvertFrom-Json
+
             if ($ledger.SourceCommit -cne $env:RELEASE_COMMIT) {
               throw 'Candidate source commit differs from the planned release tag target.'
             }
@@ -254,10 +263,12 @@ jobs:
             if ($existing.object.type -ne 'tag') {
               throw "Release tag '$env:RELEASE_TAG' must be annotated."
             }
+
             $tagObject = gh api "repos/$env:GITHUB_REPOSITORY/git/tags/$($existing.object.sha)" | ConvertFrom-Json
             if ($tagObject.object.type -ne 'commit' -or $tagObject.object.sha -ne $env:RELEASE_COMMIT) {
               throw "Release tag '$env:RELEASE_TAG' does not identify '$env:RELEASE_COMMIT'."
             }
+
             Write-Host "Release tag '$env:RELEASE_TAG' already identifies the tested candidate."
             return
           }
@@ -273,8 +284,14 @@ jobs:
           PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
         run: |
           $expectedGalleryVersion = $env:RELEASE_TAG.Substring(1)
-          $lookup = @{ Name = $env:MODULE_NAME; RequiredVersion = $expectedGalleryVersion; Repository = 'PSGallery'; ErrorAction = 'SilentlyContinue' }
+          $lookup = @{
+            Name            = $env:MODULE_NAME
+            RequiredVersion = $expectedGalleryVersion
+            Repository      = 'PSGallery'
+            ErrorAction     = 'SilentlyContinue'
+          }
           if ($expectedGalleryVersion.Contains('-')) { $lookup.AllowPrerelease = $true }
+
           $published = Find-Module @lookup
           if ($published) {
             Write-Host "PSGallery already contains $env:MODULE_NAME $expectedGalleryVersion; skipping immutable publish."
@@ -285,14 +302,23 @@ jobs:
           $manifest = Import-PowerShellDataFile (Join-Path $modulePath "$env:MODULE_NAME.psd1")
           $fullVersion = [String]$manifest.ModuleVersion
           if ($manifest.PrivateData.PSData.Prerelease) { $fullVersion += '-' + $manifest.PrivateData.PSData.Prerelease }
-          if ($fullVersion -cne $expectedGalleryVersion) { throw 'Downloaded manifest full version differs from the planned release.' }
+
+          if ($fullVersion -cne $expectedGalleryVersion) {
+            throw 'Downloaded manifest full version differs from the planned release.'
+          }
+
           if ($expectedGalleryVersion.Contains('-')) {
             $ledger = Get-Content ./Release/candidate-ledger.json -Raw | ConvertFrom-Json
-            if ($ledger.FullVersion -cne $expectedGalleryVersion -or $ledger.ModuleName -cne $env:MODULE_NAME -or
-                (Get-FileHash "./Release/$env:MODULE_NAME.zip" -Algorithm SHA256).Hash -cne $ledger.PackageSha256) {
+
+            if (
+                $ledger.FullVersion -cne $expectedGalleryVersion -or
+                $ledger.ModuleName -cne $env:MODULE_NAME -or
+                (Get-FileHash "./Release/$env:MODULE_NAME.zip" -Algorithm SHA256).Hash -cne $ledger.PackageSha256
+            ) {
               throw 'Downloaded candidate artifact differs from its verification ledger.'
             }
           }
+
           foreach ($dependency in @($manifest.RequiredModules)) {
             $installParameters = @{
               Repository   = 'PSGallery'
@@ -301,23 +327,17 @@ jobs:
               AllowClobber = $true
               ErrorAction  = 'Stop'
             }
-            if ($dependency -is [String]) {
-              $installParameters.Name = $dependency
-            }
+
+            if ($dependency -is [String]) { $installParameters.Name = $dependency }
             else {
               $installParameters.Name = $dependency.ModuleName
-              if ($dependency.RequiredVersion) {
-                $installParameters.RequiredVersion = $dependency.RequiredVersion
-              }
+              if ($dependency.RequiredVersion) { $installParameters.RequiredVersion = $dependency.RequiredVersion }
               else {
-                if ($dependency.ModuleVersion) {
-                  $installParameters.MinimumVersion = $dependency.ModuleVersion
-                }
-                if ($dependency.MaximumVersion) {
-                  $installParameters.MaximumVersion = $dependency.MaximumVersion
-                }
+                if ($dependency.ModuleVersion) { $installParameters.MinimumVersion = $dependency.ModuleVersion }
+                if ($dependency.MaximumVersion) { $installParameters.MaximumVersion = $dependency.MaximumVersion }
               }
             }
+
             Install-Module @installParameters
           }
 
@@ -378,11 +398,18 @@ jobs:
       - name: Acquire and load the exact published candidate
         shell: pwsh
         run: |
-          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile -File ./Tools/Test-CandidateAcquisition.ps1 -ModuleName $env:MODULE_NAME -RequiredVersion $env:CANDIDATE_VERSION.Substring(1)
+          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile `
+            -File ./Tools/Test-CandidateAcquisition.ps1 `
+            -ModuleName $env:MODULE_NAME `
+            -RequiredVersion $env:CANDIDATE_VERSION.Substring(1)
+
           if ($LASTEXITCODE -ne 0) { throw 'Exact candidate acquisition failed.' }
 
       - name: Verify normal acquisition still selects stable
         shell: pwsh
         run: |
-          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile -File ./Tools/Test-CandidateAcquisition.ps1 -StableModuleName $env:MODULE_NAME
+          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile `
+            -File ./Tools/Test-CandidateAcquisition.ps1 `
+            -StableModuleName $env:MODULE_NAME
+
           if ($LASTEXITCODE -ne 0) { throw 'Stable acquisition failed.' }

@@ -25,17 +25,21 @@ function Install-DependencyRequirement {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [String]$BuildRequirementsPath,
+        [String]
+        $BuildRequirementsPath,
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [String]$ManifestPath,
+        [String]
+        $ManifestPath,
 
         [Parameter()]
-        [Object[]]$CandidateRequirement = @(),
+        [Object[]]
+        $CandidateRequirement = @(),
 
         [Parameter()]
-        [String]$CandidateRoot = (Join-Path ([IO.Path]::GetTempPath()) 'AtlassianPS-Candidates')
+        [String]
+        $CandidateRoot = (Join-Path ([IO.Path]::GetTempPath()) 'AtlassianPS-Candidates')
     )
 
     function Get-RequirementValue {
@@ -43,11 +47,13 @@ function Install-DependencyRequirement {
         [OutputType([String])]
         param(
             [Parameter(Mandatory)]
-            [Object]$Requirement,
+            [Object]
+            $Requirement,
 
             [Parameter(Mandatory)]
             [ValidateNotNullOrEmpty()]
-            [String]$Name
+            [String]
+            $Name
         )
 
         if ($Requirement -is [System.Collections.IDictionary]) {
@@ -70,11 +76,13 @@ function Install-DependencyRequirement {
         [OutputType([PSCustomObject])]
         param(
             [Parameter(Mandatory)]
-            [Object]$Requirement,
+            [Object]
+            $Requirement,
 
             [Parameter(Mandatory)]
             [ValidateNotNullOrEmpty()]
-            [String]$SourcePath
+            [String]
+            $SourcePath
         )
 
         if ($Requirement -is [string]) {
@@ -89,11 +97,14 @@ function Install-DependencyRequirement {
         $requiredVersion = Get-RequirementValue -Requirement $Requirement -Name 'RequiredVersion'
         $minimumVersion = Get-RequirementValue -Requirement $Requirement -Name 'ModuleVersion'
         $maximumVersion = Get-RequirementValue -Requirement $Requirement -Name 'MaximumVersion'
+
         if ($maximumVersion -match '^(?<prefix>\d+(?:\.\d+){0,2})\.\*$') {
             $maximumParts = @($Matches.prefix.Split('.'))
             while ($maximumParts.Count -lt 4) { $maximumParts += [Int]::MaxValue.ToString() }
+
             $maximumVersion = $maximumParts -join '.'
         }
+
         if (-not $requiredVersion -and -not $minimumVersion) {
             throw "Module requirement '$moduleName' in '$SourcePath' must specify RequiredVersion or ModuleVersion."
         }
@@ -112,7 +123,8 @@ function Install-DependencyRequirement {
         param(
             [Parameter(Mandatory)]
             [ValidateNotNullOrEmpty()]
-            [String]$Path
+            [String]
+            $Path
         )
 
         $tokens = $null
@@ -176,21 +188,27 @@ function Install-DependencyRequirement {
 
     $requirements = @($requirementsByName.Values)
     $candidatesByName = @{}
+
     foreach ($candidate in $CandidateRequirement) {
         $key = [String]$candidate.ModuleName
         if (-not $requirementsByName.ContainsKey($key) -or $candidatesByName.ContainsKey($key)) {
             throw "Candidate '$key' must identify one declared dependency."
         }
+
         if ([String]$candidate.RequiredVersion -notmatch '^\d+\.\d+\.\d+-(alpha|beta)\d{4}$') {
             throw "Candidate '$key' requires an exact alpha or beta version."
         }
+
         $numericVersion = [Version]($candidate.RequiredVersion.Split('-')[0])
         $bounds = $requirementsByName[$key]
-        if (($bounds.RequiredVersion -and $numericVersion -ne [Version]$bounds.RequiredVersion) -or
+        if (
+            ($bounds.RequiredVersion -and $numericVersion -ne [Version]$bounds.RequiredVersion) -or
             ($bounds.MinimumVersion -and $numericVersion -lt [Version]$bounds.MinimumVersion) -or
-            ($bounds.MaximumVersion -and $numericVersion -gt [Version]$bounds.MaximumVersion)) {
+            ($bounds.MaximumVersion -and $numericVersion -gt [Version]$bounds.MaximumVersion)
+        ) {
             throw "Candidate '$key' falls outside the declared numeric dependency bounds."
         }
+
         $candidatesByName[$key] = $candidate
     }
 
@@ -205,6 +223,7 @@ function Install-DependencyRequirement {
         $moduleName = $requirement.ModuleName
         $requiredVersion = [string]$requirement.RequiredVersion
         $candidate = $candidatesByName[$moduleName]
+
         if ($candidate) {
             if ($PSCmdlet.ShouldProcess("$moduleName $($candidate.RequiredVersion)", 'Provision exact candidate dependency')) {
                 $candidateParameters = @{
@@ -212,13 +231,16 @@ function Install-DependencyRequirement {
                     RequiredVersion = $candidate.RequiredVersion
                     DestinationPath = $CandidateRoot
                 }
+
                 if ($candidate.PackagePath) {
                     $candidateParameters.PackagePath = $candidate.PackagePath
                     $candidateParameters.PackageSha256 = $candidate.PackageSha256
                 }
+
                 $null = Install-ModuleCandidate @candidateParameters -ErrorAction Stop
                 $installedCount++
             }
+
             continue
         }
 
@@ -249,11 +271,13 @@ function Install-DependencyRequirement {
                 Force              = $true
                 ErrorAction        = 'Stop'
             }
+
             if ($requiredVersion) { $installParameters.RequiredVersion = $requiredVersion }
             else {
                 $installParameters.MinimumVersion = $requirement.MinimumVersion
                 if ($requirement.MaximumVersion) { $installParameters.MaximumVersion = $requirement.MaximumVersion }
             }
+
             Install-Module @installParameters
             $installedCount++
         }

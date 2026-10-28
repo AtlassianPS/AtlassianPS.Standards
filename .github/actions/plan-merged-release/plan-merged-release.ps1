@@ -9,9 +9,11 @@ $manualReleaseImpact = if ($env:RELEASE_IMPACT) { $env:RELEASE_IMPACT.Trim().ToL
 
 $isManualRelease = -not [String]::IsNullOrWhiteSpace($manualReleaseImpact)
 $channel = if ($env:RELEASE_CHANNEL) { $env:RELEASE_CHANNEL } else { 'stable' }
+
 if ($channel -cnotin @('stable', 'alpha', 'beta')) {
     throw "Release channel '$channel' must be stable, alpha, or beta."
 }
+
 if ($channel -ne 'stable' -and -not $isManualRelease) {
     throw 'Alpha and beta releases require an explicit manual release impact.'
 }
@@ -169,27 +171,36 @@ if ($nextMajor -gt $latest.Major) {
         throw "Major-base releases require fresh human authorization: '$requiredAuthorization'."
     }
 }
+
 if ($channel -ne 'stable') {
     $candidateTags = @(git tag --list "v$releaseVersion-*")
     if ($LASTEXITCODE -ne 0) { throw 'Unable to read candidate tags.' }
+
     $moduleName = $env:GITHUB_REPOSITORY.Split('/')[-1]
     $galleryVersions = @(Find-Module -Name $moduleName -AllVersions -AllowPrerelease -Repository PSGallery -ErrorAction Stop)
     $candidateTags += @($galleryVersions | ForEach-Object { 'v' + [String]$_.Version })
+
     $basePattern = '^v{0}-' -f [Regex]::Escape($releaseVersion)
     $candidateTags = @($candidateTags | Where-Object { $_ -match $basePattern })
+
     if ($channel -eq 'alpha' -and @($candidateTags | Where-Object { $_ -match '-beta\d{4}$' }).Count -gt 0) {
         throw "Version '$releaseVersion' already has beta candidates. Continue with beta."
     }
+
     $candidatePattern = '^v{0}-{1}(?<sequence>\d{{4}})$' -f [Regex]::Escape($releaseVersion), $channel
     $sequence = 0
+
     foreach ($tag in $candidateTags) {
         if ($tag -match $candidatePattern) {
             $sequence = [Math]::Max($sequence, [Int]$Matches.sequence)
         }
     }
+
     if ($sequence -ge 9999) { throw 'Candidate sequence exhausted; choose the next numeric base.' }
+
     $releaseVersion += '-{0}{1:d4}' -f $channel, ($sequence + 1)
 }
+
 $releaseTag = 'v{0}' -f $releaseVersion
 git show-ref --verify --quiet "refs/tags/$releaseTag"
 $tagExistsExitCode = $LASTEXITCODE

@@ -148,8 +148,11 @@ jobs:
           if ('${{ github.event_name }}' -ne 'workflow_dispatch' -or '${{ github.ref }}' -ne 'refs/heads/master') {
             throw 'Candidates require a manual dispatch from protected master.'
           }
-          if ($env:RELEASE_VERSION -cnotmatch '^v\d+\.\d+\.\d+-(alpha|beta)\d{4}$' -or
-              $env:MODULE_NAME -notmatch '^[A-Za-z][A-Za-z0-9.]*$') {
+
+          if (
+              $env:RELEASE_VERSION -cnotmatch '^v\d+\.\d+\.\d+-(alpha|beta)\d{4}$' -or
+              $env:MODULE_NAME -notmatch '^[A-Za-z][A-Za-z0-9.]*$'
+          ) {
             throw 'Invalid planned candidate version or module name.'
           }
 
@@ -208,16 +211,19 @@ jobs:
           RELEASE_NOTES_PATH: ${{ steps.candidate_notes.outputs.release_notes_path }}
         run: |
           . ./.candidate-workflow/AtlassianPS.Standards/Public/Test-ModulePackage.ps1
+
           Invoke-Build -Task SetVersion -VersionToPublish $env:RELEASE_VERSION
           Invoke-Build -Task Package
+
           $artifact = Test-ModulePackage -BuildOutputPath ./Release -ModuleName $env:MODULE_NAME -ExpectedVersion $env:RELEASE_VERSION -RequireReleaseNotes
           Copy-Item -LiteralPath $env:RELEASE_NOTES_PATH -Destination ./Release/release-notes.md
+
           @{
-            ModuleName = $env:MODULE_NAME
-            FullVersion = $artifact.FullVersion
-            SourceCommit = '${{ inputs.source-commit || github.sha }}'
+            ModuleName     = $env:MODULE_NAME
+            FullVersion    = $artifact.FullVersion
+            SourceCommit   = '${{ inputs.source-commit || github.sha }}'
             WorkflowCommit = '${{ job.workflow_sha }}'
-            PackageSha256 = (Get-FileHash $artifact.PackagePath -Algorithm SHA256).Hash
+            PackageSha256  = (Get-FileHash $artifact.PackagePath -Algorithm SHA256).Hash
           } | ConvertTo-Json | Set-Content ./Release/candidate-ledger.json
 
       - name: Upload build artifact
