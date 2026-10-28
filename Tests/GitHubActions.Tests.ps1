@@ -435,7 +435,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
 
         $ciCaller | Should -Match 'uses: \./\.github/workflows/module_ci\.yml'
         $ciCaller | Should -Match 'module-manifest-path: \./AtlassianPS\.Standards/AtlassianPS\.Standards\.psd1'
-        $ciCaller | Should -Match '(?ms)ci-required:.*?name: CI Result.*?needs: module-ci'
+        $ciCaller | Should -Match '(?ms)ci-required:.*?name: CI Result.*?needs: \[module-ci, gallery-acquisition\]'
         $ciCaller | Should -Not -Match 'paths-ignore:|detect-changes: false'
         $ciWorkflow | Should -Match '(?m)^\s+workflow_call:'
         $ciWorkflow | Should -Match 'build-profile:'

@@ -21,18 +21,56 @@ jobs:
     with:
       module-manifest-path: ./AtlassianPS.Standards/AtlassianPS.Standards.psd1
 
+  gallery-acquisition:
+    name: Gallery acquisition (${{ matrix.shell }})
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    env:
+      ACQUISITION_SHELL: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Bootstrap Windows PowerShell package provider
+        if: matrix.shell == 'powershell'
+        shell: powershell
+        run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force
+          Install-Module PowerShellGet -RequiredVersion 2.2.5 -Scope CurrentUser -Force -AllowClobber
+
+      - name: Acquire and load the existing immutable candidate
+        shell: pwsh
+        run: |
+          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile -File ./Tools/Test-CandidateAcquisition.ps1 -ModuleName AtlassianPS.Configuration -RequiredVersion 0.3.0-alpha0002
+          if ($LASTEXITCODE -ne 0) { throw 'Exact candidate acquisition failed.' }
+
+      - name: Verify normal acquisition still selects stable
+        shell: pwsh
+        run: |
+          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile -File ./Tools/Test-CandidateAcquisition.ps1 -StableModuleName AtlassianPS.Configuration
+          if ($LASTEXITCODE -ne 0) { throw 'Stable acquisition failed.' }
+
   ci-required:
     name: CI Result
     if: always()
-    needs: module-ci
+    needs: [module-ci, gallery-acquisition]
     runs-on: ubuntu-latest
     steps:
       - name: Require the reusable CI pipeline
         shell: bash
         env:
           PIPELINE_RESULT: ${{ needs.module-ci.result }}
+          ACQUISITION_RESULT: ${{ needs.gallery-acquisition.result }}
         run: |
           if [[ "$PIPELINE_RESULT" != "success" ]]; then
             echo "::error::Module CI finished with result: $PIPELINE_RESULT"
+            exit 1
+          fi
+          if [[ "$ACQUISITION_RESULT" != "success" ]]; then
+            echo "::error::Gallery acquisition finished with result: $ACQUISITION_RESULT"
             exit 1
           fi

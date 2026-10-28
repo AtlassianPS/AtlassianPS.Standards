@@ -119,7 +119,7 @@ Describe 'Candidate planning' {
         Get-Content $env:GITHUB_OUTPUT -Raw | Should -Match 'release_tag=v0.3.0-beta0001'
         $env:RELEASE_CHANNEL = 'stable'
         & $planner
-        Get-Content $env:GITHUB_OUTPUT -Raw | Should -Match '(?m)^release_tag=v0.3.0$'
+        Get-Content $env:GITHUB_OUTPUT | Should -Contain 'release_tag=v0.3.0'
     }
 
     It 'skips Gallery candidates published without a Git tag by temporary tooling' {

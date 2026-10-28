@@ -172,6 +172,10 @@ prerelease. Candidate activity does not trigger the stable metadata-commit route
 After publication, fresh Windows PowerShell 5.1 and PowerShell 7 processes acquire
 the exact Gallery candidate with prerelease opt-in and check ordinary stable acquisition.
 
+Standards CI also runs these Gallery checks against the published Configuration
+`0.3.0-alpha0002` and its latest stable package on both Windows shells.
+This tests the acquisition helper before a new candidate is published.
+
 For a major-base release, including an alpha or beta, enter fresh human confirmation
 in `major_authorization` as `owner/repository vMAJOR`, for example
 `AtlassianPS/JiraPS v3`. Automatic major intent stops at planning until a human

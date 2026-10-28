@@ -356,7 +356,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@347ded1033c302cf6dbbd8c614aefe2477121ab0 # v0.4.0
 
+      - name: Download final candidate for smoke tests
+        if: inputs.planned-release-version != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: Release
+          path: ./Release/
+          digest-mismatch: error
+
+      - name: Run candidate smoke tests against the built module
+        if: inputs.planned-release-version != ''
+        run: Invoke-Build -Task TestIntegration -IntegrationTestPath './Release/Tests/Integration' -Tag 'Smoke' -PesterVerbosity Detailed
+        shell: pwsh
+
       - run: Invoke-Build -Task TestIntegration -Tag 'Smoke' -PesterVerbosity Detailed
+        if: inputs.planned-release-version == ''
         shell: pwsh
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
