@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       release_impact:
-        description: Release impact for unreleased changes already on master
+        description: Release impact for the changes being packaged
         required: true
         type: choice
         options:
@@ -22,6 +22,10 @@ on:
         default: stable
         type: choice
         options: [stable, alpha, beta]
+      prerelease_branch:
+        description: Optional source branch for alpha/beta (empty uses master)
+        required: false
+        type: string
       major_authorization:
         description: Fresh major authorization as owner/repository vMAJOR
         required: false
@@ -41,5 +45,6 @@ jobs:
       notify-homepage: false
       release-impact: ${{ inputs.release_impact }}
       release-channel: ${{ inputs.release_channel || 'stable' }}
+      prerelease-branch: ${{ inputs.prerelease_branch }}
       major-authorization: ${{ inputs.major_authorization }}
     secrets: inherit

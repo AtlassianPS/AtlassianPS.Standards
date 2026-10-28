@@ -147,3 +147,85 @@ Describe 'Candidate planning' {
         Get-Content $env:GITHUB_OUTPUT -Raw | Should -Match 'release_tag=v1.0.0-alpha0001'
     }
 }
+
+Describe 'Prerelease branch source' {
+    BeforeAll {
+        $root = Split-Path $PSScriptRoot -Parent
+        $workflow = Get-Content (Join-Path $root '.github/workflows/module_release.yml') -Raw
+        $sourceStep = [Regex]::Match($workflow, '(?ms)- name: Resolve prerelease source.*?run: \|\r?\n(?<code>(?: {10}[^\r\n]*\r?\n)+)')
+        $sourceStep.Success | Should -BeTrue
+        $script:resolveSource = [ScriptBlock]::Create(($sourceStep.Groups['code'].Value -replace '(?m)^ {10}', ''))
+        $script:defaultCommit = git -C $root rev-parse HEAD
+        $script:repository = Join-Path $TestDrive 'source-repository'
+        $null = git init --quiet $repository
+        $null = git -C $repository fetch --quiet --depth=1 --no-tags $root "${defaultCommit}:refs/heads/master" "${defaultCommit}:refs/remotes/origin/feature/shared-sessions"
+        if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the prerelease source fixture.' }
+        $null = git -C $repository symbolic-ref HEAD refs/heads/master
+        if ($LASTEXITCODE -ne 0) { throw 'Could not create the prerelease source fixture.' }
+    }
+    BeforeEach {
+        $script:savedEnvironment = @{}
+        foreach ($name in @('PRERELEASE_BRANCH', 'RELEASE_CHANNEL', 'GITHUB_OUTPUT')) {
+            $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+        }
+        $env:RELEASE_CHANNEL = 'alpha'
+        $env:PRERELEASE_BRANCH = 'feature/shared-sessions'
+        $env:GITHUB_OUTPUT = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N') + '.txt')
+        Push-Location $repository
+        $null = git symbolic-ref HEAD refs/heads/unavailable-workflow-branch
+    }
+    AfterEach {
+        Pop-Location
+        foreach ($name in $savedEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name])
+        }
+    }
+
+    It 'resolves the requested branch independently of the checkout HEAD' -ForEach @(
+        @{ Channel = 'alpha' }, @{ Channel = 'beta' }
+    ) {
+        $env:RELEASE_CHANNEL = $Channel
+        & $resolveSource
+        Get-Content $env:GITHUB_OUTPUT | Should -Contain "source_commit=$defaultCommit"
+        $null = git rev-parse --verify --quiet HEAD
+        $LASTEXITCODE | Should -Be 1
+    }
+
+    It 'defaults to the checked-out master commit when no source branch is supplied' {
+        $null = git symbolic-ref HEAD refs/heads/master
+        $env:PRERELEASE_BRANCH = ''
+        & $resolveSource
+        Get-Content $env:GITHUB_OUTPUT | Should -Contain "source_commit=$defaultCommit"
+    }
+
+    It 'rejects a source branch for stable releases' {
+        $env:RELEASE_CHANNEL = 'stable'
+        { & $resolveSource } | Should -Throw -ExpectedMessage '*requires the alpha or beta channel*'
+        Test-Path $env:GITHUB_OUTPUT | Should -BeFalse
+    }
+
+    It 'rejects missing branches and tag names without falling back to master' -ForEach @(
+        @{ Branch = 'missing-branch' }, @{ Branch = 'v0.3.0-alpha0001' }
+    ) {
+        $null = git update-ref refs/tags/v0.3.0-alpha0001 $defaultCommit
+        $env:PRERELEASE_BRANCH = $Branch
+        { & $resolveSource } | Should -Throw -ExpectedMessage '*Unable to resolve prerelease branch*'
+        Test-Path $env:GITHUB_OUTPUT | Should -BeFalse
+    }
+
+    It 'rejects malformed branch names' {
+        $env:PRERELEASE_BRANCH = '../master'
+        { & $resolveSource } | Should -Throw -ExpectedMessage '*Invalid prerelease branch name*'
+    }
+
+    It 'uses the resolved commit in every candidate checkout, ledger, and tag target' {
+        $ci = Get-Content (Join-Path $root '.github/workflows/module_ci.yml') -Raw
+        foreach ($job in @('build', 'test_windows_ps5', 'test_pwsh', 'smoke_tests')) {
+            $ci | Should -Match "(?ms)^  ${job}:.*?steps:\s+- uses: actions/checkout@[^\r\n]+\r?\n\s+with:\s+ref: \$\{\{ inputs.source-commit \}\}"
+        }
+        $ci | Should -Match 'SourceCommit = ''\$\{\{ inputs.source-commit \|\| github.sha \}\}'''
+        $workflow | Should -Match 'source-commit: \$\{\{ needs.prepare.outputs.source-commit \}\}'
+        $workflow | Should -Match 'RELEASE_COMMIT: \$\{\{ github.event.workflow_run.head_sha \|\| needs.prepare.outputs.source-commit \}\}'
+        $workflow | Should -Match 'if \(\$ledger.SourceCommit -cne \$env:RELEASE_COMMIT\)'
+    }
+}

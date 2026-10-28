@@ -5,6 +5,7 @@
 ### Added
 
 - Support explicit alpha and beta releases through the shared CI and protected publication route, with exact candidate acquisition and package verification.
+- Package alpha/beta releases from a selected repository branch, using one resolved commit for validation and the release tag.
 
 ### Fixed
 

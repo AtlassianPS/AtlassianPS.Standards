@@ -14,9 +14,9 @@ implement the contract; this document does not duplicate their YAML.
 ## Required Invariants
 
 - Every pull request declares exactly one `release:*` intent before merge.
-- Only protected `master` commits can become release candidates.
+- Stable release candidates come only from protected `master` commits.
 - Stable metadata commits are promoted only after CI runs triggered by the `atlassianps-release-bot` GitHub App.
-- Alpha and beta candidates require manual dispatch from protected `master` and the complete shared CI gate.
+- Alpha and beta candidates require manual dispatch from protected `master` and the complete shared CI gate; their source may be another repository branch.
 - The highest impact among unreleased merged pull requests determines the next version.
 - Stable metadata commits contain the final changelog section and source version. Prereleases prepare notes in a disposable CI checkout.
 - CI builds, stamps, packages, and validates one final candidate artifact.
@@ -172,6 +172,16 @@ prerelease. Candidate activity does not trigger the stable metadata-commit route
 After publication, fresh Windows PowerShell 5.1 and PowerShell 7 processes acquire
 the exact Gallery candidate with prerelease opt-in and check ordinary stable acquisition.
 
+To package changes before merging, set `prerelease_branch` to a repository branch,
+for example `feature/shared-sessions`, while dispatching `Continuous Release` from
+`master`. Leave it empty to use `master`. Stable releases reject this input.
+The branch must implement the shared build tasks and contain its candidate notes
+under `Unreleased`. The workflow resolves the branch once and uses that commit for
+every build and test checkout, the artifact ledger, and the annotated release tag.
+Moving the branch during CI does not change the candidate. Version sequences use
+repository-wide tags and Gallery versions, so branches share one alpha/beta sequence
+for each numeric base. Merge the changes into `master` before releasing stable.
+
 The Gallery matrix uses the same two acquisition steps for both Windows shells,
 each in a fresh child process. Candidate CI reuses the notes file produced during
 changelog preparation instead of extracting that section again for GitHub.
@@ -223,7 +233,7 @@ replacement acquisition and Cloud/Data Center integration tests pass and a compa
 stable Configuration prerequisite is available. Preserve published packages and their
 verification ledgers during that cleanup; retain disposable configuration storage.
 
-The operator never enters the final version or source commit.
+The operator chooses an optional prerelease source branch, never the final version or source commit.
 
 ## Identity And Repository Configuration
 
@@ -307,6 +317,10 @@ on:
         default: stable
         type: choice
         options: [stable, alpha, beta]
+      prerelease_branch:
+        description: Optional source branch for alpha/beta (empty uses master)
+        required: false
+        type: string
       major_authorization:
         required: false
         type: string
@@ -324,6 +338,7 @@ jobs:
       module-name: ExampleModule
       release-impact: ${{ inputs.release_impact }}
       release-channel: ${{ inputs.release_channel || 'stable' }}
+      prerelease-branch: ${{ inputs.prerelease_branch }}
       major-authorization: ${{ inputs.major_authorization }}
     secrets: inherit
 ```

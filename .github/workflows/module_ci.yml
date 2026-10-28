@@ -38,6 +38,11 @@ on:
         required: false
         default: ''
         type: string
+      source-commit:
+        description: Immutable module commit resolved by the prerelease planner.
+        required: false
+        default: ''
+        type: string
       module-name:
         description: Module name for a planned alpha or beta artifact.
         required: false
@@ -115,6 +120,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-commit }}
 
       - name: Lint GitHub Actions
         if: inputs.build-profile == 'jiraps'
@@ -208,7 +215,7 @@ jobs:
           @{
             ModuleName = $env:MODULE_NAME
             FullVersion = $artifact.FullVersion
-            SourceCommit = '${{ github.sha }}'
+            SourceCommit = '${{ inputs.source-commit || github.sha }}'
             WorkflowCommit = '${{ job.workflow_sha }}'
             PackageSha256 = (Get-FileHash $artifact.PackagePath -Algorithm SHA256).Hash
           } | ConvertTo-Json | Set-Content ./Release/candidate-ledger.json
@@ -229,6 +236,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-commit }}
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@347ded1033c302cf6dbbd8c614aefe2477121ab0 # v0.4.0
         with:
           ps-version: "5"
@@ -284,6 +293,8 @@ jobs:
           - { os: macos-latest, name: "macOS" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-commit }}
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@347ded1033c302cf6dbbd8c614aefe2477121ab0 # v0.4.0
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
@@ -351,6 +362,8 @@ jobs:
       JIRA_TEST_VERSION: ${{ vars.JIRA_TEST_VERSION }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-commit }}
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@347ded1033c302cf6dbbd8c614aefe2477121ab0 # v0.4.0
 
       - name: Download final candidate for smoke tests

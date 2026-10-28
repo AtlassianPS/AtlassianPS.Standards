@@ -41,6 +41,7 @@ Instruction-only changes may be skipped by CI path filters; run local validation
 - Release notes must come from the same `CHANGELOG.md` section for GitHub release bodies and PSGallery manifest `PrivateData.PSData.ReleaseNotes`.
 - If release flow changes, update the blueprint, helper catalog, tests, changelog, and agent instructions together.
 - Use the shared manual alpha/beta route and explicit candidate provisioning. Preserve stable notes and acquisition defaults; major-base candidates require fresh repository/major authorization.
+- Dispatch from `master` and use `prerelease_branch` to package another repository branch. Resolve it once and use that commit throughout candidate validation and publication.
 
 ## Source Layout
 

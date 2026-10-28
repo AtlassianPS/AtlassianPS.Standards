@@ -42,6 +42,12 @@ and the staged JiraPS/Configuration cleanup prerequisites.
 candidate, or ordinary stable acquisition. The Windows matrix runs each acquisition
 in a fresh child process.
 
+The release workflow accepts `prerelease-branch` for alpha/beta source selection.
+It resolves the branch once and passes `source-commit` to shared CI, which checks out
+that commit for builds and tests and records it in `candidate-ledger.json`.
+The publisher verifies the ledger's source commit before creating the release tag.
+Dispatch remains on `master`, preserving the existing release environment restriction.
+
 ## Readable Build Task Example
 
 Prefer explicit task dependencies and concrete helper calls over a generic build wrapper.

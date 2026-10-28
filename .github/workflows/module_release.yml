@@ -22,6 +22,11 @@ on:
         required: false
         default: stable
         type: string
+      prerelease-branch:
+        description: Optional repository branch to package for alpha/beta; dispatch still runs from master.
+        required: false
+        default: ''
+        type: string
       major-authorization:
         description: Fresh human confirmation formatted as owner/repository vMAJOR.
         required: false
@@ -74,6 +79,7 @@ jobs:
     environment: release
     outputs:
       release-tag: ${{ steps.plan.outputs.release_tag }}
+      source-commit: ${{ steps.source.outputs.source_commit }}
     steps:
       - name: Checkout module repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,6 +87,27 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.workflow_run.head_sha || 'master' }}
+
+      - name: Resolve prerelease source
+        id: source
+        shell: pwsh
+        env:
+          PRERELEASE_BRANCH: ${{ inputs.prerelease-branch }}
+          RELEASE_CHANNEL: ${{ inputs.release-channel }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sourceRef = 'HEAD'
+          if ($env:PRERELEASE_BRANCH) {
+            if ($env:RELEASE_CHANNEL -cnotin @('alpha', 'beta')) {
+              throw 'prerelease-branch requires the alpha or beta channel.'
+            }
+            git check-ref-format "refs/heads/$env:PRERELEASE_BRANCH"
+            if ($LASTEXITCODE -ne 0) { throw 'Invalid prerelease branch name.' }
+            $sourceRef = "refs/remotes/origin/$env:PRERELEASE_BRANCH"
+          }
+          $sourceCommit = git rev-parse --verify --quiet "$sourceRef^{commit}"
+          if ($LASTEXITCODE -ne 0) { throw "Unable to resolve prerelease branch '$env:PRERELEASE_BRANCH'." }
+          "source_commit=$sourceCommit" >> $env:GITHUB_OUTPUT
 
       - name: Checkout release workflow implementation
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -141,6 +168,7 @@ jobs:
       smoke-profile: ${{ inputs.smoke-profile }}
       exclude-documentation-tests: ${{ inputs.exclude-documentation-tests }}
       planned-release-version: ${{ needs.prepare.outputs.release-tag }}
+      source-commit: ${{ needs.prepare.outputs.source-commit }}
       module-name: ${{ inputs.module-name }}
     secrets:
       ATLASSIAN_CLOUD_PAT: ${{ secrets.ATLASSIAN_CLOUD_PAT }}
@@ -208,10 +236,17 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.release_app.outputs.token }}
           RELEASE_TAG: ${{ steps.prepared_release.outputs.release_tag }}
-          RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+          RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || needs.prepare.outputs.source-commit }}
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
+
+          if ($env:RELEASE_TAG.Contains('-')) {
+            $ledger = Get-Content ./Release/candidate-ledger.json -Raw | ConvertFrom-Json
+            if ($ledger.SourceCommit -cne $env:RELEASE_COMMIT) {
+              throw 'Candidate source commit differs from the planned release tag target.'
+            }
+          }
 
           $refs = @(gh api "repos/$env:GITHUB_REPOSITORY/git/matching-refs/tags/$env:RELEASE_TAG" | ConvertFrom-Json)
           $existing = $refs | Where-Object { $_.ref -eq "refs/tags/$env:RELEASE_TAG" } | Select-Object -First 1
