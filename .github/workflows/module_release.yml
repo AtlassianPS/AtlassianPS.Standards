@@ -320,6 +320,10 @@ jobs:
       fail-fast: false
       matrix:
         shell: [powershell, pwsh]
+    env:
+      ACQUISITION_SHELL: ${{ matrix.shell }}
+      MODULE_NAME: ${{ inputs.module-name }}
+      CANDIDATE_VERSION: ${{ needs.prepare.outputs.release-tag }}
     steps:
       - name: Checkout shared acquisition checks
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -337,33 +341,13 @@ jobs:
           Install-Module PowerShellGet -RequiredVersion 2.2.5 -Scope CurrentUser -Force -AllowClobber
 
       - name: Acquire and load the exact published candidate
-        if: matrix.shell == 'pwsh'
         shell: pwsh
-        env:
-          MODULE_NAME: ${{ inputs.module-name }}
-          CANDIDATE_VERSION: ${{ needs.prepare.outputs.release-tag }}
         run: |
-          & ./Tools/Test-CandidateAcquisition.ps1 -ModuleName $env:MODULE_NAME -RequiredVersion $env:CANDIDATE_VERSION.Substring(1)
+          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile -File ./Tools/Test-CandidateAcquisition.ps1 -ModuleName $env:MODULE_NAME -RequiredVersion $env:CANDIDATE_VERSION.Substring(1)
+          if ($LASTEXITCODE -ne 0) { throw 'Exact candidate acquisition failed.' }
 
       - name: Verify normal acquisition still selects stable
-        if: matrix.shell == 'pwsh'
         shell: pwsh
-        env:
-          MODULE_NAME: ${{ inputs.module-name }}
-        run: '& ./Tools/Test-CandidateAcquisition.ps1 -StableModuleName $env:MODULE_NAME'
-
-      - name: Acquire and load the exact candidate on Windows PowerShell
-        if: matrix.shell == 'powershell'
-        shell: powershell
-        env:
-          MODULE_NAME: ${{ inputs.module-name }}
-          CANDIDATE_VERSION: ${{ needs.prepare.outputs.release-tag }}
         run: |
-          & ./Tools/Test-CandidateAcquisition.ps1 -ModuleName $env:MODULE_NAME -RequiredVersion $env:CANDIDATE_VERSION.Substring(1)
-
-      - name: Verify normal acquisition on Windows PowerShell
-        if: matrix.shell == 'powershell'
-        shell: powershell
-        env:
-          MODULE_NAME: ${{ inputs.module-name }}
-        run: '& ./Tools/Test-CandidateAcquisition.ps1 -StableModuleName $env:MODULE_NAME'
+          & $env:ACQUISITION_SHELL -NoLogo -NonInteractive -NoProfile -File ./Tools/Test-CandidateAcquisition.ps1 -StableModuleName $env:MODULE_NAME
+          if ($LASTEXITCODE -ne 0) { throw 'Stable acquisition failed.' }

@@ -172,6 +172,10 @@ prerelease. Candidate activity does not trigger the stable metadata-commit route
 After publication, fresh Windows PowerShell 5.1 and PowerShell 7 processes acquire
 the exact Gallery candidate with prerelease opt-in and check ordinary stable acquisition.
 
+The Gallery matrix uses the same two acquisition steps for both Windows shells,
+each in a fresh child process. Candidate CI reuses the notes file produced during
+changelog preparation instead of extracting that section again for GitHub.
+
 Standards CI also runs these Gallery checks against the published Configuration
 `0.3.0-alpha0002` and its latest stable package on both Windows shells.
 This tests the acquisition helper before a new candidate is published.

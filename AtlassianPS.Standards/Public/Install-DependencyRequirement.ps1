@@ -156,7 +156,7 @@ function Install-DependencyRequirement {
         throw "Unsupported build requirements format in '$resolvedBuildRequirementsPath'. Use array entries with ModuleName and RequiredVersion."
     }
 
-    $buildRequirementEntries = if ($buildRequirementsData.Value -is [System.Collections.IDictionary]) { @($buildRequirementsData.Value) } else { @($buildRequirementsData.Value) }
+    $buildRequirementEntries = @($buildRequirementsData.Value)
 
     $manifestData = Get-DataFileExpressionValue -Path $resolvedManifestPath
     if ($manifestData.Value -isnot [System.Collections.IDictionary]) {
@@ -166,18 +166,18 @@ function Install-DependencyRequirement {
 
     foreach ($requirementEntry in $buildRequirementEntries) {
         $requirement = ConvertTo-ModuleRequirement -Requirement $requirementEntry -SourcePath $resolvedBuildRequirementsPath
-        $requirementsByName[$requirement.ModuleName.ToLowerInvariant()] = $requirement
+        $requirementsByName[$requirement.ModuleName] = $requirement
     }
 
     foreach ($requirementEntry in @($manifestData.Value['RequiredModules'])) {
         $requirement = ConvertTo-ModuleRequirement -Requirement $requirementEntry -SourcePath $resolvedManifestPath
-        $requirementsByName[$requirement.ModuleName.ToLowerInvariant()] = $requirement
+        $requirementsByName[$requirement.ModuleName] = $requirement
     }
 
-    $requirements = @($requirementsByName.Values | Sort-Object -Property ModuleName)
+    $requirements = @($requirementsByName.Values)
     $candidatesByName = @{}
     foreach ($candidate in $CandidateRequirement) {
-        $key = ([String]$candidate.ModuleName).ToLowerInvariant()
+        $key = [String]$candidate.ModuleName
         if (-not $requirementsByName.ContainsKey($key) -or $candidatesByName.ContainsKey($key)) {
             throw "Candidate '$key' must identify one declared dependency."
         }
@@ -200,11 +200,11 @@ function Install-DependencyRequirement {
 
     $installedCount = 0
     $alreadyPresentCount = 0
-    $orderedRequirements = $requirements | Sort-Object @{ Expression = { $candidatesByName.ContainsKey($_.ModuleName.ToLowerInvariant()) } }, ModuleName
+    $orderedRequirements = $requirements | Sort-Object @{ Expression = { $candidatesByName.ContainsKey($_.ModuleName) } }, ModuleName
     foreach ($requirement in $orderedRequirements) {
         $moduleName = $requirement.ModuleName
         $requiredVersion = [string]$requirement.RequiredVersion
-        $candidate = $candidatesByName[$moduleName.ToLowerInvariant()]
+        $candidate = $candidatesByName[$moduleName]
         if ($candidate) {
             if ($PSCmdlet.ShouldProcess("$moduleName $($candidate.RequiredVersion)", 'Provision exact candidate dependency')) {
                 $candidateParameters = @{

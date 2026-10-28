@@ -113,8 +113,6 @@ jobs:
     if: needs.changes.outputs.run-ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    outputs:
-      release-tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -149,6 +147,7 @@ jobs:
           }
 
       - name: Prepare candidate notes in the disposable CI checkout
+        id: candidate_notes
         if: inputs.planned-release-version != ''
         uses: ./.candidate-workflow/.github/actions/prepare-release-changelog
         with:
@@ -166,30 +165,28 @@ jobs:
           Invoke-Build -Task Clean, TestPublish
         shell: pwsh
 
-      - name: Resolve release build
+      - name: Resolve stable release build
         id: release
-        if: inputs.planned-release-version != '' || (inputs.release-candidate && github.event_name == 'push' && github.ref == 'refs/heads/master')
+        if: >-
+          inputs.release-candidate && inputs.planned-release-version == '' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/master'
         shell: pwsh
         env:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-          PLANNED_VERSION: ${{ inputs.planned-release-version }}
         run: |
-          if ($env:PLANNED_VERSION) {
-            "tag=$env:PLANNED_VERSION" >> $env:GITHUB_OUTPUT
-          }
-          elseif ($env:COMMIT_MESSAGE -match '^Prepare (?<tag>v\d+\.\d+\.\d+) release$') {
+          if ($env:COMMIT_MESSAGE -match '^Prepare (?<tag>v\d+\.\d+\.\d+) release$') {
             "tag=$($Matches.tag)" >> $env:GITHUB_OUTPUT
           }
 
       - name: Build release notes
-        if: steps.release.outputs.tag != '' && inputs.planned-release-version == ''
+        if: steps.release.outputs.tag != ''
         uses: AtlassianPS/AtlassianPS.Standards/.github/actions/build-release-notes@347ded1033c302cf6dbbd8c614aefe2477121ab0 # v0.4.0
         with:
           release-version: ${{ steps.release.outputs.tag }}
           module-path: ${{ inputs.module-manifest-path }}
 
       - name: Stamp and verify release build
-        if: steps.release.outputs.tag != '' && inputs.planned-release-version == ''
+        if: steps.release.outputs.tag != ''
         run: |
           Invoke-Build -Task SetVersion -VersionToPublish ${{ steps.release.outputs.tag }}
           Invoke-Build -Task VerifyReleaseArtifact -VersionToPublish ${{ steps.release.outputs.tag }}
@@ -201,13 +198,13 @@ jobs:
         env:
           RELEASE_VERSION: ${{ inputs.planned-release-version }}
           MODULE_NAME: ${{ inputs.module-name }}
+          RELEASE_NOTES_PATH: ${{ steps.candidate_notes.outputs.release_notes_path }}
         run: |
           . ./.candidate-workflow/AtlassianPS.Standards/Public/Test-ModulePackage.ps1
           Invoke-Build -Task SetVersion -VersionToPublish $env:RELEASE_VERSION
           Invoke-Build -Task Package
           $artifact = Test-ModulePackage -BuildOutputPath ./Release -ModuleName $env:MODULE_NAME -ExpectedVersion $env:RELEASE_VERSION -RequireReleaseNotes
-          . ./.candidate-workflow/AtlassianPS.Standards/Public/Get-ReleaseNotesFromChangelog.ps1
-          Get-ReleaseNotesFromChangelog -ChangelogPath ./CHANGELOG.md -ReleaseVersion $env:RELEASE_VERSION | Set-Content ./Release/release-notes.md
+          Copy-Item -LiteralPath $env:RELEASE_NOTES_PATH -Destination ./Release/release-notes.md
           @{
             ModuleName = $env:MODULE_NAME
             FullVersion = $artifact.FullVersion

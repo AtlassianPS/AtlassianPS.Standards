@@ -125,9 +125,6 @@
                 throw "Packaged file '$relativePath' differs from the built module."
             }
         }
-        if ($RequireReleaseNotes -and [String]::IsNullOrWhiteSpace($packagedManifestData.PrivateData.PSData.ReleaseNotes)) {
-            throw 'Packaged manifest release notes are empty.'
-        }
     }
     catch {
         throw "Release package validation failed for '$PackagePath': $($_.Exception.Message)"

@@ -38,6 +38,10 @@ checking whether a requirement is already satisfied.
 See [ReleaseBlueprint.md](ReleaseBlueprint.md#exact-candidate-dependencies) for examples
 and the staged JiraPS/Configuration cleanup prerequisites.
 
+`Tools/Test-CandidateAcquisition.ps1` checks a local artifact, an exact Gallery
+candidate, or ordinary stable acquisition. The Windows matrix runs each acquisition
+in a fresh child process.
+
 ## Readable Build Task Example
 
 Prefer explicit task dependencies and concrete helper calls over a generic build wrapper.
