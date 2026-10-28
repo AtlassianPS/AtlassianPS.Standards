@@ -19,7 +19,7 @@
         Optional explicit package archive path. Defaults to <BuildOutputPath>/<ModuleName>.zip.
 
     .PARAMETER ExpectedVersion
-        Optional expected numeric module version.
+        Optional expected full version, including the exact prerelease label.
 
     .PARAMETER RequireReleaseNotes
         Require non-empty PrivateData.PSData.ReleaseNotes in both release manifest and package.
@@ -75,10 +75,14 @@
     if ($null -eq $manifest.Version) {
         throw 'Release manifest version could not be resolved.'
     }
-    if ($ExpectedVersion -and $manifest.Version.ToString() -ne $ExpectedVersion) {
-        throw "Release manifest version '$($manifest.Version)' does not match expected '$ExpectedVersion'."
-    }
     $manifestData = Import-PowerShellDataFile -LiteralPath $releaseManifestPath
+    $fullVersion = $manifest.Version.ToString()
+    if ($manifestData.PrivateData.PSData.Prerelease) {
+        $fullVersion += '-' + $manifestData.PrivateData.PSData.Prerelease
+    }
+    if ($ExpectedVersion -and $fullVersion -cne $ExpectedVersion.TrimStart('v')) {
+        throw "Release manifest version '$fullVersion' does not match expected '$ExpectedVersion'."
+    }
     if ($RequireReleaseNotes -and [String]::IsNullOrWhiteSpace($manifestData.PrivateData.PSData.ReleaseNotes)) {
         throw 'Release manifest release notes are empty.'
     }
@@ -99,6 +103,28 @@
             throw "Packaged manifest version '$($packagedManifest.Version)' does not match release manifest version '$($manifest.Version)'."
         }
         $packagedManifestData = Import-PowerShellDataFile -LiteralPath $packagedManifestPath
+        if ([String]$packagedManifestData.PrivateData.PSData.Prerelease -cne [String]$manifestData.PrivateData.PSData.Prerelease) {
+            throw 'Packaged manifest prerelease label does not match the release manifest.'
+        }
+        if ([String]$packagedManifestData.PrivateData.PSData.ReleaseNotes -cne [String]$manifestData.PrivateData.PSData.ReleaseNotes) {
+            throw 'Packaged manifest release notes do not match the release manifest.'
+        }
+        $packagedModulePath = Split-Path $packagedManifestPath -Parent
+        $builtFiles = @(Get-ChildItem -LiteralPath $releaseModulePath -Recurse -File -Force)
+        $packagedFiles = @(Get-ChildItem -LiteralPath $packagedModulePath -Recurse -File -Force)
+        if ($builtFiles.Count -ne $packagedFiles.Count) {
+            throw 'Packaged file count differs from the built module.'
+        }
+        $resolvedModulePath = (Resolve-Path -LiteralPath $releaseModulePath).ProviderPath
+        foreach ($file in $builtFiles) {
+            $relativePath = $file.FullName.Substring($resolvedModulePath.Length + 1)
+            $packagedFilePath = Join-Path $packagedModulePath $relativePath
+            if (-not (Test-Path -LiteralPath $packagedFilePath -PathType Leaf) -or
+                (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -cne
+                (Get-FileHash -LiteralPath $packagedFilePath -Algorithm SHA256).Hash) {
+                throw "Packaged file '$relativePath' differs from the built module."
+            }
+        }
         if ($RequireReleaseNotes -and [String]::IsNullOrWhiteSpace($packagedManifestData.PrivateData.PSData.ReleaseNotes)) {
             throw 'Packaged manifest release notes are empty.'
         }
@@ -116,5 +142,6 @@
         PackagePath  = $PackagePath
         Name         = $manifest.Name
         Version      = $manifest.Version
+        FullVersion  = $fullVersion
     }
 }

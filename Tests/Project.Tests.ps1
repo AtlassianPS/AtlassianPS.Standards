@@ -18,6 +18,7 @@ Describe 'Project validation' {
             'Initialize-AtlassianPSBuildEnvironment'
             'Initialize-AtlassianPSModuleTestEnvironment'
             'Install-AtlassianPSDependencyRequirement'
+            'Install-AtlassianPSModuleCandidate'
             'Invoke-AtlassianPSLint'
             'Invoke-AtlassianPSModuleTests'
             'Join-AtlassianPSModuleSource'

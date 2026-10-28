@@ -29,7 +29,13 @@ function Install-DependencyRequirement {
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [String]$ManifestPath
+        [String]$ManifestPath,
+
+        [Parameter()]
+        [Object[]]$CandidateRequirement = @(),
+
+        [Parameter()]
+        [String]$CandidateRoot = (Join-Path ([IO.Path]::GetTempPath()) 'AtlassianPS-Candidates')
     )
 
     function Get-RequirementValue {
@@ -81,16 +87,22 @@ function Install-DependencyRequirement {
         }
 
         $requiredVersion = Get-RequirementValue -Requirement $Requirement -Name 'RequiredVersion'
-        if (-not $requiredVersion) {
-            $requiredVersion = Get-RequirementValue -Requirement $Requirement -Name 'ModuleVersion'
+        $minimumVersion = Get-RequirementValue -Requirement $Requirement -Name 'ModuleVersion'
+        $maximumVersion = Get-RequirementValue -Requirement $Requirement -Name 'MaximumVersion'
+        if ($maximumVersion -match '^(?<prefix>\d+(?:\.\d+){0,2})\.\*$') {
+            $maximumParts = @($Matches.prefix.Split('.'))
+            while ($maximumParts.Count -lt 4) { $maximumParts += [Int]::MaxValue.ToString() }
+            $maximumVersion = $maximumParts -join '.'
         }
-        if (-not $requiredVersion) {
+        if (-not $requiredVersion -and -not $minimumVersion) {
             throw "Module requirement '$moduleName' in '$SourcePath' must specify RequiredVersion or ModuleVersion."
         }
 
         return [PSCustomObject]@{
             ModuleName      = $moduleName
             RequiredVersion = $requiredVersion
+            MinimumVersion  = $minimumVersion
+            MaximumVersion  = $maximumVersion
         }
     }
 
@@ -163,6 +175,24 @@ function Install-DependencyRequirement {
     }
 
     $requirements = @($requirementsByName.Values | Sort-Object -Property ModuleName)
+    $candidatesByName = @{}
+    foreach ($candidate in $CandidateRequirement) {
+        $key = ([String]$candidate.ModuleName).ToLowerInvariant()
+        if (-not $requirementsByName.ContainsKey($key) -or $candidatesByName.ContainsKey($key)) {
+            throw "Candidate '$key' must identify one declared dependency."
+        }
+        if ([String]$candidate.RequiredVersion -notmatch '^\d+\.\d+\.\d+-(alpha|beta)\d{4}$') {
+            throw "Candidate '$key' requires an exact alpha or beta version."
+        }
+        $numericVersion = [Version]($candidate.RequiredVersion.Split('-')[0])
+        $bounds = $requirementsByName[$key]
+        if (($bounds.RequiredVersion -and $numericVersion -ne [Version]$bounds.RequiredVersion) -or
+            ($bounds.MinimumVersion -and $numericVersion -lt [Version]$bounds.MinimumVersion) -or
+            ($bounds.MaximumVersion -and $numericVersion -gt [Version]$bounds.MaximumVersion)) {
+            throw "Candidate '$key' falls outside the declared numeric dependency bounds."
+        }
+        $candidatesByName[$key] = $candidate
+    }
 
     if (-not (Get-PSRepository -Name 'PSGallery' -ErrorAction SilentlyContinue)) {
         Register-PSRepository -Default
@@ -170,12 +200,36 @@ function Install-DependencyRequirement {
 
     $installedCount = 0
     $alreadyPresentCount = 0
-    foreach ($requirement in $requirements) {
+    $orderedRequirements = $requirements | Sort-Object @{ Expression = { $candidatesByName.ContainsKey($_.ModuleName.ToLowerInvariant()) } }, ModuleName
+    foreach ($requirement in $orderedRequirements) {
         $moduleName = $requirement.ModuleName
         $requiredVersion = [string]$requirement.RequiredVersion
+        $candidate = $candidatesByName[$moduleName.ToLowerInvariant()]
+        if ($candidate) {
+            if ($PSCmdlet.ShouldProcess("$moduleName $($candidate.RequiredVersion)", 'Provision exact candidate dependency')) {
+                $candidateParameters = @{
+                    ModuleName      = $moduleName
+                    RequiredVersion = $candidate.RequiredVersion
+                    DestinationPath = $CandidateRoot
+                }
+                if ($candidate.PackagePath) {
+                    $candidateParameters.PackagePath = $candidate.PackagePath
+                    $candidateParameters.PackageSha256 = $candidate.PackageSha256
+                }
+                $null = Install-ModuleCandidate @candidateParameters -ErrorAction Stop
+                $installedCount++
+            }
+            continue
+        }
 
         $installedModule = Get-Module -Name $moduleName -ListAvailable |
-            Where-Object { $_.Version.ToString() -eq $requiredVersion } |
+            Where-Object {
+                -not $_.PrivateData.PSData.Prerelease -and
+                (-not $requiredVersion -or $_.Version -eq [Version]$requiredVersion) -and
+                (-not $requirement.MinimumVersion -or $_.Version -ge [Version]$requirement.MinimumVersion) -and
+                (-not $requirement.MaximumVersion -or $_.Version -le [Version]$requirement.MaximumVersion)
+            } |
+            Sort-Object -Property Version -Descending |
             Select-Object -First 1
 
         if ($installedModule) {
@@ -186,13 +240,21 @@ function Install-DependencyRequirement {
 
         if ($PSCmdlet.ShouldProcess("$moduleName $requiredVersion", 'Install module dependency')) {
             Write-Verbose "Installing dependency '$moduleName' $requiredVersion."
-            Install-Module -Name $moduleName `
-                -RequiredVersion $requiredVersion `
-                -Scope CurrentUser `
-                -Repository 'PSGallery' `
-                -SkipPublisherCheck `
-                -AllowClobber `
-                -Force
+            $installParameters = @{
+                Name               = $moduleName
+                Scope              = 'CurrentUser'
+                Repository         = 'PSGallery'
+                SkipPublisherCheck = $true
+                AllowClobber       = $true
+                Force              = $true
+                ErrorAction        = 'Stop'
+            }
+            if ($requiredVersion) { $installParameters.RequiredVersion = $requiredVersion }
+            else {
+                $installParameters.MinimumVersion = $requirement.MinimumVersion
+                if ($requirement.MaximumVersion) { $installParameters.MaximumVersion = $requirement.MaximumVersion }
+            }
+            Install-Module @installParameters
             $installedCount++
         }
     }

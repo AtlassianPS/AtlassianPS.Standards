@@ -16,6 +16,27 @@ Consumers call commands with the prefixed names, for example `Test-AtlassianPSMo
 | External help | `Update-ExternalHelp`, `Remove-OrphanedExternalHelp` | Generate PlatyPS external help and remove generated help files that no longer have markdown sources. |
 | Test bootstrap | `Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment` | Resolve repository/module paths and import the module under test for Pester. |
 | Environment loading | `Import-DotEnvFile` | Load `.env` values into process-scoped environment variables without emitting secret values. |
+| Candidate dependencies | `Install-DependencyRequirement`, `Install-ModuleCandidate` | Keep stable provisioning as the default; acquire, verify, and globally import an exact alpha/beta separately from numeric runtime bounds. |
+
+`Test-ModulePackage -ExpectedVersion` accepts a full version including its exact
+prerelease label. It compares numeric versions, labels, notes, and every archived file
+against the built directory. `RequireReleaseNotes` rejects empty candidate notes.
+The result includes numeric `Version` and exact `FullVersion`.
+
+`Install-ModuleCandidate` requires `ModuleName`, exact `RequiredVersion`, and
+`DestinationPath`. Gallery acquisition uses `Save-Module -AllowPrerelease` with that
+exact version. Local archives also require `PackagePath` and `PackageSha256`.
+Both routes import the verified manifest globally and report `ManifestPath`,
+`ModulePath`, `RootPath`, and `FullVersion`. Start a fresh process if the module is
+already loaded. The isolated root stays on that process's module path for dependencies.
+
+`Install-DependencyRequirement` accepts optional `CandidateRequirement` entries and
+`CandidateRoot`. Each candidate must identify a declared dependency and satisfy its
+numeric exact pin or minimum/maximum bounds. Ordinary dependencies install first.
+Stable provisioning has no prerelease opt-in and excludes prerelease installs when
+checking whether a requirement is already satisfied.
+See [ReleaseBlueprint.md](ReleaseBlueprint.md#exact-candidate-dependencies) for examples
+and the staged JiraPS/Configuration cleanup prerequisites.
 
 ## Readable Build Task Example
 

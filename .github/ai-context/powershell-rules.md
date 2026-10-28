@@ -31,6 +31,7 @@ Instruction-only changes may be skipped by CI path filters; run local validation
 - Keep `RequiredModules` in `AtlassianPS.Standards/AtlassianPS.Standards.psd1` synchronized with `Tools/build.requirements.psd1`.
 - Treat breaking helper behavior as a major-version concern.
 - Use `vX.Y.Z` tags for release publishing.
+- Alpha/beta tags use exact four-digit labels such as `v0.3.0-alpha0001`; manifests separate the numeric version and `PSData.Prerelease`.
 
 ## Release Flow Guidance
 
@@ -39,6 +40,7 @@ Instruction-only changes may be skipped by CI path filters; run local validation
 - PRs declare release intent with `release:*` labels and, for user-facing changes, `changelog:*` labels or `.changelog` fragments. Contributors should not need to pick the final release version.
 - Release notes must come from the same `CHANGELOG.md` section for GitHub release bodies and PSGallery manifest `PrivateData.PSData.ReleaseNotes`.
 - If release flow changes, update the blueprint, helper catalog, tests, changelog, and agent instructions together.
+- Use the shared manual alpha/beta route and explicit candidate provisioning. Preserve stable notes and acquisition defaults; major-base candidates require fresh repository/major authorization.
 
 ## Source Layout
 

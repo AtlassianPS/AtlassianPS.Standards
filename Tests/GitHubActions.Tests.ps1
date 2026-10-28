@@ -415,7 +415,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/module_release.yml'
         $caller = Get-Content -LiteralPath $callerPath -Raw
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
-        $publishWorkflow = $workflow.Substring($workflow.IndexOf('  publish:'))
+        $publishStart = $workflow.IndexOf('  publish:')
+        $publishWorkflow = $workflow.Substring($publishStart, $workflow.IndexOf('  verify_gallery:') - $publishStart)
         $ciCaller = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath '.github/workflows/ci.yml') -Raw
         $ciWorkflow = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath '.github/workflows/module_ci.yml') -Raw
 
@@ -469,7 +470,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $ciWorkflow | Should -Match 'if-no-files-found: error'
         $ciWorkflow | Should -Match 'path: \./Release/'
         $ciWorkflow | Should -Not -Match 'nupkg|gallery_package_path'
-        $ciWorkflow | Should -Not -Match 'release-manifest\.json|packageSha256|galleryPackageSha256|releaseNotesSha256'
+        $ciWorkflow | Should -Not -Match 'release-manifest\.json|galleryPackageSha256|releaseNotesSha256'
         $ciWorkflow | Should -Not -Match 'PSGALLERY_API_KEY|HOMEPAGE_PAT|ATLASSIANPS_RELEASE_APP_PRIVATE_KEY'
         $ciCaller | Should -Match 'PIPELINE_RESULT.*success'
 
@@ -478,11 +479,12 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishWorkflow | Should -Match 'name: Release'
         $publishWorkflow | Should -Match 'actions/download-artifact@[0-9a-f]{40}'
         $publishWorkflow | Should -Match 'github-token: \$\{\{ github\.token \}\}'
-        $publishWorkflow | Should -Match 'run-id: \$\{\{ github\.event\.workflow_run\.id \}\}'
+        $publishWorkflow | Should -Match 'run-id: \$\{\{ github\.event\.workflow_run\.id \|\| github\.run_id \}\}'
         $publishWorkflow | Should -Match 'digest-mismatch: error'
-        $publishWorkflow | Should -Not -Match 'dawidd6/action-download-artifact|release-manifest\.json|Get-FileHash|ZipFile'
+        $publishWorkflow | Should -Not -Match 'dawidd6/action-download-artifact|release-manifest\.json|ZipFile'
         $publishWorkflow | Should -Match 'Publish-Module -Path \$modulePath'
-        $publishWorkflow | Should -Match 'Find-Module -Name \$env:MODULE_NAME -RequiredVersion \$expectedGalleryVersion -Repository PSGallery'
+        $publishWorkflow | Should -Match 'Find-Module @lookup'
+        $publishWorkflow | Should -Match 'RequiredVersion = \$expectedGalleryVersion'
         $publishWorkflow | Should -Match '\$installParameters\.RequiredVersion = \$dependency\.RequiredVersion'
         $publishWorkflow | Should -Match '\$installParameters\.MinimumVersion = \$dependency\.ModuleVersion'
         $publishWorkflow | Should -Match '\$installParameters\.MaximumVersion = \$dependency\.MaximumVersion'
@@ -495,7 +497,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishWorkflow | Should -Match '\$PSNativeCommandUseErrorActionPreference = \$true'
         $publishWorkflow | Should -Match 'token: \$\{\{ steps\.release_app\.outputs\.token \}\}'
         $publishWorkflow | Should -Not -Match 'GITHUB_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}'
-        $publishWorkflow | Should -Match '(?ms)if: inputs\.notify-homepage\s+uses: peter-evans/repository-dispatch@'
+        $publishWorkflow | Should -Match '(?ms)if: inputs\.notify-homepage && .*?uses: peter-evans/repository-dispatch@'
         $publishWorkflow | Should -Not -Match 'actions/checkout|setup-powershell|Invoke-Build|Compress-Archive|uses: \./\.release-workflow/'
         $workflow | Should -Not -Match 'recovery_tag|RECOVERY_TAG|No successful CI run was found for recovery commit'
 

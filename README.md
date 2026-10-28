@@ -12,7 +12,7 @@ Exported helpers cover:
 - Pester orchestration (`Invoke-ModuleTests`)
 - test bootstrap helpers (`Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment`)
 - integration-test helpers (`Import-DotEnvFile`)
-- dependency bootstrap and maintenance (`Install-DependencyRequirement`, `Update-DependencyReference`)
+- dependency bootstrap and maintenance (`Install-DependencyRequirement`, `Install-ModuleCandidate`, `Update-DependencyReference`)
 
 ## Usage
 
@@ -34,6 +34,11 @@ Detailed contracts and examples live in [`docs/BlueprintHelpers.md`](docs/Bluepr
 Downstream migration guidance lives in [`docs/DownstreamAdoption.md`](docs/DownstreamAdoption.md).
 Reusable CI guidance lives in [`docs/CIBlueprint.md`](docs/CIBlueprint.md).
 Release flow guidance lives in [`docs/ReleaseBlueprint.md`](docs/ReleaseBlueprint.md).
+
+The shared release workflow supports manually selected `alpha` and `beta` channels
+alongside stable releases. CI verifies the final candidate before protected publication;
+candidate notes leave the stable `Unreleased` bucket intact. Exact candidate provisioning
+opts into a full version separately from runtime numeric dependency bounds.
 
 ## Repository Layout
 
