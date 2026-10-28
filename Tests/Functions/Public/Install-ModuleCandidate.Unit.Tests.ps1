@@ -14,7 +14,16 @@ Describe 'Exact Gallery candidate acquisition' {
         $null = New-Item $sample, $support -ItemType Directory -Force
         New-ModuleManifest -Path (Join-Path $support 'AcquisitionSupport.psd1') -RootModule AcquisitionSupport.psm1 -ModuleVersion 1.0.0
         Set-Content (Join-Path $support 'AcquisitionSupport.psm1') 'function Get-AcquisitionSupport { "saved dependency" }'
-        New-ModuleManifest -Path (Join-Path $sample 'AcquisitionSample.psd1') -RootModule AcquisitionSample.psm1 -ModuleVersion 0.3.0 -Prerelease beta0002 -RequiredModules @{ ModuleName = 'AcquisitionSupport'; ModuleVersion = '1.0.0' }
+        Set-Content (Join-Path $sample 'AcquisitionSample.psd1') @'
+@{
+    RootModule = 'AcquisitionSample.psm1'
+    ModuleVersion = '0.3.0'
+    GUID = '06fca3e7-1f86-490c-a9da-5c9a21b7ab99'
+    FunctionsToExport = '*'
+    PrivateData = @{ PSData = @{ Prerelease = 'beta0002' } }
+    RequiredModules = @(@{ ModuleName = 'AcquisitionSupport'; ModuleVersion = '1.0.0' })
+}
+'@
         Set-Content (Join-Path $sample 'AcquisitionSample.psm1') 'function Get-AcquisitionSample { Get-AcquisitionSupport }'
     }
     AfterEach {

@@ -43,7 +43,8 @@ plus label; numeric equality alone cannot identify a candidate.
 
 Ordering is `0.3.0-alpha0001 < 0.3.0-alpha0002 < 0.3.0-beta0001 < 0.3.0`.
 The planner derives the numeric base from the last stable tag and selected impact,
-then increments the chosen channel's four-digit sequence from existing tags.
+then increments the chosen channel's four-digit sequence from existing tags and
+published Gallery versions, including untagged versions from temporary tooling.
 After beta starts for a base, continue with beta. Published versions and tags remain immutable.
 
 `CHANGELOG.md` is the only release-note source. The same version section populates the package manifest

@@ -15,6 +15,8 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../AtlassianPS.Standards/Public/Install-ModuleCandidate.ps1')
 $root = Join-Path ([IO.Path]::GetTempPath()) ('candidate-acquisition-' + [Guid]::NewGuid().ToString('N'))
+$savedConfigurationRoot = $env:ATLASSIANPS_CONFIGURATION_ROOT
+$env:ATLASSIANPS_CONFIGURATION_ROOT = Join-Path $root 'configuration'
 try {
     if ($PSCmdlet.ParameterSetName -eq 'Stable') {
         $null = New-Item -Path $root -ItemType Directory
@@ -48,5 +50,6 @@ try {
     }
 }
 finally {
+    $env:ATLASSIANPS_CONFIGURATION_ROOT = $savedConfigurationRoot
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 }

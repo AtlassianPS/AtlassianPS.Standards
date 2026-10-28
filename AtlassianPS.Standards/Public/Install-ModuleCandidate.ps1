@@ -55,7 +55,7 @@
     $manifests = @(Get-ChildItem -LiteralPath $root -Filter "$ModuleName.psd1" -Recurse -File)
     if ($manifests.Count -ne 1) { throw "Expected one '$ModuleName' candidate manifest, found $($manifests.Count)." }
     $manifestPath = $manifests[0].FullName
-    $data = Import-PowerShellDataFile -LiteralPath $manifestPath
+    $data = Import-PowerShellDataFile -LiteralPath $manifestPath -ErrorAction Stop
     $fullVersion = "$($data.ModuleVersion)-$($data.PrivateData.PSData.Prerelease)"
     if ($fullVersion -cne $RequiredVersion) {
         throw "Acquired '$fullVersion', expected exact candidate '$RequiredVersion'."

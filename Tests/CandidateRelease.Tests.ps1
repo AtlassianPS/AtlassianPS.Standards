@@ -12,7 +12,15 @@ Describe 'Candidate manifest and archive identity' {
         $script:modulePath = Join-Path $output 'CandidateSample'
         $null = New-Item -Path $modulePath -ItemType Directory -Force
         $script:manifestPath = Join-Path $modulePath 'CandidateSample.psd1'
-        New-ModuleManifest -Path $manifestPath -RootModule CandidateSample.psm1 -ModuleVersion 0.3.0 -Prerelease alpha0001 -ReleaseNotes 'Candidate notes'
+        Set-Content $manifestPath @'
+@{
+    RootModule = 'CandidateSample.psm1'
+    ModuleVersion = '0.3.0'
+    GUID = '709414af-5850-4148-bb7b-7cf7b68c2f31'
+    FunctionsToExport = '*'
+    PrivateData = @{ PSData = @{ Prerelease = 'alpha0001'; ReleaseNotes = 'Candidate notes' } }
+}
+'@
         Set-Content (Join-Path $modulePath 'CandidateSample.psm1') 'function Get-CandidateSample { "candidate" }'
         $script:packagePath = New-AtlassianPSModulePackage -BuildOutputPath $output -ModuleName CandidateSample
     }
@@ -92,6 +100,7 @@ Describe 'Candidate planning' {
             throw "Unexpected git invocation: $args"
         }
         function gh { throw "Candidate planning must not generate merged-PR fragments: $args" }
+        Mock Find-Module { @() }
     }
     AfterEach {
         foreach ($name in $savedEnvironment.Keys) {
@@ -111,6 +120,16 @@ Describe 'Candidate planning' {
         $env:RELEASE_CHANNEL = 'stable'
         & $planner
         Get-Content $env:GITHUB_OUTPUT -Raw | Should -Match '(?m)^release_tag=v0.3.0$'
+    }
+
+    It 'skips Gallery candidates published without a Git tag by temporary tooling' {
+        Mock Find-Module {
+            [PSCustomObject]@{ Version = '0.2.11-beta0001' }
+            [PSCustomObject]@{ Version = '0.3.0-alpha0005' }
+        }
+        & $planner
+        Get-Content $env:GITHUB_OUTPUT -Raw | Should -Match 'release_tag=v0.3.0-alpha0006'
+        Should -Invoke Find-Module -Times 1 -Exactly -ParameterFilter { $AllVersions -and $AllowPrerelease -and $Repository -eq 'PSGallery' }
     }
 
     It 'does not allow alpha after a beta at the same base' {
