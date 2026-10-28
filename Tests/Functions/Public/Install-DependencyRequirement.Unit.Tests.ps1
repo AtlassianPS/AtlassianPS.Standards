@@ -2,10 +2,112 @@
 
 BeforeAll {
     . "$PSScriptRoot/../../Helpers/TestTools.ps1"
+
     $script:moduleToTest = Initialize-TestEnvironment
 }
 
 Describe 'Install-DependencyRequirement' {
+    It 'honors a numeric minimum and maximum without opting into prereleases' {
+        $buildRequirementsPath = Join-Path $TestDrive 'ranges.psd1'
+        $manifestPath = Join-Path $TestDrive 'range-module.psd1'
+
+        Set-Content $buildRequirementsPath '@(@{ ModuleName = "Sample"; RequiredVersion = "0.3.0" })'
+        Set-Content $manifestPath '@{ RequiredModules = @(@{ ModuleName = "Sample"; ModuleVersion = "0.3.0"; MaximumVersion = "0.999" }) }'
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            Build    = $buildRequirementsPath
+            Manifest = $manifestPath
+        } {
+            param($Build, $Manifest)
+
+            Mock Get-PSRepository { @{ Name = 'PSGallery' } }
+            Mock Get-Module {
+                @(
+                    [PSCustomObject]@{ Version = [Version]'0.2.0' },
+                    [PSCustomObject]@{ Version = [Version]'1.0.0' },
+                    [PSCustomObject]@{
+                        Version     = [Version]'0.3.0'
+                        PrivateData = @{
+                            PSData = @{
+                                Prerelease = 'alpha0001'
+                            }
+                        }
+                    }
+                )
+            }
+            Mock Install-Module { }
+
+            $result = Install-DependencyRequirement -BuildRequirementsPath $Build -ManifestPath $Manifest
+
+            $result.InstalledCount | Should -Be 1
+            Should -Invoke Install-Module -Times 1 -Exactly -ParameterFilter {
+                $MinimumVersion -eq '0.3.0' -and
+                $MaximumVersion -eq '0.999' -and
+                -not $AllowPrerelease -and
+                -not $RequiredVersion
+            }
+        }
+    }
+
+    It 'accepts a stable version anywhere within the supported range' {
+        $buildRequirementsPath = Join-Path $TestDrive 'installed-range.psd1'
+        $manifestPath = Join-Path $TestDrive 'installed-range-module.psd1'
+
+        Set-Content $buildRequirementsPath '@(@{ ModuleName = "Sample"; RequiredVersion = "0.3.0" })'
+        Set-Content $manifestPath '@{ RequiredModules = @(@{ ModuleName = "Sample"; ModuleVersion = "0.3.0"; MaximumVersion = "0.*" }) }'
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            Build    = $buildRequirementsPath
+            Manifest = $manifestPath
+        } {
+            param($Build, $Manifest)
+
+            Mock Get-PSRepository { @{ Name = 'PSGallery' } }
+            Mock Get-Module { [PSCustomObject]@{ Version = [Version]'0.4.0' } }
+            Mock Install-Module { }
+
+            $result = Install-DependencyRequirement -BuildRequirementsPath $Build -ManifestPath $Manifest
+
+            $result.AlreadyPresentCount | Should -Be 1
+            Should -Invoke Install-Module -Times 0 -Exactly
+        }
+    }
+
+    It 'explicit candidates cannot be satisfied by an already installed stable version' {
+        $buildRequirementsPath = Join-Path $TestDrive 'candidate.psd1'
+        $manifestPath = Join-Path $TestDrive 'candidate-module.psd1'
+
+        Set-Content $buildRequirementsPath '@(@{ ModuleName = "Sample"; RequiredVersion = "0.3.0" })'
+        Set-Content $manifestPath '@{ RequiredModules = @(@{ ModuleName = "Sample"; ModuleVersion = "0.3.0"; MaximumVersion = "0.*" }) }'
+
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            Build    = $buildRequirementsPath
+            Manifest = $manifestPath
+        } {
+            param($Build, $Manifest)
+
+            Mock Get-PSRepository { @{ Name = 'PSGallery' } }
+            Mock Get-Module { [PSCustomObject]@{ Version = [Version]'0.3.0' } }
+            Mock Install-Module { }
+            Mock Install-ModuleCandidate { }
+
+            $null = Install-DependencyRequirement -BuildRequirementsPath $Build -ManifestPath $Manifest -CandidateRequirement @{
+                ModuleName      = 'Sample'
+                RequiredVersion = '0.3.0-alpha0002'
+            }
+
+            Should -Invoke Install-ModuleCandidate -Times 1 -Exactly -ParameterFilter { $RequiredVersion -eq '0.3.0-alpha0002' }
+            Should -Invoke Install-Module -Times 0 -Exactly
+
+            {
+                Install-DependencyRequirement -BuildRequirementsPath $Build -ManifestPath $Manifest -CandidateRequirement @{
+                    ModuleName      = 'Sample'
+                    RequiredVersion = '1.0.0-alpha0001'
+                }
+            } | Should -Throw -ExpectedMessage '*outside the declared numeric dependency bounds*'
+        }
+    }
+
     It 'is exported by the module' {
         $command = Get-Command -Name 'Install-AtlassianPSDependencyRequirement' -ErrorAction SilentlyContinue
         $command | Should -Not -BeNullOrEmpty

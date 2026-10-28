@@ -33,6 +33,25 @@ on:
         required: false
         default: ''
         type: string
+      planned-release-version:
+        description: Exact alpha or beta calculated by the protected release planner.
+        required: false
+        default: ''
+        type: string
+      source-commit:
+        description: Immutable module commit resolved by the prerelease planner.
+        required: false
+        default: ''
+        type: string
+      module-name:
+        description: Module name for a planned alpha or beta artifact.
+        required: false
+        default: ''
+        type: string
+
+    secrets:
+      ATLASSIAN_CLOUD_PAT:
+        required: false
 
 permissions:
   contents: read
@@ -101,12 +120,48 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-commit }}
 
       - name: Lint GitHub Actions
         if: inputs.build-profile == 'jiraps'
         uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
 
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@347ded1033c302cf6dbbd8c614aefe2477121ab0 # v0.4.0
+
+      - name: Checkout candidate implementation
+        if: inputs.planned-release-version != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .candidate-workflow
+          persist-credentials: false
+
+      - name: Validate candidate context
+        if: inputs.planned-release-version != ''
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.planned-release-version }}
+          MODULE_NAME: ${{ inputs.module-name }}
+        run: |
+          if ('${{ github.event_name }}' -ne 'workflow_dispatch' -or '${{ github.ref }}' -ne 'refs/heads/master') {
+            throw 'Candidates require a manual dispatch from protected master.'
+          }
+
+          if (
+              $env:RELEASE_VERSION -cnotmatch '^v\d+\.\d+\.\d+-(alpha|beta)\d{4}$' -or
+              $env:MODULE_NAME -notmatch '^[A-Za-z][A-Za-z0-9.]*$'
+          ) {
+            throw 'Invalid planned candidate version or module name.'
+          }
+
+      - name: Prepare candidate notes in the disposable CI checkout
+        id: candidate_notes
+        if: inputs.planned-release-version != ''
+        uses: ./.candidate-workflow/.github/actions/prepare-release-changelog
+        with:
+          release-version: ${{ inputs.planned-release-version }}
 
       - name: Build module
         if: inputs.build-profile == 'standard'
@@ -120,9 +175,11 @@ jobs:
           Invoke-Build -Task Clean, TestPublish
         shell: pwsh
 
-      - name: Resolve release build
+      - name: Resolve stable release build
         id: release
-        if: inputs.release-candidate && github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: >-
+          inputs.release-candidate && inputs.planned-release-version == '' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/master'
         shell: pwsh
         env:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
@@ -145,6 +202,30 @@ jobs:
           Invoke-Build -Task VerifyReleaseArtifact -VersionToPublish ${{ steps.release.outputs.tag }}
         shell: pwsh
 
+      - name: Stamp and validate the full candidate artifact
+        if: inputs.planned-release-version != ''
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.planned-release-version }}
+          MODULE_NAME: ${{ inputs.module-name }}
+          RELEASE_NOTES_PATH: ${{ steps.candidate_notes.outputs.release_notes_path }}
+        run: |
+          . ./.candidate-workflow/AtlassianPS.Standards/Public/Test-ModulePackage.ps1
+
+          Invoke-Build -Task SetVersion -VersionToPublish $env:RELEASE_VERSION
+          Invoke-Build -Task Package
+
+          $artifact = Test-ModulePackage -BuildOutputPath ./Release -ModuleName $env:MODULE_NAME -ExpectedVersion $env:RELEASE_VERSION -RequireReleaseNotes
+          Copy-Item -LiteralPath $env:RELEASE_NOTES_PATH -Destination ./Release/release-notes.md
+
+          @{
+            ModuleName     = $env:MODULE_NAME
+            FullVersion    = $artifact.FullVersion
+            SourceCommit   = '${{ inputs.source-commit || github.sha }}'
+            WorkflowCommit = '${{ job.workflow_sha }}'
+            PackageSha256  = (Get-FileHash $artifact.PackagePath -Algorithm SHA256).Hash
+          } | ConvertTo-Json | Set-Content ./Release/candidate-ledger.json
+
       - name: Upload build artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -161,6 +242,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-commit }}
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@347ded1033c302cf6dbbd8c614aefe2477121ab0 # v0.4.0
         with:
           ps-version: "5"
@@ -176,6 +259,20 @@ jobs:
         run: |
           ./Tools/setup.ps1
           Invoke-Build -Task ShowDebugInfo
+
+      - name: Checkout candidate acquisition checks
+        if: inputs.planned-release-version != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .candidate-workflow
+          persist-credentials: false
+
+      - name: Acquire and load exact candidate in fresh Windows PowerShell
+        if: inputs.planned-release-version != ''
+        shell: powershell
+        run: '& ./.candidate-workflow/Tools/Test-CandidateAcquisition.ps1 -ArtifactPath ./Release'
 
       - run: Invoke-Build -Task Test
         shell: powershell
@@ -202,6 +299,8 @@ jobs:
           - { os: macos-latest, name: "macOS" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-commit }}
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@347ded1033c302cf6dbbd8c614aefe2477121ab0 # v0.4.0
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
@@ -220,6 +319,20 @@ jobs:
           else {
             Invoke-Build -Task Test
           }
+
+      - name: Checkout candidate acquisition checks
+        if: inputs.planned-release-version != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .candidate-workflow
+          persist-credentials: false
+
+      - name: Acquire and load exact candidate in fresh PowerShell 7
+        if: inputs.planned-release-version != ''
+        shell: pwsh
+        run: '& ./.candidate-workflow/Tools/Test-CandidateAcquisition.ps1 -ArtifactPath ./Release'
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
@@ -255,9 +368,25 @@ jobs:
       JIRA_TEST_VERSION: ${{ vars.JIRA_TEST_VERSION }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-commit }}
       - uses: AtlassianPS/AtlassianPS.Standards/.github/actions/setup-powershell@347ded1033c302cf6dbbd8c614aefe2477121ab0 # v0.4.0
 
+      - name: Download final candidate for smoke tests
+        if: inputs.planned-release-version != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: Release
+          path: ./Release/
+          digest-mismatch: error
+
+      - name: Run candidate smoke tests against the built module
+        if: inputs.planned-release-version != ''
+        run: Invoke-Build -Task TestIntegration -IntegrationTestPath './Release/Tests/Integration' -Tag 'Smoke' -PesterVerbosity Detailed
+        shell: pwsh
+
       - run: Invoke-Build -Task TestIntegration -Tag 'Smoke' -PesterVerbosity Detailed
+        if: inputs.planned-release-version == ''
         shell: pwsh
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
