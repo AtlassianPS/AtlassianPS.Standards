@@ -158,10 +158,9 @@ Describe 'Prerelease branch source' {
         $script:defaultCommit = git -C $root rev-parse HEAD
         $script:repository = Join-Path $TestDrive 'source-repository'
         $null = git init --quiet $repository
+        $null = git -C $repository symbolic-ref HEAD refs/heads/unavailable-workflow-branch
         $null = git -C $repository fetch --quiet --depth=1 --no-tags $root "${defaultCommit}:refs/heads/master" "${defaultCommit}:refs/remotes/origin/feature/shared-sessions"
         if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the prerelease source fixture.' }
-        $null = git -C $repository symbolic-ref HEAD refs/heads/master
-        if ($LASTEXITCODE -ne 0) { throw 'Could not create the prerelease source fixture.' }
     }
     BeforeEach {
         $script:savedEnvironment = @{}
