@@ -68,6 +68,10 @@ It computes the next semantic version from reviewed `release:*` intent, prepares
 Secretless CI stamps and packages the `Release` artifact before the platform tests consume it. The publishing job downloads that immutable artifact from the exact successful CI run and publishes its module directory with `Publish-Module`, without checking out or rebuilding repository code.
 Release workflows read the organization variable `ATLASSIANPS_RELEASE_APP_CLIENT_ID` and the organization secrets `ATLASSIANPS_RELEASE_APP_PRIVATE_KEY`, `PSGALLERY_API_KEY`, and `HOMEPAGE_PAT`.
 
+A manual dispatch of `Continuous Release` from `master` can also publish an `alpha` or `beta` candidate.
+Set `prerelease_branch` to package another branch; builds, tests, and the release tag use one resolved commit.
+See [`docs/ReleaseBlueprint.md`](docs/ReleaseBlueprint.md) for the full candidate flow.
+
 The continuous release workflow will:
 
 1. Build, test, stamp, package, and validate the release candidate without publishing credentials.

@@ -7,6 +7,13 @@ inputs:
   release-impact:
     description: Optional manual release impact for releasing unreleased changes already on the checked-out branch.
     required: false
+  release-channel:
+    description: Explicit stable, alpha, or beta channel. Candidates require manual impact.
+    default: stable
+    required: false
+  major-authorization:
+    description: Fresh human confirmation, formatted as owner/repository vMAJOR.
+    required: false
 outputs:
   should_release:
     description: Whether pending merged changes require a release.
@@ -25,4 +32,6 @@ runs:
         GITHUB_REPOSITORY: ${{ github.repository }}
         COMMIT_SHA: ${{ inputs.commit-sha || github.sha }}
         RELEASE_IMPACT: ${{ inputs.release-impact }}
+        RELEASE_CHANNEL: ${{ inputs.release-channel }}
+        MAJOR_AUTHORIZATION: ${{ inputs.major-authorization }}
       run: ${{ github.action_path }}/plan-merged-release.ps1

@@ -4,8 +4,9 @@ Installs required module dependencies for AtlassianPS standards workflows.
 
 .DESCRIPTION
 Reads dependency requirements from the build requirements data file and the
-module manifest, normalizes entries to ModuleName/RequiredVersion pairs, and
-installs any missing versions from PSGallery for the current user.
+module manifest, normalizes entries to an exact RequiredVersion or a
+ModuleVersion/MaximumVersion range, and installs any missing stable versions
+from PSGallery for the current user.
 
 .PARAMETER BuildRequirementsPath
 Path to the build requirements data file (for example, Tools/build.requirements.psd1).
@@ -81,16 +82,19 @@ function Install-DependencyRequirement {
         }
 
         $requiredVersion = Get-RequirementValue -Requirement $Requirement -Name 'RequiredVersion'
-        if (-not $requiredVersion) {
-            $requiredVersion = Get-RequirementValue -Requirement $Requirement -Name 'ModuleVersion'
-        }
-        if (-not $requiredVersion) {
+        $minimumVersion = Get-RequirementValue -Requirement $Requirement -Name 'ModuleVersion'
+        # Install-Module rejects manifest wildcards such as 1.*.
+        $maximumVersion = (Get-RequirementValue -Requirement $Requirement -Name 'MaximumVersion') -replace '\*$', [Int]::MaxValue
+
+        if (-not $requiredVersion -and -not $minimumVersion) {
             throw "Module requirement '$moduleName' in '$SourcePath' must specify RequiredVersion or ModuleVersion."
         }
 
         return [PSCustomObject]@{
             ModuleName      = $moduleName
             RequiredVersion = $requiredVersion
+            MinimumVersion  = $minimumVersion
+            MaximumVersion  = $maximumVersion
         }
     }
 
@@ -175,7 +179,13 @@ function Install-DependencyRequirement {
         $requiredVersion = [string]$requirement.RequiredVersion
 
         $installedModule = Get-Module -Name $moduleName -ListAvailable |
-            Where-Object { $_.Version.ToString() -eq $requiredVersion } |
+            Where-Object {
+                -not $_.PrivateData.PSData.Prerelease -and
+                (-not $requiredVersion -or $_.Version -eq [Version]$requiredVersion) -and
+                (-not $requirement.MinimumVersion -or $_.Version -ge [Version]$requirement.MinimumVersion) -and
+                (-not $requirement.MaximumVersion -or $_.Version -le [Version]$requirement.MaximumVersion)
+            } |
+            Sort-Object -Property Version -Descending |
             Select-Object -First 1
 
         if ($installedModule) {
@@ -186,13 +196,23 @@ function Install-DependencyRequirement {
 
         if ($PSCmdlet.ShouldProcess("$moduleName $requiredVersion", 'Install module dependency')) {
             Write-Verbose "Installing dependency '$moduleName' $requiredVersion."
-            Install-Module -Name $moduleName `
-                -RequiredVersion $requiredVersion `
-                -Scope CurrentUser `
-                -Repository 'PSGallery' `
-                -SkipPublisherCheck `
-                -AllowClobber `
-                -Force
+            $installParameters = @{
+                Name               = $moduleName
+                Scope              = 'CurrentUser'
+                Repository         = 'PSGallery'
+                SkipPublisherCheck = $true
+                AllowClobber       = $true
+                Force              = $true
+                ErrorAction        = 'Stop'
+            }
+
+            if ($requiredVersion) { $installParameters.RequiredVersion = $requiredVersion }
+            else {
+                $installParameters.MinimumVersion = $requirement.MinimumVersion
+                if ($requirement.MaximumVersion) { $installParameters.MaximumVersion = $requirement.MaximumVersion }
+            }
+
+            Install-Module @installParameters
             $installedCount++
         }
     }

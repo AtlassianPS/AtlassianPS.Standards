@@ -17,6 +17,22 @@ Consumers call commands with the prefixed names, for example `Test-AtlassianPSMo
 | Test bootstrap | `Resolve-ProjectRoot`, `Resolve-ModuleSource`, `Initialize-ModuleTestEnvironment` | Resolve repository/module paths and import the module under test for Pester. |
 | Environment loading | `Import-DotEnvFile` | Load `.env` values into process-scoped environment variables without emitting secret values. |
 
+`Test-ModulePackage -ExpectedVersion` accepts a full version including its exact prerelease label.
+It compares numeric versions, labels, notes, and every archived file against the built directory.
+`RequireReleaseNotes` rejects empty candidate notes.
+The result includes numeric `Version` and exact `FullVersion`.
+
+`Install-DependencyRequirement` treats `ModuleVersion` as a minimum and honors `MaximumVersion`, including wildcards such as `0.*`.
+It has no prerelease opt-in and ignores installed prereleases when checking whether a requirement is already satisfied.
+
+`Tools/Test-CandidateAcquisition.ps1` checks a local candidate artifact, an exact Gallery candidate, or ordinary stable acquisition, each in a fresh child process.
+Each check verifies the full version and the loaded path.
+
+The release workflow accepts `prerelease-branch` for alpha/beta source selection.
+It resolves the branch once and passes `source-commit` to shared CI, which checks out that commit for builds and tests and records it in `candidate-ledger.json`.
+The release tag targets the same commit.
+Dispatch remains on `master`, preserving the existing release environment restriction.
+
 ## Readable Build Task Example
 
 Prefer explicit task dependencies and concrete helper calls over a generic build wrapper.
