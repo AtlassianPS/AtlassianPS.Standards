@@ -59,7 +59,6 @@ try {
             $parameters.ModuleName = $ledger.ModuleName
             $parameters.RequiredVersion = $ledger.FullVersion
             $parameters.PackagePath = Join-Path $ArtifactPath "$($ledger.ModuleName).zip"
-            $parameters.PackageSha256 = $ledger.PackageSha256
         }
         else {
             $parameters.ModuleName = $ModuleName

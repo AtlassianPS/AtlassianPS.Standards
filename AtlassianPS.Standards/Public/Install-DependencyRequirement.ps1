@@ -83,14 +83,8 @@ function Install-DependencyRequirement {
 
         $requiredVersion = Get-RequirementValue -Requirement $Requirement -Name 'RequiredVersion'
         $minimumVersion = Get-RequirementValue -Requirement $Requirement -Name 'ModuleVersion'
-        $maximumVersion = Get-RequirementValue -Requirement $Requirement -Name 'MaximumVersion'
-
-        if ($maximumVersion -match '^(?<prefix>\d+(?:\.\d+){0,2})\.\*$') {
-            $maximumParts = @($Matches.prefix.Split('.'))
-            while ($maximumParts.Count -lt 4) { $maximumParts += [Int]::MaxValue.ToString() }
-
-            $maximumVersion = $maximumParts -join '.'
-        }
+        # Install-Module rejects manifest wildcards such as 1.*.
+        $maximumVersion = (Get-RequirementValue -Requirement $Requirement -Name 'MaximumVersion') -replace '\*$', [Int]::MaxValue
 
         if (-not $requiredVersion -and -not $minimumVersion) {
             throw "Module requirement '$moduleName' in '$SourcePath' must specify RequiredVersion or ModuleVersion."

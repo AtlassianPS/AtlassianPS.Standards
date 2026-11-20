@@ -44,7 +44,7 @@ If guidance conflicts, follow this file first.
 - Run manual release dispatches from `master` only; operators choose the impact and optional alpha/beta source branch, never the final version or source commit.
 - Resolve `prerelease-branch` to one immutable commit for all candidate builds, tests, ledgers, and tags. Stable releases reject this input and remain on `master`.
 - Alpha/beta dispatches use the shared CI route with disposable candidate notes. Dependency provisioning stays stable-only.
-- Major-base candidates require the same fresh human authorization as stable majors, entered as `owner/repository vMAJOR`. Retire temporary consumer tooling only after replacement integration tests and the stable prerequisite pass.
+- Major-base candidates require the same fresh human authorization as stable majors, entered as `owner/repository vMAJOR`.
 - Never trigger or enable a major release without fresh, explicit human confirmation that names the repository and intended major version. A `release:major` label, breaking-change notes, a merged pull request, inferred Semantic Versioning, or a general request to continue is not authorization.
 - Candidate CI must create the final validated module directory and release archive without publishing secrets. The publish job downloads the immutable artifact from the exact successful CI run and promotes it without checking out repository code.
 - Keep shared CI and release jobs bounded with explicit timeouts, and retain build and test artifacts for 14 days.

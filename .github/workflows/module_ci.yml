@@ -163,6 +163,12 @@ jobs:
         with:
           release-version: ${{ inputs.planned-release-version }}
 
+      # Repository lint and style tests scan the whole workspace.
+      - name: Move candidate implementation out of the workspace
+        if: inputs.planned-release-version != ''
+        shell: pwsh
+        run: Move-Item -LiteralPath ./.candidate-workflow -Destination "$env:RUNNER_TEMP/candidate-workflow"
+
       - name: Build module
         if: inputs.build-profile == 'standard'
         run: Invoke-Build -Task Lint, Build
@@ -209,8 +215,10 @@ jobs:
           RELEASE_VERSION: ${{ inputs.planned-release-version }}
           MODULE_NAME: ${{ inputs.module-name }}
           RELEASE_NOTES_PATH: ${{ steps.candidate_notes.outputs.release_notes_path }}
+          SOURCE_COMMIT: ${{ inputs.source-commit || github.sha }}
+          WORKFLOW_COMMIT: ${{ job.workflow_sha }}
         run: |
-          . ./.candidate-workflow/AtlassianPS.Standards/Public/Test-ModulePackage.ps1
+          . "$env:RUNNER_TEMP/candidate-workflow/AtlassianPS.Standards/Public/Test-ModulePackage.ps1"
 
           Invoke-Build -Task SetVersion -VersionToPublish $env:RELEASE_VERSION
           Invoke-Build -Task Package
@@ -221,9 +229,8 @@ jobs:
           @{
             ModuleName     = $env:MODULE_NAME
             FullVersion    = $artifact.FullVersion
-            SourceCommit   = '${{ inputs.source-commit || github.sha }}'
-            WorkflowCommit = '${{ job.workflow_sha }}'
-            PackageSha256  = (Get-FileHash $artifact.PackagePath -Algorithm SHA256).Hash
+            SourceCommit   = $env:SOURCE_COMMIT
+            WorkflowCommit = $env:WORKFLOW_COMMIT
           } | ConvertTo-Json | Set-Content ./Release/candidate-ledger.json
 
       - name: Upload build artifact
@@ -260,6 +267,9 @@ jobs:
           ./Tools/setup.ps1
           Invoke-Build -Task ShowDebugInfo
 
+      - run: Invoke-Build -Task Test
+        shell: powershell
+
       - name: Checkout candidate acquisition checks
         if: inputs.planned-release-version != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -273,9 +283,6 @@ jobs:
         if: inputs.planned-release-version != ''
         shell: powershell
         run: '& ./.candidate-workflow/Tools/Test-CandidateAcquisition.ps1 -ArtifactPath ./Release'
-
-      - run: Invoke-Build -Task Test
-        shell: powershell
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()

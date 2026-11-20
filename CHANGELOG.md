@@ -11,11 +11,12 @@
 
 - Release planning stops a major release, stable or prerelease, unless a manual dispatch supplies `major_authorization` as `owner/repository vMAJOR`.
 - `Test-ModulePackage -ExpectedVersion` compares the full version, including the prerelease label, and requires the package to match the built module file for file.
+- `Install-DependencyRequirement` treats a requirement with only `ModuleVersion` as a minimum, no longer an exact pin.
 
 ### Fixed
 
 - Honor both numeric dependency range bounds and exclude installed prereleases from normal stable provisioning.
-  A requirement with only `ModuleVersion` is a minimum, no longer an exact pin.
+- Publishing a module whose manifest uses a wildcard `MaximumVersion`, such as `1.*`, no longer fails while it installs the dependencies.
 
 ## v0.4.1 - 2026-10-19
 

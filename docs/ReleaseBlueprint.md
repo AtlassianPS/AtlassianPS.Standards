@@ -128,12 +128,12 @@ For a release metadata commit, `Release` must contain:
 | `<ModuleName>/` | Validated module directory published to PSGallery |
 | `<ModuleName>.zip` | GitHub release asset |
 | `release-notes.md` | GitHub release body |
-| `candidate-ledger.json` | Alpha/beta full version, source/workflow commits, and archive SHA256 |
+| `candidate-ledger.json` | Alpha/beta module name, full version, and source/workflow commits |
 
 The alpha/beta build prepares a candidate changelog section only in the disposable CI checkout.
 It never pushes metadata or deletes fragments from `master`, so stable planning retains its notes.
 CI verifies the full version, exact label, notes, and every archived file against the built directory before the Windows PS5 and PS7 matrix consumes that artifact.
-Acquisition checks import the hash-verified archive in fresh processes and verify the loaded path and full version.
+Acquisition checks import the archive in fresh processes and verify the loaded path and full version.
 
 The publishing job may use trusted pinned third-party actions and inline deployment commands. It must not
 check out repository contents, invoke the repository build, load local actions, or modify the candidate.
@@ -166,11 +166,14 @@ The shared workflow runs the required build, platform tests and configured smoke
 It uses the existing module name on PSGallery and marks the GitHub release as a prerelease.
 Candidate activity does not trigger the stable metadata-commit route.
 After publication, fresh Windows PowerShell 5.1 and PowerShell 7 processes acquire the exact Gallery candidate with prerelease opt-in and check ordinary stable acquisition.
+If that check fails because PSGallery has not indexed the new version yet, rerun the failed job.
+Candidate and stable runs share one concurrency group, so do not dispatch a candidate while a stable release is in progress.
 
 To package changes before merging, set `prerelease_branch` to a repository branch, for example `feature/shared-sessions`, while dispatching `Continuous Release` from `master`.
 Leave it empty to use `master`.
 Stable releases reject this input.
 The branch must implement the shared build tasks and contain its candidate notes under `Unreleased`.
+The candidate publishes the branch content as it is, so review the branch before you dispatch.
 The workflow resolves the branch once and uses that commit for every build and test checkout, the artifact ledger, and the annotated release tag.
 Moving the branch during CI does not change the candidate.
 Version sequences use repository-wide tags and Gallery versions, so branches share one alpha/beta sequence for each numeric base.
@@ -193,8 +196,6 @@ Setup uses stable acquisition without prerelease opt-in.
 Runtime manifests express numeric compatibility using `ModuleVersion` and `MaximumVersion`.
 Build pins use `RequiredVersion`.
 The shared installer honors both range endpoints and excludes installed prereleases.
-
-The operator chooses an optional prerelease source branch, never the final version or source commit.
 
 ## Identity And Repository Configuration
 

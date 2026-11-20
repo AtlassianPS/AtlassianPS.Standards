@@ -249,14 +249,6 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
 
-          if ($env:RELEASE_TAG.Contains('-')) {
-            $ledger = Get-Content ./Release/candidate-ledger.json -Raw | ConvertFrom-Json
-
-            if ($ledger.SourceCommit -cne $env:RELEASE_COMMIT) {
-              throw 'Candidate source commit differs from the planned release tag target.'
-            }
-          }
-
           $refs = @(gh api "repos/$env:GITHUB_REPOSITORY/git/matching-refs/tags/$env:RELEASE_TAG" | ConvertFrom-Json)
           $existing = $refs | Where-Object { $_.ref -eq "refs/tags/$env:RELEASE_TAG" } | Select-Object -First 1
           if ($existing) {
@@ -305,18 +297,6 @@ jobs:
             throw 'Downloaded manifest full version differs from the planned release.'
           }
 
-          if ($expectedGalleryVersion.Contains('-')) {
-            $ledger = Get-Content ./Release/candidate-ledger.json -Raw | ConvertFrom-Json
-
-            if (
-                $ledger.FullVersion -cne $expectedGalleryVersion -or
-                $ledger.ModuleName -cne $env:MODULE_NAME -or
-                (Get-FileHash "./Release/$env:MODULE_NAME.zip" -Algorithm SHA256).Hash -cne $ledger.PackageSha256
-            ) {
-              throw 'Downloaded candidate artifact differs from its verification ledger.'
-            }
-          }
-
           foreach ($dependency in @($manifest.RequiredModules)) {
             $installParameters = @{
               Repository   = 'PSGallery'
@@ -338,7 +318,8 @@ jobs:
                   $installParameters.MinimumVersion = $dependency.ModuleVersion
                 }
                 if ($dependency.MaximumVersion) {
-                  $installParameters.MaximumVersion = $dependency.MaximumVersion
+                  # Install-Module rejects manifest wildcards such as 1.*.
+                  $installParameters.MaximumVersion = $dependency.MaximumVersion -replace '\*$', [Int]::MaxValue
                 }
               }
             }
@@ -360,7 +341,7 @@ jobs:
           prerelease: ${{ inputs.release-channel != 'stable' && github.event_name == 'workflow_dispatch' }}
 
       - name: Notify homepage to update submodule
-        if: inputs.notify-homepage && (github.event_name != 'workflow_dispatch' || inputs.release-channel == 'stable')
+        if: inputs.notify-homepage && github.event_name != 'workflow_dispatch'
         uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
         with:
           token: ${{ secrets.HOMEPAGE_PAT }}

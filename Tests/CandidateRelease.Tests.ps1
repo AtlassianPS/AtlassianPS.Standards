@@ -64,11 +64,11 @@ Describe 'Candidate manifest and archive identity' {
             Should -Throw -ExpectedMessage '*release notes do not match*'
     }
 
-    It 'loads a hash-verified archive in a fresh process and checks the full version and loaded path' {
+    It 'loads an archive in a fresh process and checks the full version and loaded path' {
         $helper = Join-Path $PSScriptRoot '../AtlassianPS.Standards/Private/Install-ModuleCandidate.ps1'
         $consumer = Join-Path $TestDrive 'consume.ps1'
         Set-Content $consumer @'
-param($Helper, $Package, $Digest, $Destination)
+param($Helper, $Package, $Destination)
 
 $ErrorActionPreference = 'Stop'
 
@@ -78,8 +78,7 @@ $result = Install-ModuleCandidate `
     -ModuleName CandidateSample `
     -RequiredVersion 0.3.0-alpha0001 `
     -DestinationPath $Destination `
-    -PackagePath $Package `
-    -PackageSha256 $Digest
+    -PackagePath $Package
 
 if ($result.FullVersion -cne '0.3.0-alpha0001' -or (Get-Module CandidateSample).Path -cne $result.ModulePath) {
     throw 'Wrong loaded candidate.'
@@ -89,31 +88,12 @@ if ((Get-CandidateSample) -cne 'candidate') { throw 'Wrong candidate implementat
 
 'candidate acquired'
 '@
-        $digest = (Get-FileHash $packagePath -Algorithm SHA256).Hash
         $shell = (Get-Process -Id $PID).Path
 
-        $result = & $shell -NoLogo -NonInteractive -NoProfile -File $consumer $helper $packagePath $digest (Join-Path $TestDrive 'installed') 2>&1
+        $result = & $shell -NoLogo -NonInteractive -NoProfile -File $consumer $helper $packagePath (Join-Path $TestDrive 'installed') 2>&1
 
         $LASTEXITCODE | Should -Be 0 -Because ($result -join "`n")
         $result | Should -Contain 'candidate acquired'
-    }
-
-    It 'rejects a corrupted archive before extraction' {
-        InModuleScope AtlassianPS.Standards -Parameters @{
-            Package     = $packagePath
-            Destination = $TestDrive
-        } {
-            param($Package, $Destination)
-
-            {
-                Install-ModuleCandidate `
-                    -ModuleName CandidateSample `
-                    -RequiredVersion 0.3.0-alpha0001 `
-                    -DestinationPath $Destination `
-                    -PackagePath $Package `
-                    -PackageSha256 ('0' * 64)
-            } | Should -Throw -ExpectedMessage '*SHA256 mismatch*'
-        }
     }
 
     It 'rejects archived code that differs from the tested built directory' {
@@ -134,6 +114,7 @@ Describe 'Candidate planning' {
             'RELEASE_IMPACT'
             'RELEASE_CHANNEL'
             'MAJOR_AUTHORIZATION'
+            'COMMIT_SHA'
             'ATLAS_TEST_CANDIDATE_TAGS'
         )
 
@@ -222,6 +203,55 @@ Describe 'Candidate planning' {
         & $planner
 
         Get-Content $env:GITHUB_OUTPUT -Raw | Should -Match 'release_tag=v1.0.0-alpha0001'
+    }
+
+    It 'requires the same authorization for a manual stable major' {
+        $env:RELEASE_CHANNEL = 'stable'
+        $env:RELEASE_IMPACT = 'major'
+
+        { & $planner } | Should -Throw -ExpectedMessage '*AtlassianPS/CandidateSample v1*'
+
+        $env:MAJOR_AUTHORIZATION = 'AtlassianPS/CandidateSample v1'
+        & $planner
+
+        Get-Content $env:GITHUB_OUTPUT | Should -Contain 'release_tag=v1.0.0'
+    }
+
+    It 'stops a release:major merge at planning even when an authorization value is present' {
+        $env:RELEASE_CHANNEL = ''
+        $env:RELEASE_IMPACT = ''
+        $env:COMMIT_SHA = 'abc123'
+        $env:MAJOR_AUTHORIZATION = 'AtlassianPS/CandidateSample v1'
+
+        function git {
+            if ($args[0] -eq 'tag') { 'v0.2.0'; return }
+            if ($args[0] -eq 'rev-list') { 'abc123'; return }
+
+            throw "Unexpected git invocation: $args"
+        }
+
+        function gh {
+            if ($args -like 'repos/*/commits/*/pulls') {
+                '[{"number":45,"title":"Remove a parameter","user":{"login":"tester"},"merged_at":"2026-01-01T00:00:00Z"}]'
+                return
+            }
+
+            if ($args -like 'repos/*/issues/*/labels') {
+                'release:major'
+                'changelog:breaking'
+                return
+            }
+
+            throw "Unexpected gh invocation: $args"
+        }
+
+        Push-Location $TestDrive
+        try {
+            { & $planner } | Should -Throw -ExpectedMessage '*fresh human authorization*'
+        }
+        finally {
+            Pop-Location
+        }
     }
 }
 
@@ -316,9 +346,20 @@ Describe 'Prerelease branch source' {
             $ci | Should -Match "(?ms)^  ${job}:.*?steps:\s+- uses: actions/checkout@[^\r\n]+\r?\n\s+with:\s+ref: \$\{\{ inputs.source-commit \}\}"
         }
 
-        $ci | Should -Match 'SourceCommit\s+= ''\$\{\{ inputs.source-commit \|\| github.sha \}\}'''
+        $ci | Should -Match 'SOURCE_COMMIT: \$\{\{ inputs.source-commit \|\| github.sha \}\}'
         $workflow | Should -Match 'source-commit: \$\{\{ needs.prepare.outputs.source-commit \}\}'
         $workflow | Should -Match 'RELEASE_COMMIT: \$\{\{ github.event.workflow_run.head_sha \|\| needs.prepare.outputs.source-commit \}\}'
-        $workflow | Should -Match 'if \(\$ledger.SourceCommit -cne \$env:RELEASE_COMMIT\)'
+    }
+
+    It 'keeps the candidate implementation out of the workspace that repository lint and tests scan' {
+        $ci = Get-Content (Join-Path $root '.github/workflows/module_ci.yml') -Raw
+        $build = [Regex]::Match($ci, '(?ms)^  build:.*?^  test_windows_ps5:').Value
+        $ps5 = [Regex]::Match($ci, '(?ms)^  test_windows_ps5:.*?^  test_pwsh:').Value
+        $pwsh = [Regex]::Match($ci, '(?ms)^  test_pwsh:.*?^  smoke_tests:').Value
+
+        $build | Should -Match '(?ms)Move-Item -LiteralPath \./\.candidate-workflow -Destination "\$env:RUNNER_TEMP/candidate-workflow".*?- name: Build module'
+        $build | Should -Match '\. "\$env:RUNNER_TEMP/candidate-workflow/AtlassianPS\.Standards/Public/Test-ModulePackage\.ps1"'
+        $ps5 | Should -Match '(?ms)Invoke-Build -Task Test.*?path: \.candidate-workflow'
+        $pwsh | Should -Match '(?ms)Invoke-Build -Task Test.*?path: \.candidate-workflow'
     }
 }

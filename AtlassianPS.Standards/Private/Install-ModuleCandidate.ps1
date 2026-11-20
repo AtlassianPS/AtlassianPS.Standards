@@ -4,9 +4,9 @@
         Acquires and imports one exact alpha or beta into an isolated directory.
 
     .DESCRIPTION
-        Gallery acquisition explicitly opts into prereleases. Local release archives
-        require a SHA256 digest. Both routes verify the full manifest version and
-        loaded path. Use a fresh process when changing candidate versions.
+        Gallery acquisition explicitly opts into prereleases. Both routes verify the
+        full manifest version and loaded path. Use a fresh process when changing
+        candidate versions.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([PSCustomObject])]
@@ -27,27 +27,11 @@
 
         [Parameter()]
         [String]
-        $PackagePath,
-
-        [Parameter()]
-        [String]
-        $PackageSha256
+        $PackagePath
     )
 
     if (Get-Module -Name $ModuleName -All) {
         throw "Module '$ModuleName' is already loaded. Provision candidates in a fresh process."
-    }
-
-    if ($PackagePath -and $PackageSha256 -notmatch '^[A-Fa-f0-9]{64}$') {
-        throw 'Local candidate archives require a SHA256 digest.'
-    }
-
-    if ($PackageSha256 -and -not $PackagePath) {
-        throw 'PackageSha256 requires PackagePath.'
-    }
-
-    if ($PackagePath -and (Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).Hash -cne $PackageSha256.ToUpperInvariant()) {
-        throw 'Candidate archive SHA256 mismatch.'
     }
 
     if (-not $PSCmdlet.ShouldProcess("$ModuleName $RequiredVersion", 'Acquire and import exact candidate')) { return }

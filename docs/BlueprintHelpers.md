@@ -26,11 +26,11 @@ The result includes numeric `Version` and exact `FullVersion`.
 It has no prerelease opt-in and ignores installed prereleases when checking whether a requirement is already satisfied.
 
 `Tools/Test-CandidateAcquisition.ps1` checks a local candidate artifact, an exact Gallery candidate, or ordinary stable acquisition, each in a fresh child process.
-It uses the private `Install-ModuleCandidate`, which verifies the archive SHA256, the full version, and the loaded path.
+Each check verifies the full version and the loaded path.
 
 The release workflow accepts `prerelease-branch` for alpha/beta source selection.
 It resolves the branch once and passes `source-commit` to shared CI, which checks out that commit for builds and tests and records it in `candidate-ledger.json`.
-The publisher verifies the ledger's source commit before creating the release tag.
+The release tag targets the same commit.
 Dispatch remains on `master`, preserving the existing release environment restriction.
 
 ## Readable Build Task Example

@@ -7,18 +7,22 @@ BeforeAll {
 }
 
 Describe 'Install-DependencyRequirement' {
-    It 'honors a numeric minimum and maximum without opting into prereleases' {
+    It 'honors a numeric minimum and maximum <Maximum> without opting into prereleases' -ForEach @(
+        @{ Maximum = '0.999'; Expected = '0.999' }
+        @{ Maximum = '0.*'; Expected = '0.2147483647' }
+    ) {
         $buildRequirementsPath = Join-Path $TestDrive 'ranges.psd1'
         $manifestPath = Join-Path $TestDrive 'range-module.psd1'
 
         Set-Content $buildRequirementsPath '@(@{ ModuleName = "Sample"; RequiredVersion = "0.3.0" })'
-        Set-Content $manifestPath '@{ RequiredModules = @(@{ ModuleName = "Sample"; ModuleVersion = "0.3.0"; MaximumVersion = "0.999" }) }'
+        Set-Content $manifestPath "@{ RequiredModules = @(@{ ModuleName = 'Sample'; ModuleVersion = '0.3.0'; MaximumVersion = '$Maximum' }) }"
 
         InModuleScope AtlassianPS.Standards -Parameters @{
             Build    = $buildRequirementsPath
             Manifest = $manifestPath
+            Expected = $Expected
         } {
-            param($Build, $Manifest)
+            param($Build, $Manifest, $Expected)
 
             Mock Get-PSRepository { @{ Name = 'PSGallery' } }
             Mock Get-Module {
@@ -42,7 +46,7 @@ Describe 'Install-DependencyRequirement' {
             $result.InstalledCount | Should -Be 1
             Should -Invoke Install-Module -Times 1 -Exactly -ParameterFilter {
                 $MinimumVersion -eq '0.3.0' -and
-                $MaximumVersion -eq '0.999' -and
+                $MaximumVersion -eq $Expected -and
                 -not $AllowPrerelease -and
                 -not $RequiredVersion
             }
