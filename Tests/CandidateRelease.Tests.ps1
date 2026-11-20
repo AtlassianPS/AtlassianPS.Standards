@@ -65,16 +65,16 @@ Describe 'Candidate manifest and archive identity' {
     }
 
     It 'loads a hash-verified archive in a fresh process and checks the full version and loaded path' {
-        $helper = Join-Path $PSScriptRoot '../AtlassianPS.Standards/AtlassianPS.Standards.psd1'
+        $helper = Join-Path $PSScriptRoot '../AtlassianPS.Standards/Private/Install-ModuleCandidate.ps1'
         $consumer = Join-Path $TestDrive 'consume.ps1'
         Set-Content $consumer @'
 param($Helper, $Package, $Digest, $Destination)
 
 $ErrorActionPreference = 'Stop'
 
-Import-Module $Helper -Force -ErrorAction Stop
+. $Helper
 
-$result = Install-AtlassianPSModuleCandidate `
+$result = Install-ModuleCandidate `
     -ModuleName CandidateSample `
     -RequiredVersion 0.3.0-alpha0001 `
     -DestinationPath $Destination `
@@ -99,14 +99,21 @@ if ((Get-CandidateSample) -cne 'candidate') { throw 'Wrong candidate implementat
     }
 
     It 'rejects a corrupted archive before extraction' {
-        {
-            Install-AtlassianPSModuleCandidate `
-                -ModuleName CandidateSample `
-                -RequiredVersion 0.3.0-alpha0001 `
-                -DestinationPath $TestDrive `
-                -PackagePath $packagePath `
-                -PackageSha256 ('0' * 64)
-        } | Should -Throw -ExpectedMessage '*SHA256 mismatch*'
+        InModuleScope AtlassianPS.Standards -Parameters @{
+            Package     = $packagePath
+            Destination = $TestDrive
+        } {
+            param($Package, $Destination)
+
+            {
+                Install-ModuleCandidate `
+                    -ModuleName CandidateSample `
+                    -RequiredVersion 0.3.0-alpha0001 `
+                    -DestinationPath $Destination `
+                    -PackagePath $Package `
+                    -PackageSha256 ('0' * 64)
+            } | Should -Throw -ExpectedMessage '*SHA256 mismatch*'
+        }
     }
 
     It 'rejects archived code that differs from the tested built directory' {

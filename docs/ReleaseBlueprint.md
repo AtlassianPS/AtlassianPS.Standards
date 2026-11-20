@@ -36,16 +36,15 @@ Use one `v`-prefixed three-part version wherever a release is identified.
 | Changelog heading | `## vX.Y.Z - YYYY-MM-DD` | `## v3.0.0 - 2026-05-10` |
 | Module manifest | `X.Y.Z` | `ModuleVersion = '3.0.0'` |
 
-Alpha and beta tags add a fixed-width label, such as `v0.3.0-alpha0001` or
-`v0.3.0-beta0001`. Manifests keep `ModuleVersion = '0.3.0'` and set
-`PrivateData.PSData.Prerelease` to the exact label. The full version is numeric version
-plus label; numeric equality alone cannot identify a candidate.
+Alpha and beta tags add a fixed-width label, such as `v0.3.0-alpha0001` or `v0.3.0-beta0001`.
+Manifests keep `ModuleVersion = '0.3.0'` and set `PrivateData.PSData.Prerelease` to the exact label.
+The full version is numeric version plus label; numeric equality alone cannot identify a candidate.
 
 Ordering is `0.3.0-alpha0001 < 0.3.0-alpha0002 < 0.3.0-beta0001 < 0.3.0`.
-The planner derives the numeric base from the last stable tag and selected impact,
-then increments the chosen channel's four-digit sequence from existing tags and
-published Gallery versions, including untagged versions from temporary tooling.
-After beta starts for a base, continue with beta. Published versions and tags remain immutable.
+The planner derives the numeric base from the last stable tag and selected impact.
+It then increments the chosen channel's four-digit sequence from existing tags and published Gallery versions, including Gallery versions without a tag.
+After beta starts for a base, continue with beta.
+Published versions and tags remain immutable.
 
 `CHANGELOG.md` is the only release-note source. The same version section populates the package manifest
 and GitHub release body. The committed source manifest keeps `ReleaseNotes` empty.
@@ -131,12 +130,10 @@ For a release metadata commit, `Release` must contain:
 | `release-notes.md` | GitHub release body |
 | `candidate-ledger.json` | Alpha/beta full version, source/workflow commits, and archive SHA256 |
 
-The alpha/beta build prepares a candidate changelog section only in the disposable
-CI checkout. It never pushes metadata or deletes fragments from `master`, so stable
-planning retains its notes. CI verifies the full version, exact label, notes, and
-every archived file against the built directory before the Windows PS5 and PS7
-matrix consumes that artifact. Acquisition checks import the hash-verified archive
-in fresh processes and verify the loaded path and full version.
+The alpha/beta build prepares a candidate changelog section only in the disposable CI checkout.
+It never pushes metadata or deletes fragments from `master`, so stable planning retains its notes.
+CI verifies the full version, exact label, notes, and every archived file against the built directory before the Windows PS5 and PS7 matrix consumes that artifact.
+Acquisition checks import the hash-verified archive in fresh processes and verify the loaded path and full version.
 
 The publishing job may use trusted pinned third-party actions and inline deployment commands. It must not
 check out repository contents, invoke the repository build, load local actions, or modify the candidate.
@@ -164,74 +161,38 @@ Manual dispatch handles an unreleased bucket already on `master`; it is not a re
 2. Choose the highest required `release_impact` for the pending changes.
 3. Let the normal metadata-commit, CI-candidate, and promotion flow finish.
 
-Select `release_channel=alpha` or `beta` to test the same pending bucket before stable
-release. The shared workflow runs the required build, platform tests and configured
-smoke tests, then downloads `Release` from that exact run in the protected publisher.
-It uses the existing module name on PSGallery and marks the GitHub release as a
-prerelease. Candidate activity does not trigger the stable metadata-commit route.
-After publication, fresh Windows PowerShell 5.1 and PowerShell 7 processes acquire
-the exact Gallery candidate with prerelease opt-in and check ordinary stable acquisition.
+Select `release_channel=alpha` or `beta` to test the same pending bucket before stable release.
+The shared workflow runs the required build, platform tests and configured smoke tests, then downloads `Release` from that exact run in the protected publisher.
+It uses the existing module name on PSGallery and marks the GitHub release as a prerelease.
+Candidate activity does not trigger the stable metadata-commit route.
+After publication, fresh Windows PowerShell 5.1 and PowerShell 7 processes acquire the exact Gallery candidate with prerelease opt-in and check ordinary stable acquisition.
 
-To package changes before merging, set `prerelease_branch` to a repository branch,
-for example `feature/shared-sessions`, while dispatching `Continuous Release` from
-`master`. Leave it empty to use `master`. Stable releases reject this input.
-The branch must implement the shared build tasks and contain its candidate notes
-under `Unreleased`. The workflow resolves the branch once and uses that commit for
-every build and test checkout, the artifact ledger, and the annotated release tag.
-Moving the branch during CI does not change the candidate. Version sequences use
-repository-wide tags and Gallery versions, so branches share one alpha/beta sequence
-for each numeric base. Merge the changes into `master` before releasing stable.
+To package changes before merging, set `prerelease_branch` to a repository branch, for example `feature/shared-sessions`, while dispatching `Continuous Release` from `master`.
+Leave it empty to use `master`.
+Stable releases reject this input.
+The branch must implement the shared build tasks and contain its candidate notes under `Unreleased`.
+The workflow resolves the branch once and uses that commit for every build and test checkout, the artifact ledger, and the annotated release tag.
+Moving the branch during CI does not change the candidate.
+Version sequences use repository-wide tags and Gallery versions, so branches share one alpha/beta sequence for each numeric base.
+Merge the changes into `master` before releasing stable.
 
-The Gallery matrix uses the same two acquisition steps for both Windows shells,
-each in a fresh child process. Candidate CI reuses the notes file produced during
-changelog preparation instead of extracting that section again for GitHub.
+For a major-base release, including an alpha or beta, enter fresh human confirmation in `major_authorization` as `owner/repository vMAJOR`, for example `AtlassianPS/JiraPS v3`.
+Automatic major intent stops at planning until a human dispatches with that confirmation.
 
-Standards CI also runs these Gallery checks against the published Configuration
-`0.3.0-alpha0002` and its latest stable package on both Windows shells.
-This tests the acquisition helper before a new candidate is published.
+Promote to stable by reviewing candidate results, merging any fixes, and dispatching the same impact with `release_channel=stable`.
+Stable CI builds and validates its own final manifest with an empty prerelease label.
+It does not rename a candidate package.
+For transient failures, rerun only the failed jobs while the original artifact is retained.
+A new dispatch calculates a new candidate after a tag was reserved.
+For a lasting failure, merge a reviewed fix and use that next version; never reuse a tag or PSGallery version.
+Repair a missing GitHub release manually if Gallery already succeeded.
 
-For a major-base release, including an alpha or beta, enter fresh human confirmation
-in `major_authorization` as `owner/repository vMAJOR`, for example
-`AtlassianPS/JiraPS v3`. Automatic major intent stops at planning until a human
-dispatches with that confirmation. Keep JiraPS's existing stable CD guard disabled
-until its separately approved stable rollout is ready.
+## Dependency provisioning
 
-Promote to stable by reviewing candidate results, merging any fixes, and dispatching
-the same impact with `release_channel=stable`. Stable CI builds and validates its own
-final manifest with an empty prerelease label. It does not rename a candidate package.
-For transient failures, rerun only the failed jobs while the original artifact is
-retained. A new dispatch calculates a new candidate after a tag was reserved. For a
-lasting failure, merge a reviewed fix and use that next version; never reuse a tag or
-PSGallery version. Repair a missing GitHub release manually if Gallery already succeeded.
-
-## Exact candidate dependencies
-
-Normal setup uses stable acquisition without prerelease opt-in. Runtime manifests
-express numeric compatibility using `ModuleVersion` and `MaximumVersion`. Build
-pins use `RequiredVersion`. The shared installer honors both range endpoints and
-excludes installed prereleases from stable provisioning.
-
-Explicit candidate provisioning uses a separate full-version selection:
-
-```powershell
-$candidate = @{ ModuleName = 'AtlassianPS.Configuration'; RequiredVersion = '0.3.0-alpha0001' }
-Install-AtlassianPSDependencyRequirement -BuildRequirementsPath ./Tools/build.requirements.psd1 `
-    -ManifestPath ./JiraPS/JiraPS.psd1 -CandidateRequirement $candidate -CandidateRoot ./.tmp/candidates
-```
-
-For a reviewed local release archive, add `PackagePath` and `PackageSha256` to that
-candidate entry. `Install-AtlassianPSModuleCandidate` saves or extracts into a unique
-root, verifies the full version, and imports the exact manifest globally. It adds
-the isolated root to the current process's module path for saved dependencies.
-An already loaded module requires a fresh process. A stable or another candidate
-with the same numeric version cannot satisfy this request. Candidate numeric versions
-must still satisfy the manifest's runtime bounds or an exact build pin.
-
-Adopt the new provisioning parameters only with a released Standards version that
-exports them. The temporary JiraPS/Configuration alpha helpers remain until the
-replacement acquisition and Cloud/Data Center integration tests pass and a compatible
-stable Configuration prerequisite is available. Preserve published packages and their
-verification ledgers during that cleanup; retain disposable configuration storage.
+Setup uses stable acquisition without prerelease opt-in.
+Runtime manifests express numeric compatibility using `ModuleVersion` and `MaximumVersion`.
+Build pins use `RequiredVersion`.
+The shared installer honors both range endpoints and excludes installed prereleases.
 
 The operator chooses an optional prerelease source branch, never the final version or source commit.
 

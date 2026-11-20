@@ -4,8 +4,9 @@ Installs required module dependencies for AtlassianPS standards workflows.
 
 .DESCRIPTION
 Reads dependency requirements from the build requirements data file and the
-module manifest, normalizes entries to ModuleName/RequiredVersion pairs, and
-installs any missing versions from PSGallery for the current user.
+module manifest, normalizes entries to an exact RequiredVersion or a
+ModuleVersion/MaximumVersion range, and installs any missing stable versions
+from PSGallery for the current user.
 
 .PARAMETER BuildRequirementsPath
 Path to the build requirements data file (for example, Tools/build.requirements.psd1).
@@ -25,21 +26,11 @@ function Install-DependencyRequirement {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [String]
-        $BuildRequirementsPath,
+        [String]$BuildRequirementsPath,
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [String]
-        $ManifestPath,
-
-        [Parameter()]
-        [Object[]]
-        $CandidateRequirement = @(),
-
-        [Parameter()]
-        [String]
-        $CandidateRoot = (Join-Path ([IO.Path]::GetTempPath()) 'AtlassianPS-Candidates')
+        [String]$ManifestPath
     )
 
     function Get-RequirementValue {
@@ -47,13 +38,11 @@ function Install-DependencyRequirement {
         [OutputType([String])]
         param(
             [Parameter(Mandatory)]
-            [Object]
-            $Requirement,
+            [Object]$Requirement,
 
             [Parameter(Mandatory)]
             [ValidateNotNullOrEmpty()]
-            [String]
-            $Name
+            [String]$Name
         )
 
         if ($Requirement -is [System.Collections.IDictionary]) {
@@ -76,13 +65,11 @@ function Install-DependencyRequirement {
         [OutputType([PSCustomObject])]
         param(
             [Parameter(Mandatory)]
-            [Object]
-            $Requirement,
+            [Object]$Requirement,
 
             [Parameter(Mandatory)]
             [ValidateNotNullOrEmpty()]
-            [String]
-            $SourcePath
+            [String]$SourcePath
         )
 
         if ($Requirement -is [string]) {
@@ -123,8 +110,7 @@ function Install-DependencyRequirement {
         param(
             [Parameter(Mandatory)]
             [ValidateNotNullOrEmpty()]
-            [String]
-            $Path
+            [String]$Path
         )
 
         $tokens = $null
@@ -168,7 +154,7 @@ function Install-DependencyRequirement {
         throw "Unsupported build requirements format in '$resolvedBuildRequirementsPath'. Use array entries with ModuleName and RequiredVersion."
     }
 
-    $buildRequirementEntries = @($buildRequirementsData.Value)
+    $buildRequirementEntries = if ($buildRequirementsData.Value -is [System.Collections.IDictionary]) { @($buildRequirementsData.Value) } else { @($buildRequirementsData.Value) }
 
     $manifestData = Get-DataFileExpressionValue -Path $resolvedManifestPath
     if ($manifestData.Value -isnot [System.Collections.IDictionary]) {
@@ -178,39 +164,15 @@ function Install-DependencyRequirement {
 
     foreach ($requirementEntry in $buildRequirementEntries) {
         $requirement = ConvertTo-ModuleRequirement -Requirement $requirementEntry -SourcePath $resolvedBuildRequirementsPath
-        $requirementsByName[$requirement.ModuleName] = $requirement
+        $requirementsByName[$requirement.ModuleName.ToLowerInvariant()] = $requirement
     }
 
     foreach ($requirementEntry in @($manifestData.Value['RequiredModules'])) {
         $requirement = ConvertTo-ModuleRequirement -Requirement $requirementEntry -SourcePath $resolvedManifestPath
-        $requirementsByName[$requirement.ModuleName] = $requirement
+        $requirementsByName[$requirement.ModuleName.ToLowerInvariant()] = $requirement
     }
 
-    $requirements = @($requirementsByName.Values)
-    $candidatesByName = @{}
-
-    foreach ($candidate in $CandidateRequirement) {
-        $key = [String]$candidate.ModuleName
-        if (-not $requirementsByName.ContainsKey($key) -or $candidatesByName.ContainsKey($key)) {
-            throw "Candidate '$key' must identify one declared dependency."
-        }
-
-        if ([String]$candidate.RequiredVersion -notmatch '^\d+\.\d+\.\d+-(alpha|beta)\d{4}$') {
-            throw "Candidate '$key' requires an exact alpha or beta version."
-        }
-
-        $numericVersion = [Version]($candidate.RequiredVersion.Split('-')[0])
-        $bounds = $requirementsByName[$key]
-        if (
-            ($bounds.RequiredVersion -and $numericVersion -ne [Version]$bounds.RequiredVersion) -or
-            ($bounds.MinimumVersion -and $numericVersion -lt [Version]$bounds.MinimumVersion) -or
-            ($bounds.MaximumVersion -and $numericVersion -gt [Version]$bounds.MaximumVersion)
-        ) {
-            throw "Candidate '$key' falls outside the declared numeric dependency bounds."
-        }
-
-        $candidatesByName[$key] = $candidate
-    }
+    $requirements = @($requirementsByName.Values | Sort-Object -Property ModuleName)
 
     if (-not (Get-PSRepository -Name 'PSGallery' -ErrorAction SilentlyContinue)) {
         Register-PSRepository -Default
@@ -218,31 +180,9 @@ function Install-DependencyRequirement {
 
     $installedCount = 0
     $alreadyPresentCount = 0
-    $orderedRequirements = $requirements | Sort-Object @{ Expression = { $candidatesByName.ContainsKey($_.ModuleName) } }, ModuleName
-    foreach ($requirement in $orderedRequirements) {
+    foreach ($requirement in $requirements) {
         $moduleName = $requirement.ModuleName
         $requiredVersion = [string]$requirement.RequiredVersion
-        $candidate = $candidatesByName[$moduleName]
-
-        if ($candidate) {
-            if ($PSCmdlet.ShouldProcess("$moduleName $($candidate.RequiredVersion)", 'Provision exact candidate dependency')) {
-                $candidateParameters = @{
-                    ModuleName      = $moduleName
-                    RequiredVersion = $candidate.RequiredVersion
-                    DestinationPath = $CandidateRoot
-                }
-
-                if ($candidate.PackagePath) {
-                    $candidateParameters.PackagePath = $candidate.PackagePath
-                    $candidateParameters.PackageSha256 = $candidate.PackageSha256
-                }
-
-                $null = Install-ModuleCandidate @candidateParameters -ErrorAction Stop
-                $installedCount++
-            }
-
-            continue
-        }
 
         $installedModule = Get-Module -Name $moduleName -ListAvailable |
             Where-Object {

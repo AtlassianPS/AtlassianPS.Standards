@@ -19,7 +19,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-. (Join-Path $PSScriptRoot '../AtlassianPS.Standards/Public/Install-ModuleCandidate.ps1')
+. (Join-Path $PSScriptRoot '../AtlassianPS.Standards/Private/Install-ModuleCandidate.ps1')
 
 $root = Join-Path ([IO.Path]::GetTempPath()) ('candidate-acquisition-' + [Guid]::NewGuid().ToString('N'))
 $savedConfigurationRoot = $env:ATLASSIANPS_CONFIGURATION_ROOT

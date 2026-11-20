@@ -145,7 +145,7 @@ jobs:
           RELEASE_VERSION: ${{ inputs.planned-release-version }}
           MODULE_NAME: ${{ inputs.module-name }}
         run: |
-          if ('${{ github.event_name }}' -ne 'workflow_dispatch' -or '${{ github.ref }}' -ne 'refs/heads/master') {
+          if ($env:GITHUB_EVENT_NAME -ne 'workflow_dispatch' -or $env:GITHUB_REF -ne 'refs/heads/master') {
             throw 'Candidates require a manual dispatch from protected master.'
           }
 

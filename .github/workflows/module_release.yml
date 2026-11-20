@@ -187,7 +187,7 @@ jobs:
       contents: read
     needs: [prepare, candidate_ci]
     if: >-
-      always() &&
+      !cancelled() &&
       ((github.event_name == 'workflow_dispatch' &&
       inputs.release-channel != 'stable' &&
       needs.prepare.result == 'success' &&
@@ -263,12 +263,10 @@ jobs:
             if ($existing.object.type -ne 'tag') {
               throw "Release tag '$env:RELEASE_TAG' must be annotated."
             }
-
             $tagObject = gh api "repos/$env:GITHUB_REPOSITORY/git/tags/$($existing.object.sha)" | ConvertFrom-Json
             if ($tagObject.object.type -ne 'commit' -or $tagObject.object.sha -ne $env:RELEASE_COMMIT) {
               throw "Release tag '$env:RELEASE_TAG' does not identify '$env:RELEASE_COMMIT'."
             }
-
             Write-Host "Release tag '$env:RELEASE_TAG' already identifies the tested candidate."
             return
           }
@@ -327,17 +325,23 @@ jobs:
               AllowClobber = $true
               ErrorAction  = 'Stop'
             }
-
-            if ($dependency -is [String]) { $installParameters.Name = $dependency }
+            if ($dependency -is [String]) {
+              $installParameters.Name = $dependency
+            }
             else {
               $installParameters.Name = $dependency.ModuleName
-              if ($dependency.RequiredVersion) { $installParameters.RequiredVersion = $dependency.RequiredVersion }
+              if ($dependency.RequiredVersion) {
+                $installParameters.RequiredVersion = $dependency.RequiredVersion
+              }
               else {
-                if ($dependency.ModuleVersion) { $installParameters.MinimumVersion = $dependency.ModuleVersion }
-                if ($dependency.MaximumVersion) { $installParameters.MaximumVersion = $dependency.MaximumVersion }
+                if ($dependency.ModuleVersion) {
+                  $installParameters.MinimumVersion = $dependency.ModuleVersion
+                }
+                if ($dependency.MaximumVersion) {
+                  $installParameters.MaximumVersion = $dependency.MaximumVersion
+                }
               }
             }
-
             Install-Module @installParameters
           }
 
