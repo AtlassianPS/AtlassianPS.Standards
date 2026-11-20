@@ -25,7 +25,7 @@
         Require non-empty PrivateData.PSData.ReleaseNotes in both release manifest and package.
 
     .OUTPUTS
-        PSCustomObject with ModulePath, ManifestPath, PackagePath, Name, and Version.
+        PSCustomObject with ModulePath, ManifestPath, PackagePath, Name, Version, and FullVersion.
 
     .EXAMPLE
         Test-AtlassianPSModulePackage -BuildOutputPath './Release' -ModuleName 'JiraPS'
