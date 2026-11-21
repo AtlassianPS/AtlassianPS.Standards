@@ -47,7 +47,8 @@ Ordering is `0.3.0-alpha0001 < 0.3.0-alpha0002 < 0.3.0-beta0001 < 0.3.0`.
 The planner derives the numeric base from the last stable tag and selected impact.
 It then increments the chosen channel's four-digit sequence from existing tags and published Gallery versions, including Gallery versions without a tag.
 Planning stops when the numeric base is not above the latest stable version on PSGallery, usually because that release has no three-part tag.
-Publication checks again before tagging, so a rerun of an old run cannot publish below a newer stable release.
+Publication checks again before tagging, so a rerun of an old run stops when a newer stable version, or a later alpha or beta of the same base, is already published.
+It also stops when PSGallery has the version but the repository has no tag for it, because that package did not come from this route.
 A stable fix can follow a candidate with a higher base, such as `0.2.11` after `0.3.0-alpha0002`.
 Both checks need PSGallery: rerun the failed job after an outage, and publish a new module's first version by hand.
 After beta starts for a base, continue with beta.

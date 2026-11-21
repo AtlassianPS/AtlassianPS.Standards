@@ -219,13 +219,23 @@ jobs:
             $releaseTag = $Matches.tag
           }
 
-          # Publishing uses -Force, so recheck before tagging that no newer stable release appeared since planning.
-          $latestStable = [Version](Find-Module -Name $env:MODULE_NAME -Repository PSGallery -ErrorAction Stop).Version
-          if ($latestStable -gt [Version]$releaseTag.Substring(1).Split('-')[0]) {
-            throw "PSGallery already has $env:MODULE_NAME $latestStable, which is newer than $releaseTag."
+          # Publishing uses -Force so that a stable fix can follow a higher-base alpha or beta.
+          # Recheck before tagging that nothing published since planning supersedes this release:
+          # a newer stable version, or a later alpha or beta of the same base.
+          $fullVersion = $releaseTag.Substring(1)
+          $base, $label = $fullVersion -split '-', 2
+          $published = @(Find-Module -Name $env:MODULE_NAME -Repository PSGallery -AllVersions -AllowPrerelease -ErrorAction Stop | ForEach-Object { [String]$_.Version })
+          foreach ($version in $published) {
+            $otherBase, $otherLabel = $version -split '-', 2
+            $sameBase = [Version]$otherBase -eq [Version]$base
+            $newer = [Version]$otherBase -gt [Version]$base -or ($sameBase -and $label -and (-not $otherLabel -or $otherLabel -gt $label))
+            if ($newer -and ($sameBase -or -not $otherLabel)) {
+              throw "PSGallery already has $env:MODULE_NAME $version, which supersedes $releaseTag."
+            }
           }
 
           "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
+          "already_published=$($published -contains $fullVersion)" >> $env:GITHUB_OUTPUT
 
       - name: Download tested release candidate
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
@@ -251,6 +261,7 @@ jobs:
           GH_TOKEN: ${{ steps.release_app.outputs.token }}
           RELEASE_TAG: ${{ steps.prepared_release.outputs.release_tag }}
           RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || needs.prepare.outputs.source-commit }}
+          ALREADY_PUBLISHED: ${{ steps.prepared_release.outputs.already_published }}
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
@@ -267,6 +278,11 @@ jobs:
             }
             Write-Host "Release tag '$env:RELEASE_TAG' already identifies the tested candidate."
             return
+          }
+
+          # This route tags before publishing, so a published version without its tag came from elsewhere.
+          if ($env:ALREADY_PUBLISHED -eq 'True') {
+            throw "PSGallery already has '$env:RELEASE_TAG' without its release tag; it was not published from this artifact."
           }
 
           $tagObjectSha = gh api -X POST "repos/$env:GITHUB_REPOSITORY/git/tags" -f tag="$env:RELEASE_TAG" -f message="$env:RELEASE_TAG" -f object="$env:RELEASE_COMMIT" -f type=commit --jq .sha

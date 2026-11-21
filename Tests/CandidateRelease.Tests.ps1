@@ -412,3 +412,61 @@ Describe 'Prerelease branch source' {
         $pwsh | Should -Match $restoreBeforeTests
     }
 }
+
+Describe 'Publish preflight' {
+    BeforeAll {
+        $root = Split-Path $PSScriptRoot -Parent
+        $workflow = Get-Content (Join-Path $root '.github/workflows/module_release.yml') -Raw
+        $body = [Regex]::Match($workflow, '(?ms)- name: Resolve prepared release.*?run: \|\r?\n(?<body>.*?)\r?\n\s*- name: Download tested release candidate').Groups['body'].Value
+        $script:preflight = Join-Path $TestDrive 'preflight.ps1'
+        ($body -split '\r?\n' | ForEach-Object { $_ -replace '^ {10}', '' }) -join "`n" | Set-Content $preflight
+    }
+
+    BeforeEach {
+        $script:savedEnvironment = @{}
+        foreach ($name in 'MODULE_NAME', 'PLANNED_CANDIDATE', 'PREPARED_COMMIT_MESSAGE', 'GITHUB_OUTPUT', 'ATLAS_TEST_GALLERY_VERSIONS') {
+            $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+        }
+
+        $env:MODULE_NAME = 'CandidateSample'
+        $env:GITHUB_OUTPUT = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N') + '.txt')
+        $env:ATLAS_TEST_GALLERY_VERSIONS = $Gallery
+        if ($Tag.Contains('-')) {
+            $env:PLANNED_CANDIDATE = $Tag
+            $env:PREPARED_COMMIT_MESSAGE = ''
+        }
+        else {
+            $env:PLANNED_CANDIDATE = ''
+            $env:PREPARED_COMMIT_MESSAGE = "Prepare $Tag release"
+        }
+
+        Mock Find-Module { $env:ATLAS_TEST_GALLERY_VERSIONS -split ';' | ForEach-Object { [PSCustomObject]@{ Version = $_ } } }
+    }
+
+    AfterEach {
+        foreach ($name in $savedEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name])
+        }
+    }
+
+    It 'accepts <Tag> after <Gallery>' -ForEach @(
+        @{ Tag = 'v0.2.11'; Gallery = '0.2.10;0.3.0-alpha0002'; Published = 'False' }
+        @{ Tag = 'v0.2.11'; Gallery = '0.2.10;0.2.11'; Published = 'True' }
+        @{ Tag = 'v0.3.0'; Gallery = '0.2.10;0.3.0-beta0002'; Published = 'False' }
+        @{ Tag = 'v0.2.11-alpha0001'; Gallery = '0.2.10;0.3.0-alpha0002'; Published = 'False' }
+        @{ Tag = 'v0.3.0-alpha0003'; Gallery = '0.2.10;0.3.0-alpha0003'; Published = 'True' }
+    ) {
+        & $preflight
+
+        Get-Content $env:GITHUB_OUTPUT | Should -Be @("release_tag=$Tag", "already_published=$Published")
+    }
+
+    It 'rejects <Tag> after <Gallery>' -ForEach @(
+        @{ Tag = 'v0.2.11'; Gallery = '0.2.10;0.2.12' }
+        @{ Tag = 'v0.3.0-alpha0003'; Gallery = '0.2.10;0.3.0' }
+        @{ Tag = 'v0.3.0-alpha0003'; Gallery = '0.2.10;0.3.0-beta0001' }
+        @{ Tag = 'v0.3.0-alpha0003'; Gallery = '0.2.10;0.4.0' }
+    ) {
+        { & $preflight } | Should -Throw -ExpectedMessage '*supersedes*'
+    }
+}

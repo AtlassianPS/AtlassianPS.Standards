@@ -514,10 +514,11 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $tagIndex | Should -BeGreaterThan -1
         $publishIndex | Should -BeGreaterThan $tagIndex
 
-        # Publish-Module uses -Force, so the latest stable Gallery version is rechecked before tagging.
-        $recheckIndex = $publishWorkflow.IndexOf('$latestStable -gt [Version]$releaseTag')
+        # Publish-Module uses -Force, so the Gallery history is rechecked before tagging.
+        $recheckIndex = $publishWorkflow.IndexOf('which supersedes $releaseTag')
         $recheckIndex | Should -BeGreaterThan -1
         $tagIndex | Should -BeGreaterThan $recheckIndex
+        $publishWorkflow | Should -Match '(?ms)Create annotated release tag.*?already identifies the tested candidate.*?ALREADY_PUBLISHED -eq ''True''.*?git/tags'
 
         $codeOwners = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath 'CODEOWNERS')
         $codeOwners[0] | Should -Match '^\*\s+@atlassianps/maintainers$'
