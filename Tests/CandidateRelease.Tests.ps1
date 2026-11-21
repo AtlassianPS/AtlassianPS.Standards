@@ -399,4 +399,16 @@ Describe 'Prerelease branch source' {
         $ps5 | Should -Match '(?ms)Invoke-Build -Task Test.*?path: \.candidate-workflow'
         $pwsh | Should -Match '(?ms)Invoke-Build -Task Test.*?path: \.candidate-workflow'
     }
+
+    It 'gives every test job the candidate changelog that the stamped manifest version comes from' {
+        $ci = Get-Content (Join-Path $root '.github/workflows/module_ci.yml') -Raw
+        $build = [Regex]::Match($ci, '(?ms)^  build:.*?^  test_windows_ps5:').Value
+        $ps5 = [Regex]::Match($ci, '(?ms)^  test_windows_ps5:.*?^  test_pwsh:').Value
+        $pwsh = [Regex]::Match($ci, '(?ms)^  test_pwsh:.*?^  smoke_tests:').Value
+        $restoreBeforeTests = '(?ms)Copy-Item -LiteralPath \./Release/candidate-changelog\.md -Destination \./CHANGELOG\.md -Force.*?Invoke-Build -Task Test'
+
+        $build | Should -Match 'Copy-Item -LiteralPath \./CHANGELOG\.md -Destination \./Release/candidate-changelog\.md'
+        $ps5 | Should -Match $restoreBeforeTests
+        $pwsh | Should -Match $restoreBeforeTests
+    }
 }

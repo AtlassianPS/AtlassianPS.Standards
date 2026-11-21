@@ -225,6 +225,7 @@ jobs:
 
           $artifact = Test-ModulePackage -BuildOutputPath ./Release -ModuleName $env:MODULE_NAME -ExpectedVersion $env:RELEASE_VERSION -RequireReleaseNotes
           Copy-Item -LiteralPath $env:RELEASE_NOTES_PATH -Destination ./Release/release-notes.md
+          Copy-Item -LiteralPath ./CHANGELOG.md -Destination ./Release/candidate-changelog.md
 
           @{
             ModuleName     = $env:MODULE_NAME
@@ -260,6 +261,12 @@ jobs:
         with:
           name: Release
           path: ./Release/
+
+      # Module build tests compare the changelog with the stamped manifest version.
+      - name: Restore candidate changelog
+        if: inputs.planned-release-version != ''
+        shell: powershell
+        run: Copy-Item -LiteralPath ./Release/candidate-changelog.md -Destination ./CHANGELOG.md -Force
 
       - name: Setup
         shell: powershell
@@ -314,6 +321,12 @@ jobs:
         with:
           name: Release
           path: ./Release/
+
+      # Module build tests compare the changelog with the stamped manifest version.
+      - name: Restore candidate changelog
+        if: inputs.planned-release-version != ''
+        shell: pwsh
+        run: Copy-Item -LiteralPath ./Release/candidate-changelog.md -Destination ./CHANGELOG.md -Force
 
       - name: Run tests
         shell: pwsh

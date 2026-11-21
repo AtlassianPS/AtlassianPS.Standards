@@ -136,6 +136,7 @@ For a release metadata commit, `Release` must contain:
 | `<ModuleName>.zip` | GitHub release asset |
 | `release-notes.md` | GitHub release body |
 | `candidate-ledger.json` | Alpha/beta module name, full version, and source/workflow commits |
+| `candidate-changelog.md` | Alpha/beta changelog that the test jobs restore before the module tests |
 
 The alpha/beta build prepares a candidate changelog section only in the disposable CI checkout.
 It never pushes metadata or deletes fragments from `master`, so stable planning retains its notes.
