@@ -6,6 +6,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $script:projectRoot = Resolve-ProjectRoot
         $script:validateReleaseIntentScriptPath = Join-Path -Path $script:projectRoot -ChildPath '.github/actions/validate-release-intent/validate-release-intent.ps1'
         $script:planMergedReleaseScriptPath = Join-Path -Path $script:projectRoot -ChildPath '.github/actions/plan-merged-release/plan-merged-release.ps1'
+
+        Mock Find-Module { @() }
     }
 
     It 'pins every external workflow dependency to a full commit SHA' {
@@ -460,6 +462,11 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match "workflow_run\.event == 'push'"
         $workflow | Should -Match 'PREPARED_COMMIT_MESSAGE'
 
+        # Only a manual dispatch can choose the impact, channel, or major authorization.
+        foreach ($name in 'release-impact', 'release-channel', 'major-authorization') {
+            $workflow | Should -Match ("{0}: \`$\{{\{{ github\.event_name == 'workflow_dispatch' && inputs\.{0} \|\|" -f $name)
+        }
+
         # The build job stamps the artifact before platform tests consume it. Publishing starts
         # only after the complete CI workflow succeeds.
         $ciWorkflow | Should -Match 'name: Release'
@@ -489,7 +496,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishWorkflow | Should -Match '\$installParameters\.MinimumVersion = \$dependency\.ModuleVersion'
         $publishWorkflow | Should -Match '\$installParameters\.MaximumVersion = \$dependency\.MaximumVersion -replace ''\\\*\$'', \[Int\]::MaxValue'
         $publishWorkflow | Should -Match '(?ms)if \(\$dependency\.ModuleVersion\) \{.*?MinimumVersion.*?\}\s+if \(\$dependency\.MaximumVersion\) \{.*?MaximumVersion'
-        $publishWorkflow | Should -Not -Match '(?m)Publish-Module[^\r\n]*-Force'
+        $publishWorkflow | Should -Match '(?m)Publish-Module[^\r\n]*-Force'
         $publishWorkflow | Should -Not -Match 'Publish-PSResource|Find-PSResource|nupkg|gallery_package_path'
         $workflow | Should -Match '(?ms)prepare:.*?permissions:\s+contents: read\s+issues: read\s+pull-requests: read'
         $publishWorkflow | Should -Match '(?ms)permissions:\s+actions: read\s+contents: read'

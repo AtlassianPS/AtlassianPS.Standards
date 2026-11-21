@@ -18,11 +18,13 @@ implement the contract; this document does not duplicate their YAML.
 - Stable metadata commits are promoted only after CI runs triggered by the `atlassianps-release-bot` GitHub App.
 - Alpha and beta candidates require manual dispatch from protected `master` and the complete shared CI gate; their source may be another repository branch.
 - The highest impact among unreleased merged pull requests determines the next version.
-- Stable metadata commits contain the final changelog section and source version. Prereleases prepare notes in a disposable CI checkout.
+- Stable metadata commits contain the final changelog section and source version.
+- Prereleases prepare notes in a disposable CI checkout.
 - CI builds, stamps, packages, and validates one final candidate artifact.
 - Promotion downloads the immutable candidate from the exact successful CI run.
 - Promotion never rebuilds the module or runs repository scripts.
-- The tag, PSGallery package, and GitHub release use the same full version. Only stable releases notify the website.
+- The tag, PSGallery package, and GitHub release use the same full version.
+- Only stable releases notify the website.
 - Annotated `v*` tags are immutable.
 - Publishing credentials never enter pull-request validation or candidate CI.
 
@@ -38,11 +40,14 @@ Use one `v`-prefixed three-part version wherever a release is identified.
 
 Alpha and beta tags add a fixed-width label, such as `v0.3.0-alpha0001` or `v0.3.0-beta0001`.
 Manifests keep `ModuleVersion = '0.3.0'` and set `PrivateData.PSData.Prerelease` to the exact label.
+The source manifest needs a `Prerelease = ''` entry under `PSData` for the build to set.
 The full version is numeric version plus label; numeric equality alone cannot identify a candidate.
 
 Ordering is `0.3.0-alpha0001 < 0.3.0-alpha0002 < 0.3.0-beta0001 < 0.3.0`.
 The planner derives the numeric base from the last stable tag and selected impact.
 It then increments the chosen channel's four-digit sequence from existing tags and published Gallery versions, including Gallery versions without a tag.
+Planning stops when the numeric base is not above the latest stable version on PSGallery, which means a release tag is missing.
+A stable fix can follow a candidate with a higher base, such as `0.2.11` after `0.3.0-alpha0002`.
 After beta starts for a base, continue with beta.
 Published versions and tags remain immutable.
 

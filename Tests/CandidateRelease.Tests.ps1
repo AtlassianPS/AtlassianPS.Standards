@@ -102,6 +102,15 @@ if ((Get-CandidateSample) -cne 'candidate') { throw 'Wrong candidate implementat
         { Test-AtlassianPSModulePackage -BuildOutputPath $output -ModuleName CandidateSample } |
             Should -Throw -ExpectedMessage '*Packaged file*differs*'
     }
+
+    It 'rejects an archive with files outside the module directory' {
+        $strayPath = Join-Path $TestDrive 'stray.txt'
+        Set-Content $strayPath 'not part of the module'
+        Compress-Archive -LiteralPath $strayPath -DestinationPath $packagePath -Update
+
+        { Test-AtlassianPSModulePackage -BuildOutputPath $output -ModuleName CandidateSample } |
+            Should -Throw -ExpectedMessage '*file count differs*'
+    }
 }
 
 Describe 'Candidate planning' {
@@ -182,6 +191,23 @@ Describe 'Candidate planning' {
 
         Get-Content $env:GITHUB_OUTPUT -Raw | Should -Match 'release_tag=v0.3.0-alpha0006'
         Should -Invoke Find-Module -Times 1 -Exactly -ParameterFilter { $AllVersions -and $AllowPrerelease -and $Repository -eq 'PSGallery' }
+    }
+
+    It 'plans a stable fix below a published candidate but not below a published stable release' {
+        $env:RELEASE_CHANNEL = 'stable'
+        $env:RELEASE_IMPACT = 'patch'
+        Mock Find-Module {
+            [PSCustomObject]@{ Version = '0.2.0' }
+            [PSCustomObject]@{ Version = '0.3.0-alpha0002' }
+        }
+
+        & $planner
+
+        Get-Content $env:GITHUB_OUTPUT | Should -Contain 'release_tag=v0.2.1'
+
+        Mock Find-Module { [PSCustomObject]@{ Version = '0.2.1' } }
+
+        { & $planner } | Should -Throw -ExpectedMessage "*not above PSGallery's latest release '0.2.1'*"
     }
 
     It 'does not allow alpha after a beta at the same base' {

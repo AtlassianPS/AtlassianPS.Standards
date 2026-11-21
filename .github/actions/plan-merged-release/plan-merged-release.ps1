@@ -172,13 +172,19 @@ if ($nextMajor -gt $latest.Major) {
     }
 }
 
+$moduleName = $env:GITHUB_REPOSITORY.Split('/')[-1]
+$galleryVersions = @(Find-Module -Name $moduleName -AllVersions -AllowPrerelease -Repository PSGallery -ErrorAction Stop | ForEach-Object { [String]$_.Version })
+# The publisher overrides PowerShellGet's ordering check so that a stable fix can follow a higher alpha or beta.
+$latestGalleryStable = $galleryVersions | Where-Object { $_ -notmatch '-' } | Sort-Object { [Version]$_ } -Descending | Select-Object -First 1
+if ($latestGalleryStable -and [Version]$releaseVersion -le [Version]$latestGalleryStable) {
+    throw "Planned version '$releaseVersion' is not above PSGallery's latest release '$latestGalleryStable'. Tag that release as 'v$latestGalleryStable'."
+}
+
 if ($channel -ne 'stable') {
     $candidateTags = @(git tag --list "v$releaseVersion-*")
     if ($LASTEXITCODE -ne 0) { throw 'Unable to read candidate tags.' }
 
-    $moduleName = $env:GITHUB_REPOSITORY.Split('/')[-1]
-    $galleryVersions = @(Find-Module -Name $moduleName -AllVersions -AllowPrerelease -Repository PSGallery -ErrorAction Stop)
-    $candidateTags += @($galleryVersions | ForEach-Object { 'v' + [String]$_.Version })
+    $candidateTags += @($galleryVersions | ForEach-Object { "v$_" })
 
     $basePattern = '^v{0}-' -f [Regex]::Escape($releaseVersion)
     $candidateTags = @($candidateTags | Where-Object { $_ -match $basePattern })

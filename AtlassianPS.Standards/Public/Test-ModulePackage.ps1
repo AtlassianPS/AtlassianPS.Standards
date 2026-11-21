@@ -117,7 +117,7 @@
 
         $packagedModulePath = Split-Path $packagedManifestPath -Parent
         $builtFiles = @(Get-ChildItem -LiteralPath $releaseModulePath -Recurse -File -Force)
-        $packagedFiles = @(Get-ChildItem -LiteralPath $packagedModulePath -Recurse -File -Force)
+        $packagedFiles = @(Get-ChildItem -LiteralPath $packageValidationRoot -Recurse -File -Force)
         if ($builtFiles.Count -ne $packagedFiles.Count) {
             throw 'Packaged file count differs from the built module.'
         }

@@ -128,9 +128,9 @@ jobs:
         id: plan
         with:
           commit-sha: ${{ github.event.workflow_run.head_sha }}
-          release-impact: ${{ inputs.release-impact }}
+          release-impact: ${{ github.event_name == 'workflow_dispatch' && inputs.release-impact || '' }}
           release-channel: ${{ github.event_name == 'workflow_dispatch' && inputs.release-channel || 'stable' }}
-          major-authorization: ${{ inputs.major-authorization }}
+          major-authorization: ${{ github.event_name == 'workflow_dispatch' && inputs.major-authorization || '' }}
 
       - uses: ./.release-workflow/.github/actions/prepare-release-changelog
         if: steps.plan.outputs.should_release == 'true' && inputs.release-channel == 'stable'
@@ -326,7 +326,9 @@ jobs:
             Install-Module @installParameters
           }
 
-          Publish-Module -Path $modulePath -Repository PSGallery -NuGetApiKey $env:PSGALLERY_API_KEY -ErrorAction Stop
+          # Without -Force, PowerShellGet rejects a stable fix below a published alpha or beta.
+          # Planning already rejects versions at or below the latest stable release.
+          Publish-Module -Path $modulePath -Repository PSGallery -NuGetApiKey $env:PSGALLERY_API_KEY -Force -ErrorAction Stop
 
       - name: Create GitHub release and upload asset
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3

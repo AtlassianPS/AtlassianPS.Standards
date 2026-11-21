@@ -42,8 +42,10 @@ If guidance conflicts, follow this file first.
 - Authenticate prepared release workflow runs with the release App actor login; commit author names are not trusted identity.
 - Do not enable release publishing on an unprotected `master`; direct pushes can bypass review and imitate release metadata.
 - Run manual release dispatches from `master` only; operators choose the impact and optional alpha/beta source branch, never the final version or source commit.
-- Resolve `prerelease-branch` to one immutable commit for all candidate builds, tests, ledgers, and tags. Stable releases reject this input and remain on `master`.
-- Alpha/beta dispatches use the shared CI route with disposable candidate notes. Dependency provisioning stays stable-only.
+- Resolve `prerelease-branch` to one immutable commit for all candidate builds, tests, ledgers, and tags.
+- Stable releases reject `prerelease-branch` and remain on `master`.
+- Alpha/beta dispatches use the shared CI route with disposable candidate notes.
+- Dependency provisioning stays stable-only.
 - Major-base candidates require the same fresh human authorization as stable majors, entered as `owner/repository vMAJOR`.
 - Never trigger or enable a major release without fresh, explicit human confirmation that names the repository and intended major version. A `release:major` label, breaking-change notes, a merged pull request, inferred Semantic Versioning, or a general request to continue is not authorization.
 - Candidate CI must create the final validated module directory and release archive without publishing secrets. The publish job downloads the immutable artifact from the exact successful CI run and promotes it without checking out repository code.
