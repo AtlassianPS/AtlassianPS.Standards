@@ -206,20 +206,26 @@ jobs:
         id: prepared_release
         shell: pwsh
         env:
+          MODULE_NAME: ${{ inputs.module-name }}
           PREPARED_COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
           PLANNED_CANDIDATE: ${{ needs.prepare.outputs.release-tag }}
         run: |
-          if ($env:PLANNED_CANDIDATE) {
-            "release_tag=$env:PLANNED_CANDIDATE" >> $env:GITHUB_OUTPUT
-            return
+          $releaseTag = $env:PLANNED_CANDIDATE
+          if (-not $releaseTag) {
+            $message = $env:PREPARED_COMMIT_MESSAGE
+            if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+) release$') {
+              throw "Commit message '$message' is not a release metadata commit."
+            }
+            $releaseTag = $Matches.tag
           }
 
-          $message = $env:PREPARED_COMMIT_MESSAGE
-          if ($message -notmatch '^Prepare (?<tag>v\d+\.\d+\.\d+) release$') {
-            throw "Commit message '$message' is not a release metadata commit."
+          # Publishing uses -Force, so recheck before tagging that no newer stable release appeared since planning.
+          $latestStable = [Version](Find-Module -Name $env:MODULE_NAME -Repository PSGallery -ErrorAction Stop).Version
+          if ($latestStable -gt [Version]$releaseTag.Substring(1).Split('-')[0]) {
+            throw "PSGallery already has $env:MODULE_NAME $latestStable, which is newer than $releaseTag."
           }
 
-          "release_tag=$($Matches.tag)" >> $env:GITHUB_OUTPUT
+          "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
 
       - name: Download tested release candidate
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8

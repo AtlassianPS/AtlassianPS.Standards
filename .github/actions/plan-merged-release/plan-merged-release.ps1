@@ -175,9 +175,14 @@ if ($nextMajor -gt $latest.Major) {
 $moduleName = $env:GITHUB_REPOSITORY.Split('/')[-1]
 $galleryVersions = @(Find-Module -Name $moduleName -AllVersions -AllowPrerelease -Repository PSGallery -ErrorAction Stop | ForEach-Object { [String]$_.Version })
 # The publisher overrides PowerShellGet's ordering check so that a stable fix can follow a higher alpha or beta.
-$latestGalleryStable = $galleryVersions | Where-Object { $_ -notmatch '-' } | Sort-Object { [Version]$_ } -Descending | Select-Object -First 1
-if ($latestGalleryStable -and [Version]$releaseVersion -le [Version]$latestGalleryStable) {
-    throw "Planned version '$releaseVersion' is not above PSGallery's latest release '$latestGalleryStable'. Tag that release as 'v$latestGalleryStable'."
+# Compare three-part versions: NuGet treats 1.3 and 1.3.0 as the same version.
+$latestGalleryStable = $galleryVersions |
+    Where-Object { $_ -notmatch '[-+]' } |
+    ForEach-Object { $parsed = [Version]$_; [Version]::new($parsed.Major, $parsed.Minor, [Math]::Max($parsed.Build, 0)) } |
+    Sort-Object -Descending |
+    Select-Object -First 1
+if ($latestGalleryStable -and [Version]$releaseVersion -le $latestGalleryStable) {
+    throw "Planned version '$releaseVersion' is not above PSGallery's latest release '$latestGalleryStable'. If that release has no three-part tag, tag its release commit as 'v$latestGalleryStable'."
 }
 
 if ($channel -ne 'stable') {

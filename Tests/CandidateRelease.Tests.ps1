@@ -125,6 +125,7 @@ Describe 'Candidate planning' {
             'MAJOR_AUTHORIZATION'
             'COMMIT_SHA'
             'ATLAS_TEST_CANDIDATE_TAGS'
+            'ATLAS_TEST_GALLERY_VERSION'
         )
 
         foreach ($name in $environmentNames) {
@@ -193,7 +194,7 @@ Describe 'Candidate planning' {
         Should -Invoke Find-Module -Times 1 -Exactly -ParameterFilter { $AllVersions -and $AllowPrerelease -and $Repository -eq 'PSGallery' }
     }
 
-    It 'plans a stable fix below a published candidate but not below a published stable release' {
+    It 'plans a stable fix below a published candidate' {
         $env:RELEASE_CHANNEL = 'stable'
         $env:RELEASE_IMPACT = 'patch'
         Mock Find-Module {
@@ -204,10 +205,20 @@ Describe 'Candidate planning' {
         & $planner
 
         Get-Content $env:GITHUB_OUTPUT | Should -Contain 'release_tag=v0.2.1'
+    }
 
-        Mock Find-Module { [PSCustomObject]@{ Version = '0.2.1' } }
+    It 'stops a <Impact> plan at or below the latest stable Gallery version <GalleryVersion>' -ForEach @(
+        @{ Impact = 'patch'; GalleryVersion = '0.2.1'; Shown = '0.2.1' }
+        @{ Impact = 'patch'; GalleryVersion = '0.2.1.5'; Shown = '0.2.1' }
+        @{ Impact = 'minor'; GalleryVersion = '0.3'; Shown = '0.3.0' }
+        @{ Impact = 'minor'; GalleryVersion = '0.4.0'; Shown = '0.4.0' }
+    ) {
+        $env:RELEASE_CHANNEL = 'stable'
+        $env:RELEASE_IMPACT = $Impact
+        $env:ATLAS_TEST_GALLERY_VERSION = $GalleryVersion
+        Mock Find-Module { [PSCustomObject]@{ Version = $env:ATLAS_TEST_GALLERY_VERSION } }
 
-        { & $planner } | Should -Throw -ExpectedMessage "*not above PSGallery's latest release '0.2.1'*"
+        { & $planner } | Should -Throw -ExpectedMessage "*not above PSGallery's latest release '$Shown'*"
     }
 
     It 'does not allow alpha after a beta at the same base' {

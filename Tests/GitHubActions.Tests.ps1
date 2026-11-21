@@ -514,6 +514,11 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $tagIndex | Should -BeGreaterThan -1
         $publishIndex | Should -BeGreaterThan $tagIndex
 
+        # Publish-Module uses -Force, so the latest stable Gallery version is rechecked before tagging.
+        $recheckIndex = $publishWorkflow.IndexOf('$latestStable -gt [Version]$releaseTag')
+        $recheckIndex | Should -BeGreaterThan -1
+        $tagIndex | Should -BeGreaterThan $recheckIndex
+
         $codeOwners = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath 'CODEOWNERS')
         $codeOwners[0] | Should -Match '^\*\s+@atlassianps/maintainers$'
         $codeOwners[-1] | Should -Match '^docs/ReleaseBlueprint\.md\s+@atlassianps/ci-managers$'

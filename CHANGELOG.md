@@ -12,7 +12,8 @@
 - Release planning stops a major release, stable or prerelease, unless a manual dispatch supplies `major_authorization` as `owner/repository vMAJOR`.
 - `Test-ModulePackage -ExpectedVersion` compares the full version, including the prerelease label, and requires the package to match the built module file for file.
 - `Install-DependencyRequirement` treats a requirement with only `ModuleVersion` as a minimum, no longer an exact pin.
-- Release planning stops when the planned version is not above the latest stable version on PSGallery.
+- Release planning stops when the planned version is not above the latest stable version on PSGallery, and publication stops before tagging when a newer stable version exists.
+- Release planning needs the module on PSGallery, so publish a new module's first version by hand.
 
 ### Fixed
 
