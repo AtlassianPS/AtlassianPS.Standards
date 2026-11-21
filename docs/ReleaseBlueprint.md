@@ -14,14 +14,17 @@ implement the contract; this document does not duplicate their YAML.
 ## Required Invariants
 
 - Every pull request declares exactly one `release:*` intent before merge.
-- Only protected `master` commits can become release candidates.
-- Only a workflow run triggered by the `atlassianps-release-bot` GitHub App can promote a prepared release commit.
+- Stable release candidates come only from protected `master` commits.
+- Stable metadata commits are promoted only after CI runs triggered by the `atlassianps-release-bot` GitHub App.
+- Alpha and beta candidates require manual dispatch from protected `master` and the complete shared CI gate; their source may be another repository branch.
 - The highest impact among unreleased merged pull requests determines the next version.
-- The candidate commit contains the final changelog section and exact source manifest version.
+- Stable metadata commits contain the final changelog section and source version.
+- Prereleases prepare notes in a disposable CI checkout.
 - CI builds, stamps, packages, and validates one final candidate artifact.
 - Promotion downloads the immutable candidate from the exact successful CI run.
 - Promotion never rebuilds the module or runs repository scripts.
-- The tag, PSGallery package, GitHub release, and website entry use the same version.
+- The tag, PSGallery package, and GitHub release use the same full version.
+- Only stable releases notify the website.
 - Annotated `v*` tags are immutable.
 - Publishing credentials never enter pull-request validation or candidate CI.
 
@@ -34,6 +37,22 @@ Use one `v`-prefixed three-part version wherever a release is identified.
 | Git tag | `vX.Y.Z` | `v3.0.0` |
 | Changelog heading | `## vX.Y.Z - YYYY-MM-DD` | `## v3.0.0 - 2026-05-10` |
 | Module manifest | `X.Y.Z` | `ModuleVersion = '3.0.0'` |
+
+Alpha and beta tags add a fixed-width label, such as `v0.3.0-alpha0001` or `v0.3.0-beta0001`.
+Manifests keep `ModuleVersion = '0.3.0'` and set `PrivateData.PSData.Prerelease` to the exact label.
+The source manifest needs a `Prerelease = ''` entry under `PSData` for the build to set.
+The full version is numeric version plus label; numeric equality alone cannot identify a candidate.
+
+Ordering is `0.3.0-alpha0001 < 0.3.0-alpha0002 < 0.3.0-beta0001 < 0.3.0`.
+The planner derives the numeric base from the last stable tag and selected impact.
+It then increments the chosen channel's four-digit sequence from existing tags and published Gallery versions, including Gallery versions without a tag.
+Planning stops when the numeric base is not above the latest stable version on PSGallery, usually because that release has no three-part tag.
+Publication checks again before tagging, so a rerun of an old run stops when a newer stable version, or a later alpha or beta of the same base, is already published.
+It also stops when PSGallery has the version but the repository has no tag for it, because that package did not come from this route.
+A stable fix can follow a candidate with a higher base, such as `0.2.11` after `0.3.0-alpha0002`.
+Both checks need PSGallery: rerun the failed job after an outage, and publish a new module's first version by hand.
+After beta starts for a base, continue with beta.
+Published versions and tags remain immutable.
 
 `CHANGELOG.md` is the only release-note source. The same version section populates the package manifest
 and GitHub release body. The committed source manifest keeps `ReleaseNotes` empty.
@@ -117,6 +136,13 @@ For a release metadata commit, `Release` must contain:
 | `<ModuleName>/` | Validated module directory published to PSGallery |
 | `<ModuleName>.zip` | GitHub release asset |
 | `release-notes.md` | GitHub release body |
+| `candidate-ledger.json` | Alpha/beta module name, full version, and source/workflow commits |
+| `candidate-changelog.md` | Alpha/beta changelog that the test jobs restore before the module tests |
+
+The alpha/beta build prepares a candidate changelog section only in the disposable CI checkout.
+It never pushes metadata or deletes fragments from `master`, so stable planning retains its notes.
+CI verifies the full version, exact label, notes, and every archived file against the built directory before the Windows PS5 and PS7 matrix consumes that artifact.
+Acquisition checks import the archive in fresh processes and verify the loaded path and full version.
 
 The publishing job may use trusted pinned third-party actions and inline deployment commands. It must not
 check out repository contents, invoke the repository build, load local actions, or modify the candidate.
@@ -144,7 +170,41 @@ Manual dispatch handles an unreleased bucket already on `master`; it is not a re
 2. Choose the highest required `release_impact` for the pending changes.
 3. Let the normal metadata-commit, CI-candidate, and promotion flow finish.
 
-The operator never enters the final version or source commit.
+Select `release_channel=alpha` or `beta` to test the same pending bucket before stable release.
+The shared workflow runs the required build, platform tests and configured smoke tests, then downloads `Release` from that exact run in the protected publisher.
+It uses the existing module name on PSGallery and marks the GitHub release as a prerelease.
+Candidate activity does not trigger the stable metadata-commit route.
+After publication, fresh Windows PowerShell 5.1 and PowerShell 7 processes acquire the exact Gallery candidate with prerelease opt-in and check ordinary stable acquisition.
+If that check fails because PSGallery has not indexed the new version yet, rerun the failed job.
+Candidate and stable runs share one concurrency group, so do not dispatch a candidate while a stable release is in progress.
+
+To package changes before merging, set `prerelease_branch` to a repository branch, for example `feature/shared-sessions`, while dispatching `Continuous Release` from `master`.
+Leave it empty to use `master`.
+Stable releases reject this input.
+The branch must implement the shared build tasks and contain its candidate notes under `Unreleased`.
+The candidate publishes the branch content as it is, so review the branch before you dispatch.
+The workflow resolves the branch once and uses that commit for every build and test checkout, the artifact ledger, and the annotated release tag.
+Moving the branch during CI does not change the candidate.
+Version sequences use repository-wide tags and Gallery versions, so branches share one alpha/beta sequence for each numeric base.
+Merge the changes into `master` before releasing stable.
+
+For a major-base release, including an alpha or beta, enter fresh human confirmation in `major_authorization` as `owner/repository vMAJOR`, for example `AtlassianPS/JiraPS v3`.
+Automatic major intent stops at planning until a human dispatches with that confirmation.
+
+Promote to stable by reviewing candidate results, merging any fixes, and dispatching the same impact with `release_channel=stable`.
+Stable CI builds and validates its own final manifest with an empty prerelease label.
+It does not rename a candidate package.
+For transient failures, rerun only the failed jobs while the original artifact is retained.
+A new dispatch calculates a new candidate after a tag was reserved.
+For a lasting failure, merge a reviewed fix and use that next version; never reuse a tag or PSGallery version.
+Repair a missing GitHub release manually if Gallery already succeeded.
+
+## Dependency provisioning
+
+Setup uses stable acquisition without prerelease opt-in.
+Runtime manifests express numeric compatibility using `ModuleVersion` and `MaximumVersion`.
+Build pins use `RequiredVersion`.
+The shared installer honors both range endpoints and excludes installed prereleases.
 
 ## Identity And Repository Configuration
 
@@ -223,6 +283,18 @@ on:
         required: true
         type: choice
         options: [patch, minor, major]
+      release_channel:
+        required: true
+        default: stable
+        type: choice
+        options: [stable, alpha, beta]
+      prerelease_branch:
+        description: Optional source branch for alpha/beta (empty uses master)
+        required: false
+        type: string
+      major_authorization:
+        required: false
+        type: string
 
 permissions:
   actions: read
@@ -236,6 +308,9 @@ jobs:
     with:
       module-name: ExampleModule
       release-impact: ${{ inputs.release_impact }}
+      release-channel: ${{ inputs.release_channel || 'stable' }}
+      prerelease-branch: ${{ inputs.prerelease_branch }}
+      major-authorization: ${{ inputs.major_authorization }}
     secrets: inherit
 ```
 

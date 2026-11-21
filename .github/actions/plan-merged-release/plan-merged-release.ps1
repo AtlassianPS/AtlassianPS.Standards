@@ -8,6 +8,15 @@ $releaseImpact = $null
 $manualReleaseImpact = if ($env:RELEASE_IMPACT) { $env:RELEASE_IMPACT.Trim().ToLowerInvariant() } else { '' }
 
 $isManualRelease = -not [String]::IsNullOrWhiteSpace($manualReleaseImpact)
+$channel = if ($env:RELEASE_CHANNEL) { $env:RELEASE_CHANNEL } else { 'stable' }
+
+if ($channel -cnotin @('stable', 'alpha', 'beta')) {
+    throw "Release channel '$channel' must be stable, alpha, or beta."
+}
+
+if ($channel -ne 'stable' -and -not $isManualRelease) {
+    throw 'Alpha and beta releases require an explicit manual release impact.'
+}
 
 if ($isManualRelease) {
     if ($manualReleaseImpact -notin @('patch', 'minor', 'major')) {
@@ -156,6 +165,53 @@ switch ($releaseImpact) {
 }
 
 $releaseVersion = '{0}.{1}.{2}' -f $nextMajor, $nextMinor, $nextPatch
+if ($nextMajor -gt $latest.Major) {
+    $requiredAuthorization = "$env:GITHUB_REPOSITORY v$nextMajor"
+    if (-not $isManualRelease -or $env:MAJOR_AUTHORIZATION -cne $requiredAuthorization) {
+        throw "Major-base releases require fresh human authorization: '$requiredAuthorization'."
+    }
+}
+
+$moduleName = $env:GITHUB_REPOSITORY.Split('/')[-1]
+$galleryVersions = @(Find-Module -Name $moduleName -AllVersions -AllowPrerelease -Repository PSGallery -ErrorAction Stop | ForEach-Object { [String]$_.Version })
+# The publisher overrides PowerShellGet's ordering check so that a stable fix can follow a higher alpha or beta.
+# Compare three-part versions: NuGet treats 1.3 and 1.3.0 as the same version.
+$latestGalleryStable = $galleryVersions |
+    Where-Object { $_ -notmatch '[-+]' } |
+    ForEach-Object { $parsed = [Version]$_; [Version]::new($parsed.Major, $parsed.Minor, [Math]::Max($parsed.Build, 0)) } |
+    Sort-Object -Descending |
+    Select-Object -First 1
+if ($latestGalleryStable -and [Version]$releaseVersion -le $latestGalleryStable) {
+    throw "Planned version '$releaseVersion' is not above PSGallery's latest release '$latestGalleryStable'. If that release has no three-part tag, tag its release commit as 'v$latestGalleryStable'."
+}
+
+if ($channel -ne 'stable') {
+    $candidateTags = @(git tag --list "v$releaseVersion-*")
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to read candidate tags.' }
+
+    $candidateTags += @($galleryVersions | ForEach-Object { "v$_" })
+
+    $basePattern = '^v{0}-' -f [Regex]::Escape($releaseVersion)
+    $candidateTags = @($candidateTags | Where-Object { $_ -match $basePattern })
+
+    if ($channel -eq 'alpha' -and @($candidateTags | Where-Object { $_ -match '-beta\d{4}$' }).Count -gt 0) {
+        throw "Version '$releaseVersion' already has beta candidates. Continue with beta."
+    }
+
+    $candidatePattern = '^v{0}-{1}(?<sequence>\d{{4}})$' -f [Regex]::Escape($releaseVersion), $channel
+    $sequence = 0
+
+    foreach ($tag in $candidateTags) {
+        if ($tag -match $candidatePattern) {
+            $sequence = [Math]::Max($sequence, [Int]$Matches.sequence)
+        }
+    }
+
+    if ($sequence -ge 9999) { throw 'Candidate sequence exhausted; choose the next numeric base.' }
+
+    $releaseVersion += '-{0}{1:d4}' -f $channel, ($sequence + 1)
+}
+
 $releaseTag = 'v{0}' -f $releaseVersion
 git show-ref --verify --quiet "refs/tags/$releaseTag"
 $tagExistsExitCode = $LASTEXITCODE

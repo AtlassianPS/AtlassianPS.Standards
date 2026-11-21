@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Added
+
+- Support explicit alpha and beta releases through the shared CI and protected publication route, with exact candidate acquisition and package verification.
+- Package alpha/beta releases from a selected repository branch, using one resolved commit for validation and the release tag.
+
+### Changed
+
+- Release planning stops a major release, stable or prerelease, unless a manual dispatch supplies `major_authorization` as `owner/repository vMAJOR`.
+- `Test-ModulePackage -ExpectedVersion` compares the full version, including the prerelease label, and requires the package to match the built module file for file.
+- `Install-DependencyRequirement` treats a requirement with only `ModuleVersion` as a minimum, no longer an exact pin.
+- Release planning stops when the planned version is not above the latest stable version on PSGallery, and publication stops before tagging when a newer stable version, or a later alpha or beta of the same base, is already published.
+- Release planning needs the module on PSGallery, so publish a new module's first version by hand.
+
+### Fixed
+
+- Honor both numeric dependency range bounds and exclude installed prereleases from normal stable provisioning.
+- Publishing a module whose manifest uses a wildcard `MaximumVersion`, such as `1.*`, no longer fails while it installs the dependencies.
+- A stable release can be published after an alpha or beta with a higher version.
+
 ## v0.4.1 - 2026-10-19
 
 ### Fixed

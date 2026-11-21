@@ -6,6 +6,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $script:projectRoot = Resolve-ProjectRoot
         $script:validateReleaseIntentScriptPath = Join-Path -Path $script:projectRoot -ChildPath '.github/actions/validate-release-intent/validate-release-intent.ps1'
         $script:planMergedReleaseScriptPath = Join-Path -Path $script:projectRoot -ChildPath '.github/actions/plan-merged-release/plan-merged-release.ps1'
+
+        Mock Find-Module { @() }
     }
 
     It 'pins every external workflow dependency to a full commit SHA' {
@@ -415,7 +417,8 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflowPath = Join-Path -Path $projectRoot -ChildPath '.github/workflows/module_release.yml'
         $caller = Get-Content -LiteralPath $callerPath -Raw
         $workflow = Get-Content -LiteralPath $workflowPath -Raw
-        $publishWorkflow = $workflow.Substring($workflow.IndexOf('  publish:'))
+        $publishStart = $workflow.IndexOf('  publish:')
+        $publishWorkflow = $workflow.Substring($publishStart, $workflow.IndexOf('  verify_gallery:') - $publishStart)
         $ciCaller = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath '.github/workflows/ci.yml') -Raw
         $ciWorkflow = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath '.github/workflows/module_ci.yml') -Raw
 
@@ -459,6 +462,11 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $workflow | Should -Match "workflow_run\.event == 'push'"
         $workflow | Should -Match 'PREPARED_COMMIT_MESSAGE'
 
+        # Only a manual dispatch can choose the impact, channel, or major authorization.
+        foreach ($name in 'release-impact', 'release-channel', 'major-authorization') {
+            $workflow | Should -Match ("{0}: \`$\{{\{{ github\.event_name == 'workflow_dispatch' && inputs\.{0} \|\|" -f $name)
+        }
+
         # The build job stamps the artifact before platform tests consume it. Publishing starts
         # only after the complete CI workflow succeeds.
         $ciWorkflow | Should -Match 'name: Release'
@@ -478,16 +486,17 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishWorkflow | Should -Match 'name: Release'
         $publishWorkflow | Should -Match 'actions/download-artifact@[0-9a-f]{40}'
         $publishWorkflow | Should -Match 'github-token: \$\{\{ github\.token \}\}'
-        $publishWorkflow | Should -Match 'run-id: \$\{\{ github\.event\.workflow_run\.id \}\}'
+        $publishWorkflow | Should -Match 'run-id: \$\{\{ github\.event\.workflow_run\.id \|\| github\.run_id \}\}'
         $publishWorkflow | Should -Match 'digest-mismatch: error'
         $publishWorkflow | Should -Not -Match 'dawidd6/action-download-artifact|release-manifest\.json|Get-FileHash|ZipFile'
         $publishWorkflow | Should -Match 'Publish-Module -Path \$modulePath'
-        $publishWorkflow | Should -Match 'Find-Module -Name \$env:MODULE_NAME -RequiredVersion \$expectedGalleryVersion -Repository PSGallery'
+        $publishWorkflow | Should -Match 'Find-Module @lookup'
+        $publishWorkflow | Should -Match 'RequiredVersion\s+= \$expectedGalleryVersion'
         $publishWorkflow | Should -Match '\$installParameters\.RequiredVersion = \$dependency\.RequiredVersion'
         $publishWorkflow | Should -Match '\$installParameters\.MinimumVersion = \$dependency\.ModuleVersion'
-        $publishWorkflow | Should -Match '\$installParameters\.MaximumVersion = \$dependency\.MaximumVersion'
+        $publishWorkflow | Should -Match '\$installParameters\.MaximumVersion = \$dependency\.MaximumVersion -replace ''\\\*\$'', \[Int\]::MaxValue'
         $publishWorkflow | Should -Match '(?ms)if \(\$dependency\.ModuleVersion\) \{.*?MinimumVersion.*?\}\s+if \(\$dependency\.MaximumVersion\) \{.*?MaximumVersion'
-        $publishWorkflow | Should -Not -Match '(?m)Publish-Module[^\r\n]*-Force'
+        $publishWorkflow | Should -Match '(?m)Publish-Module[^\r\n]*-Force'
         $publishWorkflow | Should -Not -Match 'Publish-PSResource|Find-PSResource|nupkg|gallery_package_path'
         $workflow | Should -Match '(?ms)prepare:.*?permissions:\s+contents: read\s+issues: read\s+pull-requests: read'
         $publishWorkflow | Should -Match '(?ms)permissions:\s+actions: read\s+contents: read'
@@ -495,7 +504,7 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishWorkflow | Should -Match '\$PSNativeCommandUseErrorActionPreference = \$true'
         $publishWorkflow | Should -Match 'token: \$\{\{ steps\.release_app\.outputs\.token \}\}'
         $publishWorkflow | Should -Not -Match 'GITHUB_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}'
-        $publishWorkflow | Should -Match '(?ms)if: inputs\.notify-homepage\s+uses: peter-evans/repository-dispatch@'
+        $publishWorkflow | Should -Match '(?ms)if: inputs\.notify-homepage && github\.event_name != ''workflow_dispatch''\s+uses: peter-evans/repository-dispatch@'
         $publishWorkflow | Should -Not -Match 'actions/checkout|setup-powershell|Invoke-Build|Compress-Archive|uses: \./\.release-workflow/'
         $workflow | Should -Not -Match 'recovery_tag|RECOVERY_TAG|No successful CI run was found for recovery commit'
 
@@ -504,6 +513,12 @@ Describe 'GitHub Actions' -Tag 'Lint', 'Unit' {
         $publishIndex = $publishWorkflow.IndexOf('Publish-Module')
         $tagIndex | Should -BeGreaterThan -1
         $publishIndex | Should -BeGreaterThan $tagIndex
+
+        # Publish-Module uses -Force, so the Gallery history is rechecked before tagging.
+        $recheckIndex = $publishWorkflow.IndexOf('which supersedes $releaseTag')
+        $recheckIndex | Should -BeGreaterThan -1
+        $tagIndex | Should -BeGreaterThan $recheckIndex
+        $publishWorkflow | Should -Match '(?ms)Create annotated release tag.*?already identifies the tested candidate.*?ALREADY_PUBLISHED -eq ''True''.*?git/tags'
 
         $codeOwners = Get-Content -LiteralPath (Join-Path -Path $projectRoot -ChildPath 'CODEOWNERS')
         $codeOwners[0] | Should -Match '^\*\s+@atlassianps/maintainers$'
